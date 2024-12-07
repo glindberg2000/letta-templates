@@ -1,57 +1,129 @@
-# Letta Quickstart for Roblox Development
+# Letta Client Projects
 
-This project provides a quick-start template for using Letta agents in Roblox development workflows.
+A collection of tools and utilities for working with the Letta AI server, including a CLI tool for managing agents.
 
-## Setup
+## Installation
 
-1. Install dependencies:
+1. Create and activate a virtual environment:
+```bash
+python3 -m venv venv
+source venv/bin/activate  # On Unix/MacOS
+# or
+venv\Scripts\activate  # On Windows
+```
+
+2. Install requirements:
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Configure environment:
-Copy `.env.example` to `.env` and fill in your values:
+3. Copy and configure environment variables:
 ```bash
 cp .env.example .env
+# Edit .env with your configuration
 ```
-
-3. Start the Letta server:
-```bash
-docker run -p 8283:8283 letta/server
-```
-
-## Usage
-
-Basic usage:
-```python
-from letta import create_client
-from letta_quickstart import create_roblox_agent, chat_with_agent
-
-client = create_client(base_url="http://localhost:8283")
-agent = create_roblox_agent(client, "RobloxHelper")
-
-response = chat_with_agent(client, agent.id, 
-    "Can you help me optimize this Lua script?")
-print(response)
-```
-
-## Features
-
-- Create specialized Roblox development agents
-- Update agent personas for different development focuses
-- Maintain conversation context
-- Clean error handling and resource cleanup
 
 ## Configuration
 
-The following environment variables are supported:
-- `LETTA_SERVER_PORT` (default: 8283)
-- `OPENAI_API_KEY` (required)
-- `LETTA_SERVER_HOST` (default: localhost)
+The `.env` file supports the following configurations:
 
-## Examples
+```bash
+# Choose your Letta server type:
+# For Docker: LETTA_BASE_URL=http://localhost:8283
+# For pip-installed: LETTA_BASE_URL=memory://
 
-See `examples/` directory for more usage examples:
-- Basic agent creation
-- Memory management
-- Code optimization workflows 
+LETTA_BASE_URL=http://localhost:8283
+
+# Optional port override
+# LETTA_PORT=8083
+
+# OpenAI Configuration
+OPENAI_API_KEY=your_openai_api_key_here
+```
+
+## CLI Usage
+
+The CLI tool provides several commands for managing Letta agents:
+
+### Basic Commands
+
+```bash
+# List all agents
+python letta_cli.py list
+
+# Create a new agent
+python letta_cli.py create --name "MyAgent" --description "My custom agent"
+
+# Delete a specific agent
+python letta_cli.py delete <agent_id>
+
+# Delete all agents (with confirmation)
+python letta_cli.py delete-all
+
+# View memory blocks for an agent
+python letta_cli.py memory <agent_id>
+
+# Chat with an agent
+python letta_cli.py chat <agent_id> "Your message here"
+```
+
+### Port Configuration
+
+You can specify which Letta server to connect to in several ways:
+
+```bash
+# Use specific port
+python letta_cli.py --port 8283 list
+
+# Use different URL and port
+python letta_cli.py --url http://localhost:8283 --port 8083 list
+
+# Use in-memory version
+python letta_cli.py --url memory:// list
+```
+
+Port resolution priority:
+1. Command line `--port` argument
+2. `LETTA_PORT` environment variable
+3. Port in base URL
+4. Default (8283 for Docker version)
+
+## Testing
+
+The repository includes a test script (`letta_test.py`) that demonstrates various Letta client operations:
+
+```bash
+python letta_test.py
+```
+
+The test script supports the same port and URL configurations as the CLI tool.
+
+## Server Options
+
+### Docker Version
+The Docker version of Letta runs on port 8283 by default:
+```bash
+# Check if Docker container is running
+docker ps | grep letta
+```
+
+### Pip-installed Version
+The pip-installed version can run:
+- As a service (configured via systemd)
+- In-memory (using `memory://` URL)
+- On any specified port
+
+## Features
+
+- Comprehensive CLI tool for agent management
+- Flexible port configuration
+- Support for both Docker and pip-installed versions
+- Memory block management
+- Interactive chat capabilities
+- Batch operations (e.g., delete-all)
+
+## Contributing
+
+Feel free to submit issues and enhancement requests!
+```
+ 

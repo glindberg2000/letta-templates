@@ -113,11 +113,66 @@ def chat_with_agent(client, agent_id, message):
     except Exception as e:
         print(f"Error chatting with agent: {e}")
 
+def create_letta_client(base_url=None, port=None):
+    """
+    Create a Letta client based on the configuration.
+    If base_url is memory://, it will use the in-memory version.
+    Otherwise, it will connect to the specified URL (e.g., Docker version)
+    
+    Args:
+        base_url: The base URL for the Letta service
+        port: Optional port override. If provided, will override the port in base_url
+    """
+    if base_url == "memory://":
+        print("Using in-memory Letta server")
+        return create_client()
+    else:
+        if port:
+            # Parse the base_url and replace the port
+            from urllib.parse import urlparse, urlunparse
+            parsed = urlparse(base_url)
+            # Reconstruct the URL with new port
+            base_url = urlunparse(parsed._replace(netloc=f"{parsed.hostname}:{port}"))
+        
+        print(f"Connecting to Letta server at: {base_url}")
+        return create_client(base_url=base_url)
+
+def delete_all_agents(client):
+    """Delete all agents after confirmation"""
+    try:
+        agents = client.list_agents()
+        if not agents:
+            print("No agents to delete.")
+            return
+
+        print("\nFound the following agents:")
+        for agent in agents:
+            print(f"- {agent.name} (ID: {agent.id})")
+        
+        confirm = input("\nAre you sure you want to delete ALL agents? (yes/no): ")
+        if confirm.lower() != 'yes':
+            print("Operation cancelled.")
+            return
+
+        for agent in agents:
+            try:
+                client.delete_agent(agent.id)
+                print(f"Deleted agent: {agent.name} (ID: {agent.id})")
+            except Exception as e:
+                print(f"Error deleting agent {agent.id}: {e}")
+        
+        print("\nAll agents have been deleted.")
+    except Exception as e:
+        print(f"Error deleting agents: {e}")
+
 def main():
     parser = argparse.ArgumentParser(description='Letta CLI Tool')
     parser.add_argument('--url', 
-                       default=os.getenv('LETTA_BASE_URL', 'http://localhost:8283'), 
-                       help='Base URL for the Letta service')
+                       default=os.getenv('LETTA_BASE_URL', 'memory://'), 
+                       help='Base URL for the Letta service (use memory:// for in-memory version)')
+    parser.add_argument('--port',
+                       type=int,
+                       help='Override the port number (e.g., 8283, 8083)')
     
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
     
@@ -141,27 +196,27 @@ def main():
     chat_parser = subparsers.add_parser('chat', help='Chat with an agent')
     chat_parser.add_argument('agent_id', help='ID of the agent')
     chat_parser.add_argument('message', help='Message to send to the agent')
+    
+    # Add delete-all command
+    subparsers.add_parser('delete-all', help='Delete all agents (with confirmation)')
 
     args = parser.parse_args()
     
-    # Initialize client
-    client = create_client(base_url=args.url)
+    # Initialize client with optional port override
+    client = create_letta_client(args.url, args.port)
     
-    if args.command == 'list':
+    if args.command == 'delete-all':
+        delete_all_agents(client)
+    elif args.command == 'list':
         list_all_agents(client)
-    
     elif args.command == 'create':
         create_test_agent(client, args.name, args.description)
-    
     elif args.command == 'delete':
         delete_agent(client, args.agent_id)
-    
     elif args.command == 'memory':
         get_memory_blocks(client, args.agent_id)
-    
     elif args.command == 'chat':
         chat_with_agent(client, args.agent_id, args.message)
-    
     else:
         parser.print_help()
 
