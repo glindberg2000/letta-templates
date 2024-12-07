@@ -125,5 +125,62 @@ The pip-installed version can run:
 ## Contributing
 
 Feel free to submit issues and enhancement requests!
+
+# Memory Management
+
+## Viewing Memory Blocks
+```bash
+# View current memory blocks for an agent
+python letta_cli.py memory <agent_id>
+
+# View memory blocks in message history
+python letta_cli.py messages <agent_id> --show-human
+```
+
+## Updating Memory Blocks
+Memory blocks can be updated in two ways:
+
+1. Using the CLI:
+```bash
+# Update human block
+python letta_cli.py update-memory <agent_id> --human "Name: Alice\nRole: Developer\nAge: 25"
+
+# Update persona block
+python letta_cli.py update-memory <agent_id> --persona "You are a coding expert..."
+
+# Update both blocks
+python letta_cli.py update-memory <agent_id> \
+    --human "Name: Bob\nRole: Game Developer" \
+    --persona "You are a Roblox expert..."
+```
+
+2. Programmatically using the quickstart functions:
+```python
+from letta_quickstart import update_agent_persona
+
+# Update memory blocks
+update_agent_persona(client, agent_id, {
+    'human': 'Name: Bob\nRole: Game Developer\nExpertise: Roblox',
+    'persona': 'You are a Roblox development expert...'
+})
+```
+
+## Memory Block Structure
+
+### Human Block
+Contains information about the user:
+```
+Name: [user's name]
+Role: [user's role]
+[Additional attributes...]
+```
+
+### Persona Block
+Contains the agent's personality and behavior configuration:
+```
+You are [description of the agent's role and expertise...]
+```
+
+Memory blocks are automatically used by the agent to maintain context and personalize interactions.
 ```
  

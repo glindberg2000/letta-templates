@@ -9,7 +9,28 @@ load_dotenv()
 
 def print_agent_details(client, agent_id, stage=""):
     """
-    Print detailed information about an agent's configuration and memory
+    Print detailed information about an agent's configuration and memory.
+    
+    Args:
+        client: Letta client instance
+        agent_id (str): ID of the agent to inspect
+        stage (str, optional): Description of the current stage (e.g., "INITIAL STATE", "AFTER UPDATE")
+    
+    Example:
+        >>> print_agent_details(client, agent.id, "AFTER PERSONA UPDATE")
+        
+        === Agent Details AFTER PERSONA UPDATE ===
+        Agent ID: agent-123
+        Name: RobloxHelper
+        Description: A Roblox development assistant
+        
+        Memory Blocks:
+        Block: human
+        ID: block-456
+        Value: Name: Bob
+              Role: Game Developer
+        Limit: 5000
+        --------------------------------------------------
     """
     print(f"\n=== Agent Details {stage} ===")
     
@@ -31,7 +52,29 @@ def print_agent_details(client, agent_id, stage=""):
 
 def create_roblox_agent(client, name: str, persona: str = None):
     """
-    Create a Letta agent configured for Roblox development assistance
+    Create a Letta agent configured for Roblox development assistance.
+    
+    Args:
+        client: Letta client instance
+        name (str): Name for the new agent
+        persona (str, optional): Custom persona text. If not provided, uses default Roblox expert persona
+    
+    Returns:
+        Agent: Created agent object
+    
+    Example:
+        >>> agent = create_roblox_agent(
+        ...     client,
+        ...     "RobloxHelper",
+        ...     "You are a Lua optimization expert..."
+        ... )
+    
+    Note:
+        Configures agent with:
+        - OpenAI embeddings
+        - GPT-4 model
+        - Roblox-specific memory configuration
+        - Base tools enabled
     """
     return client.create_agent(
         name=name,
@@ -57,9 +100,28 @@ def create_roblox_agent(client, name: str, persona: str = None):
         description="A Roblox development assistant"
     )
 
-def update_agent_persona(client, agent_id: str, blocks):
+def update_agent_persona(client, agent_id: str, blocks: dict):
     """
-    Update an agent's memory blocks (human/persona configuration)
+    Update an agent's memory blocks (human/persona configuration).
+    
+    Args:
+        client: Letta client instance
+        agent_id (str): ID of the agent to update
+        blocks (dict): Dictionary containing updates, e.g.:
+            {
+                'human': 'Name: Alice\nRole: Developer',
+                'persona': 'You are a coding expert...'
+            }
+    
+    Example:
+        >>> update_agent_persona(client, agent.id, {
+        ...     'human': 'Name: Bob\nRole: Game Developer\nExpertise: Roblox',
+        ...     'persona': 'You are a Roblox development expert...'
+        ... })
+        
+        Updating human block:
+        Old value: Name: User\nRole: Developer
+        New value: Name: Bob\nRole: Game Developer\nExpertise: Roblox
     """
     memory = client.get_in_context_memory(agent_id)
     for block in memory.blocks:
@@ -74,7 +136,25 @@ def update_agent_persona(client, agent_id: str, blocks):
 
 def chat_with_agent(client, agent_id: str, message: str):
     """
-    Send a message to an agent and return the response
+    Send a message to an agent and return the response.
+    
+    Args:
+        client: Letta client instance
+        agent_id (str): ID of the agent to chat with
+        message (str): Message to send to the agent
+    
+    Returns:
+        str: Agent's response message or None if no valid response
+    
+    Example:
+        >>> response = chat_with_agent(
+        ...     client,
+        ...     agent.id,
+        ...     "Can you help optimize this Lua code?"
+        ... )
+        
+        Sending message: Can you help optimize this Lua code?
+        Response: I'd be happy to help optimize your Lua code...
     """
     print(f"\nSending message: {message}")
     response = client.send_message(
