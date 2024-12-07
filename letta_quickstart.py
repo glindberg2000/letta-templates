@@ -1,6 +1,11 @@
+import os
+from dotenv import load_dotenv
 from letta import EmbeddingConfig, LLMConfig, create_client, ChatMemory
 from letta.prompts import gpt_system
 import json
+
+# Load environment variables
+load_dotenv()
 
 def print_agent_details(client, agent_id, stage=""):
     """
@@ -89,11 +94,47 @@ def chat_with_agent(client, agent_id: str, message: str):
                 pass
     return None
 
-def main():
-    try:
-        # Initialize client
-        client = create_client(base_url="http://localhost:8283")
+def create_letta_client(base_url=None, port=None):
+    """
+    Create a Letta client based on the configuration.
+    If base_url is memory://, it will use the in-memory version.
+    Otherwise, it will connect to the specified URL (e.g., Docker version)
+    """
+    # Default to Docker URL if not specified
+    if not base_url:
+        base_url = "http://localhost:8283"
+    
+    if base_url == "memory://":
+        print("Using in-memory Letta server")
+        return create_client()
+    else:
+        if port:
+            # Parse the base_url and replace the port
+            from urllib.parse import urlparse, urlunparse
+            parsed = urlparse(base_url)
+            # Reconstruct the URL with new port
+            base_url = urlunparse(parsed._replace(netloc=f"{parsed.hostname}:{port}"))
         
+        print(f"\nLetta Quickstart Configuration:")
+        print(f"Base URL: {base_url}")
+        if port:
+            print(f"Port Override: {port}")
+        print("-" * 50)
+        return create_client(base_url=base_url)
+
+def main():
+    # Initialize the client using environment variable or default to Docker version
+    port = os.getenv('LETTA_PORT')  # Get port from environment if set
+    port = int(port) if port else None  # Convert to int if exists
+    base_url = os.getenv('LETTA_BASE_URL', 'http://localhost:8283')
+    
+    print("\nStarting Letta Quickstart with:")
+    print(f"- Environment URL: {base_url}")
+    print(f"- Environment Port: {port if port else 'default'}")
+    
+    client = create_letta_client(base_url, port)
+
+    try:
         # Create a Roblox development agent
         agent = create_roblox_agent(client, "RobloxHelper")
         print(f"\nCreated agent: {agent.id}")

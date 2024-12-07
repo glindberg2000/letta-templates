@@ -16,6 +16,10 @@ def create_letta_client(base_url=None, port=None):
         base_url: The base URL for the Letta service
         port: Optional port override. If provided, will override the port in base_url
     """
+    # Default to Docker URL if not specified
+    if not base_url:
+        base_url = "http://localhost:8283"
+    
     if base_url == "memory://":
         print("Using in-memory Letta server")
         return create_client()
@@ -27,7 +31,11 @@ def create_letta_client(base_url=None, port=None):
             # Reconstruct the URL with new port
             base_url = urlunparse(parsed._replace(netloc=f"{parsed.hostname}:{port}"))
         
-        print(f"Connecting to Letta server at: {base_url}")
+        print(f"\nLetta Configuration:")
+        print(f"Base URL: {base_url}")
+        if port:
+            print(f"Port Override: {port}")
+        print("-" * 50)
         return create_client(base_url=base_url)
 
 def cleanup_agent(client, agent_id):
@@ -82,11 +90,13 @@ try:
     # Initialize the client using environment variable or default to Docker version
     port = os.getenv('LETTA_PORT')  # Get port from environment if set
     port = int(port) if port else None  # Convert to int if exists
+    base_url = os.getenv('LETTA_BASE_URL', 'http://localhost:8283')
     
-    client = create_letta_client(
-        base_url=os.getenv('LETTA_BASE_URL', 'http://localhost:8283'),
-        port=port
-    )
+    print("\nStarting Letta test with:")
+    print(f"- Environment URL: {base_url}")
+    print(f"- Environment Port: {port if port else 'default'}")
+    
+    client = create_letta_client(base_url, port)
 
     # List existing agents before creating a new one
     print("Existing agents before creation:")
