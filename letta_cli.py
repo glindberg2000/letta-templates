@@ -1,8 +1,10 @@
 import argparse
 import os
 from dotenv import load_dotenv
-from letta import EmbeddingConfig, LLMConfig, create_client, ChatMemory
+from letta import EmbeddingConfig, LLMConfig, create_client as letta_create_client, ChatMemory
 from letta.prompts import gpt_system
+from letta_local_client import LocalAPIClient
+import time
 
 # Load environment variables
 load_dotenv()
@@ -212,45 +214,17 @@ def chat_with_agent(client, agent_id, message):
         print(f"Error chatting with agent: {e}")
 
 def create_letta_client(base_url=None, port=None):
-    """
-    Create a Letta client based on the configuration.
-    
-    Args:
-        base_url (str, optional): Base URL for the Letta service
-            Use "memory://" for in-memory version
-            Defaults to environment variable or "memory://"
-        port (int, optional): Port override for the server
-            If provided, will override the port in base_url
-    
-    Returns:
-        LettaClient: Configured client instance
-        
-    Example:
-        >>> # Use Docker version
-        >>> client = create_letta_client("http://localhost:8283")
-        Connecting to Letta server at: http://localhost:8283
-        
-        >>> # Use in-memory version
-        >>> client = create_letta_client("memory://")
-        Using in-memory Letta server
-        
-        >>> # Override port
-        >>> client = create_letta_client("http://localhost:8283", port=8083)
-        Connecting to Letta server at: http://localhost:8083
-    """
+    """Create a client for direct Letta server communication."""
     if base_url == "memory://":
         print("Using in-memory Letta server")
-        return create_client()
+        return letta_create_client()  # Use renamed import
     else:
         if port:
-            # Parse the base_url and replace the port
             from urllib.parse import urlparse, urlunparse
             parsed = urlparse(base_url)
-            # Reconstruct the URL with new port
             base_url = urlunparse(parsed._replace(netloc=f"{parsed.hostname}:{port}"))
-        
         print(f"Connecting to Letta server at: {base_url}")
-        return create_client(base_url=base_url)
+        return letta_create_client(base_url=base_url)  # Use renamed import
 
 def delete_all_agents(client):
     """
@@ -432,6 +406,107 @@ def update_memory_blocks(client, agent_id, human, persona):
     except Exception as e:
         print(f"Error updating memory blocks: {e}")
 
+def create_client(mode: str, endpoint: str = None, **kwargs):
+    """Factory function to create appropriate client based on mode."""
+    if mode == 'local':
+        if not endpoint:
+            raise ValueError("Endpoint required for local mode")
+        return LocalAPIClient(endpoint)
+    else:
+        # Remove mode from kwargs since create_letta_client doesn't expect it
+        kwargs.pop('mode', None)
+        return create_letta_client(**kwargs)
+
+def run_quick_test(client, npc_id="test-npc-1", user_id="test-user-1"):
+    """Run test sequence with identifiable messages."""
+    print(f"\nRunning duplicate detection test...")
+    print(f"NPC ID: {npc_id}")
+    print(f"User ID: {user_id}")
+    print("-" * 50)
+    
+    # Normal messages with clear sequence numbers
+    test_sequence = [
+        "SEQUENCE_1: Starting test pattern",
+        "SEQUENCE_2: Measuring response time",
+        "SEQUENCE_3: Preparing rapid test",
+        "SEQUENCE_4: Ready for rapid messages"
+    ]
+    
+    for i, message in enumerate(test_sequence, 1):
+        print(f"\nSending message {i}...")
+        response = client.send_message(
+            npc_id=npc_id,
+            participant_id=user_id,
+            message=message
+        )
+        if response:
+            print(f"Response: {response['parsed_message']}")
+            print(f"Duration: {response['duration']:.3f}s")
+        time.sleep(1.0)  # Clear gap between normal messages
+    
+    # Rapid identical messages
+    print("\nSending rapid messages...")
+    rapid_msg = "DUPLICATE_TEST_MESSAGE_ABC_123"  # Clear, unique test message
+    
+    for i in range(3):
+        print(f"\nRapid message {i+1}...")
+        client.send_message(
+            npc_id=npc_id,
+            participant_id=user_id,
+            message=rapid_msg
+        )
+        time.sleep(0.1)  # Very short delay
+
+def get_agent_details(client, agent_id):
+    """
+    Display detailed information about an agent including system prompt and memory blocks.
+    
+    Args:
+        client: Letta client instance
+        agent_id (str): ID of the agent to query
+        
+    Example:
+        >>> get_agent_details(client, "agent-123")
+        
+        Agent Details:
+        ID: agent-123
+        Name: TestAgent
+        Description: A test agent
+        
+        System Prompt:
+        You are a helpful AI assistant...
+        --------------------------------------------------
+        
+        Memory Blocks:
+        Block: human
+        Value: Name: Alice
+              Role: Developer
+        --------------------------------------------------
+    """
+    try:
+        # Get agent info
+        agent = client.get_agent(agent_id)
+        print("\nAgent Details:")
+        print(f"ID: {agent.id}")
+        print(f"Name: {agent.name}")
+        print(f"Description: {agent.description}")
+        
+        # Display system prompt
+        print("\nSystem Prompt:")
+        print(agent.system)
+        print("-" * 50)
+        
+        # Get memory blocks
+        memory = client.get_in_context_memory(agent_id)
+        print("\nMemory Blocks:")
+        for block in memory.blocks:
+            print(f"\nBlock: {block.label}")
+            print(f"Value: {block.value}")
+            print("-" * 50)
+            
+    except Exception as e:
+        print(f"Error getting agent details: {e}")
+
 def main():
     """
     Main CLI entry point for the Letta management tool.
@@ -460,12 +535,18 @@ def main():
         python letta_cli.py update-memory <agent_id> --human "Name: Alice"
     """
     parser = argparse.ArgumentParser(description='Letta CLI Tool')
+    parser.add_argument('--mode', 
+                       choices=['local', 'letta'],
+                       default='letta',
+                       help='Operating mode (local for FastAPI testing)')
+    parser.add_argument('--endpoint',
+                       help='Local API endpoint for testing')
     parser.add_argument('--url', 
                        default=os.getenv('LETTA_BASE_URL', 'memory://'), 
-                       help='Base URL for the Letta service (use memory:// for in-memory version)')
+                       help='Base URL for the Letta service')
     parser.add_argument('--port',
                        type=int,
-                       help='Override the port number (e.g., 8283, 8083)')
+                       help='Override the port number')
     
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
     
@@ -522,10 +603,44 @@ def main():
     update_parser.add_argument('--human', help='New content for human block (use \\n for newlines)')
     update_parser.add_argument('--persona', help='New content for persona block (use \\n for newlines)')
     
+    # Add local test commands (always available)
+    test_parser = subparsers.add_parser('test', help='Run local API tests')
+    test_parser.add_argument('--npc-id', default='test-npc-1',
+                            help='NPC ID to test with')
+    test_parser.add_argument('--user-id', default='test-user-1',
+                            help='User ID to test with')
+    test_parser.add_argument('message', nargs='+',  # Change: Allow multiple words
+                            help='Message to send')
+    
+    history_parser = subparsers.add_parser('history', 
+        help='Show conversation history with timing')
+    
+    quick_test_parser = subparsers.add_parser('quick-test', 
+        help='Run a quick test sequence')
+    quick_test_parser.add_argument('--npc-id', default='test-npc-1',
+        help='NPC ID to test with')
+    quick_test_parser.add_argument('--user-id', default='test-user-1',
+        help='User ID to test with')
+    
+    # Add details command
+    details_parser = subparsers.add_parser('details', 
+        help='Get detailed information about an agent',
+        description='Display agent details including system prompt and memory blocks')
+    details_parser.add_argument('agent_id', help='ID of the agent')
+    
     args = parser.parse_args()
     
-    # Initialize client with optional port override
-    client = create_letta_client(args.url, args.port)
+    # Validate mode and endpoint
+    if args.mode == 'local' and not args.endpoint:
+        parser.error("--endpoint required when using --mode local")
+    
+    # Create appropriate client
+    client = create_client(
+        mode=args.mode,
+        endpoint=args.endpoint,
+        base_url=args.url,
+        port=args.port
+    )
     
     if args.command == 'messages':
         get_agent_messages(client, args.agent_id, args.limit, args.role, 
@@ -544,6 +659,22 @@ def main():
         chat_with_agent(client, args.agent_id, args.message)
     elif args.command == 'update-memory':
         update_memory_blocks(client, args.agent_id, args.human, args.persona)
+    elif args.command == 'quick-test':
+        run_quick_test(client, args.npc_id, args.user_id)
+    elif args.command == 'test':
+        # Join multiple words back into a single message
+        message = ' '.join(args.message)
+        response = client.send_message(
+            npc_id=args.npc_id,
+            participant_id=args.user_id,
+            message=message
+        )
+        if response:
+            print(f"\nMessage sent: {message}")
+            print(f"Response: {response['parsed_message']}")
+            print(f"Duration: {response['duration']:.3f}s")
+    elif args.command == 'details':
+        get_agent_details(client, args.agent_id)
     else:
         parser.print_help()
 

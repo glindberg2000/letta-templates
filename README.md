@@ -60,6 +60,55 @@ LETTA_BASE_URL=http://localhost:8283
 OPENAI_API_KEY=your_openai_api_key_here
 ```
 
+## Creating a Personalized Agent
+
+You can create a personalized agent using the following configuration:
+
+```python
+from letta import ChatMemory, EmbeddingConfig, LLMConfig, create_client
+from letta.prompts import gpt_system
+
+client = create_client()
+
+agent_state = client.create_agent(
+    name="emma_research_assistant",
+    memory=ChatMemory(
+        # Human context - who the agent is talking to
+        human="""
+Name: Alex Thompson
+Role: Data Scientist
+Interests: Machine Learning, Data Analysis, Python Programming
+Communication Style: Prefers clear, technical explanations
+        """.strip(),
+        # Agent's personality and characteristics
+        persona="""
+Name: Emma
+Role: AI Research Assistant
+Personality: Professional, knowledgeable, and friendly. Enjoys explaining complex topics in simple terms.
+Expertise: Data science, machine learning, and programming with a focus on Python.
+Communication Style: Clear and precise, uses analogies when helpful, and maintains a supportive tone.
+        """.strip()
+    ),
+    llm_config=LLMConfig(
+        model="gpt-4",
+        model_endpoint_type="openai",
+        model_endpoint="https://api.openai.com/v1",
+        context_window=8000,
+    ),
+    embedding_config=EmbeddingConfig(
+        embedding_endpoint_type="openai",
+        embedding_endpoint="https://api.openai.com/v1",
+        embedding_model="text-embedding-ada-002",
+        embedding_dim=1536,
+        embedding_chunk_size=300,
+    ),
+    # Use the built-in system prompt
+    system=gpt_system.get_system_text("memgpt_chat"),
+    include_base_tools=True,
+    tools=[],
+)
+```
+
 ## CLI Usage
 
 The CLI tool provides several commands for managing Letta agents:
@@ -81,6 +130,9 @@ python letta_cli.py delete-all
 
 # View memory blocks for an agent
 python letta_cli.py memory <agent_id>
+
+# View agent details (including system prompt)
+python letta_cli.py details <agent_id>
 
 # Chat with an agent
 python letta_cli.py chat <agent_id> "Your message here"
@@ -107,47 +159,9 @@ Port resolution priority:
 3. Port in base URL
 4. Default (8283 for Docker version)
 
-## Testing
+## Memory Management
 
-The repository includes a test script (`letta_test.py`) that demonstrates various Letta client operations:
-
-```bash
-python letta_test.py
-```
-
-The test script supports the same port and URL configurations as the CLI tool.
-
-## Server Options
-
-### Docker Version
-The Docker version of Letta runs on port 8283 by default:
-```bash
-# Check if Docker container is running
-docker ps | grep letta
-```
-
-### Pip-installed Version
-The pip-installed version can run:
-- As a service (configured via systemd)
-- In-memory (using `memory://` URL)
-- On any specified port
-
-## Features
-
-- Comprehensive CLI tool for agent management
-- Flexible port configuration
-- Support for both Docker and pip-installed versions
-- Memory block management
-- Interactive chat capabilities
-- Batch operations (e.g., delete-all)
-
-## Contributing
-
-Feel free to submit issues and enhancement requests!
-
-# Memory Management
-
-## Viewing Memory Blocks
+### Viewing Memory Blocks
 ```bash
 # View current memory blocks for an agent
 python letta_cli.py memory <agent_id>
@@ -156,21 +170,21 @@ python letta_cli.py memory <agent_id>
 python letta_cli.py messages <agent_id> --show-human
 ```
 
-## Updating Memory Blocks
+### Updating Memory Blocks
 Memory blocks can be updated in two ways:
 
 1. Using the CLI:
 ```bash
 # Update human block
-python letta_cli.py update-memory <agent_id> --human "Name: Alice\nRole: Developer\nAge: 25"
+python letta_cli.py update-memory <agent_id> --human "Name: Alice\nRole: Developer"
 
 # Update persona block
-python letta_cli.py update-memory <agent_id> --persona "You are a coding expert..."
+python letta_cli.py update-memory <agent_id> --persona "Name: Emma\nRole: AI Assistant"
 
 # Update both blocks
 python letta_cli.py update-memory <agent_id> \
-    --human "Name: Bob\nRole: Game Developer" \
-    --persona "You are a Roblox expert..."
+    --human "Name: Bob\nRole: Data Scientist" \
+    --persona "Name: Emma\nRole: Research Assistant"
 ```
 
 2. Programmatically using the quickstart functions:
@@ -179,87 +193,11 @@ from letta_quickstart import update_agent_persona
 
 # Update memory blocks
 update_agent_persona(client, agent_id, {
-    'human': 'Name: Bob\nRole: Game Developer\nExpertise: Roblox',
-    'persona': 'You are a Roblox development expert...'
+    'human': 'Name: Bob\nRole: Data Scientist',
+    'persona': 'Name: Emma\nRole: Research Assistant'
 })
 ```
 
-## Memory Block Structure
+## Contributing
 
-### Human Block
-Contains information about the user:
-```
-Name: [user's name]
-Role: [user's role]
-[Additional attributes...]
-```
-
-### Persona Block
-Contains the agent's personality and behavior configuration:
-```
-You are [description of the agent's role and expertise...]
-```
-
-Memory blocks are automatically used by the agent to maintain context and personalize interactions.
-
-# Local API Testing
-
-## Overview
-The CLI includes a local testing mode for debugging FastAPI endpoints, particularly useful for tracking message timing and duplicates.
-
-## Usage
-
-1. Basic Test:
-```bash
-# Test single message
-python letta_cli.py --mode local --endpoint "http://localhost:7777/letta/v1/chat/v2" \
-    test --npc-id "test-npc-1" --user-id "test-user-1" \
-    "Hello! How are you?"
-
-# View conversation history with timing
-python letta_cli.py --mode local --endpoint "http://localhost:7777/letta/v1/chat/v2" \
-    history
-```
-
-2. Quick Test Sequence:
-```bash
-# Run a quick test sequence
-python letta_cli.py --mode local --endpoint "http://localhost:7777/letta/v1/chat/v2" \
-    quick-test
-```
-
-## Features
-- Tracks message timing and detects potential duplicates
-- Shows full request/response details
-- Alerts on rapid messages (< 1s apart)
-- Logs timing between messages
-
-## Example Output
-```
-Message 1:
-Time: 15:30:45
-Request: {
-  "npc_id": "test-npc-1",
-  "participant_id": "test-user-1",
-  "message": "Hello!"
-}
-Response: {
-  "message": "Hi there! How can I help?"
-}
-Duration: 0.234s
-
-Message 2:
-Time: 15:30:46
-Request: {
-  "npc_id": "test-npc-1",
-  "participant_id": "test-user-1",
-  "message": "How are you?"
-}
-Response: {
-  "message": "I'm doing well, thank you!"
-}
-Duration: 0.156s
-Time since previous: 1.234s
-```
-```
-  </rewritten_file>
+Feel free to submit issues and enhancement requests!

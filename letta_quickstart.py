@@ -3,6 +3,8 @@ from dotenv import load_dotenv
 from letta import EmbeddingConfig, LLMConfig, create_client, ChatMemory
 from letta.prompts import gpt_system
 import json
+import time
+import argparse
 
 # Load environment variables
 load_dotenv()
@@ -40,6 +42,11 @@ def print_agent_details(client, agent_id, stage=""):
     print(f"Name: {agent.name}")
     print(f"Description: {agent.description}")
     
+    # Print system prompt
+    print("\nSystem Prompt:")
+    print(f"{agent.system}")
+    print("-" * 50)
+    
     # Get memory configuration
     memory = client.get_in_context_memory(agent_id)
     print("\nMemory Blocks:")
@@ -76,8 +83,12 @@ def create_roblox_agent(client, name: str, persona: str = None):
         - Roblox-specific memory configuration
         - Base tools enabled
     """
+    # Add timestamp to name to avoid conflicts
+    timestamp = int(time.time())
+    unique_name = f"{name}_{timestamp}"
+    
     return client.create_agent(
-        name=name,
+        name=unique_name,
         embedding_config=EmbeddingConfig(
             embedding_endpoint_type="openai",
             embedding_endpoint="https://api.openai.com/v1",
@@ -96,7 +107,8 @@ def create_roblox_agent(client, name: str, persona: str = None):
             persona=persona or "You are a knowledgeable AI assistant with expertise in Roblox development, Lua programming, and game design."
         ),
         system=gpt_system.get_system_text("memgpt_chat"),
-        include_base_tools=True,
+        include_base_tools=True,  # Keep base tools enabled
+        tools=None,
         description="A Roblox development assistant"
     )
 
@@ -202,7 +214,55 @@ def create_letta_client(base_url=None, port=None):
         print("-" * 50)
         return create_client(base_url=base_url)
 
+def run_quick_test(client, npc_id="test-npc-1", user_id="test-user-1"):
+    """Run test sequence with identifiable messages."""
+    print(f"\nRunning duplicate detection test...")
+    print(f"NPC ID: {npc_id}")
+    print(f"User ID: {user_id}")
+    print("-" * 50)
+    
+    # Normal messages with clear sequence numbers
+    test_sequence = [
+        "TEST_MSG_1: Starting sequence",
+        "TEST_MSG_2: Checking timing",
+        "TEST_MSG_3: Almost ready",
+        "TEST_MSG_4: Now testing rapid messages"
+    ]
+    
+    for i, message in enumerate(test_sequence, 1):
+        print(f"\nSending message {i}...")
+        response = client.send_message(
+            npc_id=npc_id,
+            participant_id=user_id,
+            message=message
+        )
+        if response:
+            print(f"Response: {response['parsed_message']}")
+            print(f"Duration: {response['duration']:.3f}s")
+        time.sleep(1.0)  # Clear gap between normal messages
+    
+    # Rapid messages with identical content
+    print("\nSending rapid messages...")
+    rapid_msg = "RAPID_TEST_MESSAGE_PLEASE_LOG_ME"
+    
+    for i in range(3):
+        print(f"\nRapid message {i+1}...")
+        client.send_message(
+            npc_id=npc_id,
+            participant_id=user_id,
+            message=rapid_msg
+        )
+        time.sleep(0.1)  # Very short delay
+    
+    print("\nTest complete! Showing full history:")
+    client.print_conversation_history()
+
 def main():
+    # Add argument parsing
+    parser = argparse.ArgumentParser(description='Letta Quickstart Tool')
+    parser.add_argument('--keep', action='store_true', help='Keep the agent after testing (do not cleanup)')
+    args = parser.parse_args()
+
     # Initialize the client using environment variable or default to Docker version
     port = os.getenv('LETTA_PORT')  # Get port from environment if set
     port = int(port) if port else None  # Convert to int if exists
@@ -211,6 +271,7 @@ def main():
     print("\nStarting Letta Quickstart with:")
     print(f"- Environment URL: {base_url}")
     print(f"- Environment Port: {port if port else 'default'}")
+    print(f"- Keep Agent: {args.keep}")
     
     client = create_letta_client(base_url, port)
 
@@ -243,11 +304,14 @@ def main():
             "Now that you're focused on optimization, what's your approach to performance tuning?")
         print(f"Response: {response}")
 
-    finally:
-        # Cleanup
-        if 'agent' in locals():
+        if args.keep:
+            print(f"\nKeeping agent for examination: {agent.id}")
+        else:
             client.delete_agent(agent.id)
             print(f"\nCleaned up agent: {agent.id}")
+
+    finally:
+        pass
 
 if __name__ == "__main__":
     main() 
