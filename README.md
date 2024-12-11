@@ -2,6 +2,24 @@
 
 A collection of tools and utilities for working with the Letta AI server, including a CLI tool for managing agents.
 
+## Version Compatibility
+
+### Client-Server Version Matching
+The Letta client must match the server version to handle tool schemas correctly. If you see validation errors like:
+```
+ValidationError: validation errors for AgentState
+tools.0.return_char_limit
+  Extra inputs are not permitted
+```
+Update your client to match the server:
+```bash
+# Check current version
+pip show letta
+
+# Upgrade to latest
+pip install --upgrade letta
+```
+
 ## Installation
 
 1. Create and activate a virtual environment:
@@ -15,6 +33,7 @@ venv\Scripts\activate  # On Windows
 2. Install requirements:
 ```bash
 pip install -r requirements.txt
+pip install --upgrade letta  # Ensure latest client version
 ```
 
 3. Copy and configure environment variables:
@@ -182,5 +201,65 @@ You are [description of the agent's role and expertise...]
 ```
 
 Memory blocks are automatically used by the agent to maintain context and personalize interactions.
+
+# Local API Testing
+
+## Overview
+The CLI includes a local testing mode for debugging FastAPI endpoints, particularly useful for tracking message timing and duplicates.
+
+## Usage
+
+1. Basic Test:
+```bash
+# Test single message
+python letta_cli.py --mode local --endpoint "http://localhost:7777/letta/v1/chat/v2" \
+    test --npc-id "test-npc-1" --user-id "test-user-1" \
+    "Hello! How are you?"
+
+# View conversation history with timing
+python letta_cli.py --mode local --endpoint "http://localhost:7777/letta/v1/chat/v2" \
+    history
 ```
- 
+
+2. Quick Test Sequence:
+```bash
+# Run a quick test sequence
+python letta_cli.py --mode local --endpoint "http://localhost:7777/letta/v1/chat/v2" \
+    quick-test
+```
+
+## Features
+- Tracks message timing and detects potential duplicates
+- Shows full request/response details
+- Alerts on rapid messages (< 1s apart)
+- Logs timing between messages
+
+## Example Output
+```
+Message 1:
+Time: 15:30:45
+Request: {
+  "npc_id": "test-npc-1",
+  "participant_id": "test-user-1",
+  "message": "Hello!"
+}
+Response: {
+  "message": "Hi there! How can I help?"
+}
+Duration: 0.234s
+
+Message 2:
+Time: 15:30:46
+Request: {
+  "npc_id": "test-npc-1",
+  "participant_id": "test-user-1",
+  "message": "How are you?"
+}
+Response: {
+  "message": "I'm doing well, thank you!"
+}
+Duration: 0.156s
+Time since previous: 1.234s
+```
+```
+  </rewritten_file>
