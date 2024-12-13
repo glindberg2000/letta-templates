@@ -58,55 +58,47 @@ LETTA_BASE_URL=http://localhost:8283
 
 # OpenAI Configuration
 OPENAI_API_KEY=your_openai_api_key_here
+
+# Claude Configuration (optional)
+LETTA_LLM_ENDPOINT=https://api.anthropic.com/v1/messages
+LETTA_LLM_ENDPOINT_TYPE=anthropic
+LETTA_LLM_MODEL=claude-3-haiku-20240307
+LETTA_LLM_CONTEXT_WINDOW=200000
+
+# Embedding Configuration for Claude
+LETTA_EMBEDDING_ENDPOINT=https://api.anthropic.com/v1/embeddings
+LETTA_EMBEDDING_ENDPOINT_TYPE=anthropic
+LETTA_EMBEDDING_MODEL=claude-3-haiku-20240307
+LETTA_EMBEDDING_DIM=1536
 ```
 
 ## Creating a Personalized Agent
 
-You can create a personalized agent using the following configuration:
+You can create a personalized agent using either OpenAI or Claude as the LLM provider:
+
+### Command Line Usage
+
+```bash
+# Create agent with OpenAI (default)
+python letta_quickstart.py --name emma_openai --llm openai
+
+# Create agent with Claude 3
+python letta_quickstart.py --name emma_claude --llm claude
+
+# Additional options
+python letta_quickstart.py --name custom_agent --llm claude --keep  # Keep agent after creation
+```
+
+### Programmatic Usage
 
 ```python
-from letta import ChatMemory, EmbeddingConfig, LLMConfig, create_client
-from letta.prompts import gpt_system
+from letta_quickstart import create_personalized_agent
 
-client = create_client()
+# Create with OpenAI (default)
+agent_openai = create_personalized_agent(name="emma_openai")
 
-agent_state = client.create_agent(
-    name="emma_research_assistant",
-    memory=ChatMemory(
-        # Human context - who the agent is talking to
-        human="""
-Name: Alex Thompson
-Role: Data Scientist
-Interests: Machine Learning, Data Analysis, Python Programming
-Communication Style: Prefers clear, technical explanations
-        """.strip(),
-        # Agent's personality and characteristics
-        persona="""
-Name: Emma
-Role: AI Research Assistant
-Personality: Professional, knowledgeable, and friendly. Enjoys explaining complex topics in simple terms.
-Expertise: Data science, machine learning, and programming with a focus on Python.
-Communication Style: Clear and precise, uses analogies when helpful, and maintains a supportive tone.
-        """.strip()
-    ),
-    llm_config=LLMConfig(
-        model="gpt-4",
-        model_endpoint_type="openai",
-        model_endpoint="https://api.openai.com/v1",
-        context_window=8000,
-    ),
-    embedding_config=EmbeddingConfig(
-        embedding_endpoint_type="openai",
-        embedding_endpoint="https://api.openai.com/v1",
-        embedding_model="text-embedding-ada-002",
-        embedding_dim=1536,
-        embedding_chunk_size=300,
-    ),
-    # Use the built-in system prompt
-    system=gpt_system.get_system_text("memgpt_chat"),
-    include_base_tools=True,
-    tools=[],
-)
+# Create with Claude 3
+agent_claude = create_personalized_agent(name="emma_claude", use_claude=True)
 ```
 
 ## CLI Usage
@@ -119,8 +111,9 @@ The CLI tool provides several commands for managing Letta agents:
 # List all agents
 python letta_cli.py list
 
-# Create a new agent
-python letta_cli.py create --name "MyAgent" --description "My custom agent"
+# Create a new agent with specific LLM
+python letta_cli.py create --name "MyAgent" --description "My custom agent" --llm openai
+python letta_cli.py create --name "ClaudeAgent" --description "Claude-powered assistant" --llm claude
 
 # Delete a specific agent
 python letta_cli.py delete <agent_id>
@@ -201,3 +194,166 @@ update_agent_persona(client, agent_id, {
 ## Contributing
 
 Feel free to submit issues and enhancement requests!
+
+## LLM Provider Configuration
+
+### OpenAI Configuration
+- Uses GPT-4 model
+- Context window: 8000 tokens
+- Default embedding model: text-embedding-ada-002
+
+### Claude Configuration
+- Uses Claude 3 Haiku model
+- Context window: 200,000 tokens
+- Supports both chat and embedding capabilities
+
+You can switch between providers using either:
+1. Command-line arguments (`--llm claude` or `--llm openai`)
+2. Environment variables in `.env`
+3. Programmatic configuration via `create_personalized_agent(use_claude=True/False)`
+
+## Custom Tools and Action Handling
+
+### Creating Agents with Custom Tools
+
+You can create agents with custom tools like the `perform_action` tool:
+
+```python
+from letta_quickstart import create_personalized_agent
+
+# Create agent with perform_action tool
+agent = create_personalized_agent(
+    name="action_agent",
+    use_claude=False,  # Use OpenAI (default)
+    overwrite=True     # Replace if exists
+)
+```
+
+The agent will have:
+- Base tools enabled (`include_base_tools=True`)
+- The `perform_action` tool for NPC actions
+- Custom system prompt with tool usage instructions
+
+### Handling Tool Responses
+
+When interacting with an agent that uses tools, you'll need to handle different types of responses:
+
+```python
+response = client.send_message(
+    agent_id=agent_id,
+    message="Follow me",
+    role="user"
+)
+
+if response and hasattr(response, 'messages'):
+    for msg in response.messages:
+        # Handle direct text responses
+        if hasattr(msg, 'text') and msg.text:
+            print(f"LLM Response: {msg.text}")
+            
+        # Handle function calls (e.g., perform_action)
+        elif hasattr(msg, 'function_call'):
+            if msg.function_call.name == 'perform_action':
+                args = json.loads(msg.function_call.arguments)
+                action = args.get('action')
+                params = args.get('parameters')
+                print(f"Action Called: {action}")
+                print(f"Parameters: {params}")
+                
+        # Handle function returns
+        elif hasattr(msg, 'function_return'):
+            try:
+                result = json.loads(msg.function_return)
+                status = result.get('status')
+                action = result.get('action_called')
+                message = result.get('message')
+                print(f"Action Result: {action} - {status}")
+                print(f"Message: {message}")
+            except json.JSONDecodeError:
+                print(f"Raw Return: {msg.function_return}")
+                
+        # Handle internal thoughts
+        elif hasattr(msg, 'internal_monologue'):
+            print(f"Internal: {msg.internal_monologue}")
+```
+
+### Example Response Structure
+
+A typical action response might look like:
+
+```python
+{
+    'messages': [
+        # Internal thought process
+        {
+            'internal_monologue': 'User wants to be followed...'
+        },
+        # Tool call
+        {
+            'function_call': {
+                'name': 'perform_action',
+                'arguments': '{"action": "follow", "request_heartbeat": true}'
+            }
+        },
+        # Tool result
+        {
+            'function_return': {
+                'status': 'success',
+                'action_called': 'follow',
+                'message': 'Now following the current target.',
+                'timestamp': '2024-12-13T22:42:27.041760'
+            }
+        },
+        # Final LLM response
+        {
+            'text': "I'm now following you! Let's share some awesome insights together."
+        }
+    ]
+}
+```
+
+### Aggregating Responses for Roblox
+
+When sending results back to Roblox, you might want to combine the action result and LLM response:
+
+```python
+def extract_action_result(response):
+    result = {
+        'action_status': None,
+        'action_message': None,
+        'llm_response': None
+    }
+    
+    if hasattr(response, 'messages'):
+        for msg in response.messages:
+            # Get function return (action result)
+            if hasattr(msg, 'function_return'):
+                try:
+                    action_result = json.loads(msg.function_return)
+                    result['action_status'] = action_result.get('status')
+                    result['action_message'] = action_result.get('message')
+                except:
+                    pass
+                    
+            # Get final LLM response
+            elif hasattr(msg, 'text') and msg.text:
+                result['llm_response'] = msg.text
+                
+    return result
+
+# Usage example:
+response = client.send_message(agent_id=agent_id, message="Follow me", role="user")
+result = extract_action_result(response)
+
+# Send to Roblox:
+{
+    'action_status': 'success',
+    'action_message': 'Now following the current target.',
+    'llm_response': "I'm now following you! Let's share some awesome insights together."
+}
+```
+
+This structure allows Roblox to:
+1. Verify the action was successful
+2. Update NPC state based on the action result
+3. Display the LLM's conversational response to the user

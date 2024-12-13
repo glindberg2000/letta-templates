@@ -5,6 +5,8 @@ from letta.prompts import gpt_system
 import json
 import time
 import argparse
+from typing import Optional
+import sys
 
 # Load environment variables
 load_dotenv()
@@ -146,45 +148,44 @@ def update_agent_persona(client, agent_id: str, blocks: dict):
                 value=blocks[block.label]
             )
 
-def chat_with_agent(client, agent_id: str, message: str):
+def extract_message_from_response(response) -> str:
     """
-    Send a message to an agent and return the response.
-    
-    Args:
-        client: Letta client instance
-        agent_id (str): ID of the agent to chat with
-        message (str): Message to send to the agent
-    
-    Returns:
-        str: Agent's response message or None if no valid response
-    
-    Example:
-        >>> response = chat_with_agent(
-        ...     client,
-        ...     agent.id,
-        ...     "Can you help optimize this Lua code?"
-        ... )
+    Extract the actual message content from a LettaResponse object.
+    """
+    try:
+        if hasattr(response, 'messages'):
+            for message in response.messages:
+                # Look for function calls to send_message
+                if getattr(message, 'message_type', '') == 'function_call':
+                    function_call = getattr(message, 'function_call', None)
+                    if function_call and function_call.name == 'send_message':
+                        # Parse the arguments JSON string
+                        import json
+                        args = json.loads(function_call.arguments)
+                        return args.get('message', '')
+        return ''
+    except Exception as e:
+        print(f"Error extracting message: {e}")
+        return ''
+
+def chat_with_agent(client, agent_id: str, message: str, role: str = "user") -> str:
+    """
+    Send a chat message to an agent and return the response.
+    """
+    try:
+        # Send message and get response
+        response = client.send_message(
+            agent_id=agent_id,
+            message=message,
+            role=role
+        )
         
-        Sending message: Can you help optimize this Lua code?
-        Response: I'd be happy to help optimize your Lua code...
-    """
-    print(f"\nSending message: {message}")
-    response = client.send_message(
-        agent_id=agent_id,
-        role="user",
-        message=message
-    )
-    
-    # Extract actual response message
-    for msg in response.messages:
-        if hasattr(msg, 'function_call'):
-            try:
-                args = json.loads(msg.function_call.arguments)
-                if 'message' in args:
-                    return args['message']
-            except:
-                pass
-    return None
+        # Extract the actual message content
+        return extract_message_from_response(response)
+        
+    except Exception as e:
+        print(f"Error in chat_with_agent: {e}")
+        raise
 
 def create_letta_client(base_url=None, port=None):
     """
@@ -257,53 +258,268 @@ def run_quick_test(client, npc_id="test-npc-1", user_id="test-user-1"):
     print("\nTest complete! Showing full history:")
     client.print_conversation_history()
 
+def create_personalized_agent(
+    name: str = "emma_research_assistant",
+    use_claude: bool = False,
+    overwrite: bool = False
+):
+    """
+    Create a personalized agent with configurable LLM settings.
+    
+    Args:
+        name (str): Name of the agent
+        use_claude (bool): If True, uses Claude 3; if False, uses OpenAI
+        overwrite (bool): If True, deletes existing agent with same name before creating new one
+    """
+    client = create_client(base_url="http://localhost:8283")
+
+    # Check if agent exists and handle accordingly
+    try:
+        existing_agents = client.list_agents()
+        for agent in existing_agents:
+            if agent.name == name:
+                if overwrite:
+                    print(f"Deleting existing agent '{name}'...")
+                    client.delete_agent(agent.id)
+                else:
+                    raise ValueError(f"Agent with name '{name}' already exists. Use --overwrite to replace it.")
+    except Exception as e:
+        print(f"Error checking existing agents: {e}")
+        raise
+
+    if use_claude:
+        # Claude 3 Configuration
+        llm_config = LLMConfig(
+            model="claude-3-haiku-20240307",
+            model_endpoint_type="anthropic",
+            model_endpoint="https://api.anthropic.com/v1",
+            context_window=200000,
+        )
+        embedding_config = EmbeddingConfig(
+            embedding_endpoint_type="anthropic",
+            embedding_endpoint="https://api.anthropic.com/v1/embeddings",
+            embedding_model="claude-3-haiku-20240307",
+            embedding_dim=1536,
+            embedding_chunk_size=300,
+        )
+    else:
+        # Default OpenAI Configuration
+        llm_config = LLMConfig(
+            model="gpt-4",
+            model_endpoint_type="openai",
+            model_endpoint="https://api.openai.com/v1",
+            context_window=8000,
+        )
+        embedding_config = EmbeddingConfig(
+            embedding_endpoint_type="openai",
+            embedding_endpoint="https://api.openai.com/v1",
+            embedding_model="text-embedding-ada-002",
+            embedding_dim=1536,
+            embedding_chunk_size=300,
+        )
+
+    # Custom system prompt with tools section
+    system_prompt = gpt_system.get_system_text("memgpt_chat").strip()
+    tools_section = """
+Performing actions:
+You have access to the `perform_action` tool. This tool allows you to direct NPC behavior by specifying an action and its parameters. Use it to control NPC actions such as following, unfollowing, examining objects, or navigating to destinations. Ensure actions align with the context of the conversation and the NPC's role.
+
+Base instructions finished.
+From now on, you are going to act as your persona."""
+
+    # Replace the default ending with our custom tools section
+    system_prompt = system_prompt.replace(
+        "Base instructions finished.\nFrom now on, you are going to act as your persona.",
+        tools_section
+    )
+
+    agent_state = client.create_agent(
+        name=name,
+        memory=ChatMemory(
+            human="""
+Name: Alex Thompson
+Role: Data Scientist
+Interests: Machine Learning, Data Analysis, Python Programming
+Communication Style: Prefers clear, technical explanations
+            """.strip(),
+            persona="""
+Name: Emma
+Role: AI Research Assistant
+Personality: Professional, knowledgeable, and friendly. Enjoys explaining complex topics in simple terms.
+Expertise: Data science, machine learning, and programming with a focus on Python.
+Communication Style: Clear and precise, uses analogies when helpful, and maintains a supportive tone.
+            """.strip()
+        ),
+        llm_config=LLMConfig(
+            model="gpt-4o-mini",  # Using gpt-4o-mini
+            model_endpoint_type="openai",
+            model_endpoint="https://api.openai.com/v1",
+            context_window=8000,
+        ),
+        embedding_config=embedding_config,
+        system=system_prompt,
+        include_base_tools=True,
+        tools=["perform_action"],
+    )
+    
+    return agent_state
+
+def validate_environment():
+    """Validate required environment variables are set."""
+    required_vars = {
+        'claude': [
+            'LETTA_LLM_ENDPOINT',
+            'LETTA_LLM_ENDPOINT_TYPE',
+            'LETTA_LLM_MODEL',
+            'ANTHROPIC_API_KEY'
+        ],
+        'openai': [
+            'OPENAI_API_KEY'
+        ]
+    }
+
+    def check_vars(vars_list):
+        missing = [var for var in vars_list if not os.getenv(var)]
+        return missing
+
+    print("\nValidating environment variables...")
+    
+    # Check common variables
+    missing_common = check_vars(['LETTA_BASE_URL'])
+    if missing_common:
+        print(f"Missing common variables: {', '.join(missing_common)}")
+        return False
+
+    # Check provider-specific variables
+    provider = os.getenv('LETTA_LLM_ENDPOINT_TYPE', 'openai')
+    missing_provider = check_vars(required_vars[provider])
+    if missing_provider:
+        print(f"Missing {provider} variables: {', '.join(missing_provider)}")
+        return False
+
+    print("Environment validation successful!")
+    return True
+
+def test_agent_chat(client, agent_id: str, llm_type: str) -> bool:
+    """
+    Test the agent with a simple chat message to verify it's working.
+    """
+    try:
+        test_message = "Follow me"  # Simple, direct action request
+        print(f"\nSending test message: '{test_message}'")
+        
+        # Get agent details for debugging
+        agent = client.get_agent(agent_id)
+        print(f"\nDebug: Agent configuration:")
+        print(f"ID: {agent_id}")
+        print(f"Model: {getattr(agent, 'model', 'unknown')}")
+        
+        # Send message and get response
+        response = client.send_message(
+            agent_id=agent_id,
+            message=test_message,
+            role="user"
+        )
+        
+        if response and hasattr(response, 'messages'):
+            print("\nResponse messages:")
+            for msg in response.messages:
+                if hasattr(msg, 'text') and msg.text:
+                    print(f"Text: {msg.text}")
+                elif hasattr(msg, 'function_call'):
+                    print(f"Function Call: {msg.function_call.name}")
+                    print(f"Arguments: {msg.function_call.arguments}")
+                    if msg.function_call.name == 'perform_action':
+                        print("Found perform_action call!")
+                        try:
+                            import json
+                            args = json.loads(msg.function_call.arguments)
+                            print(f"Action: {args.get('action')}")
+                            print(f"Parameters: {args.get('parameters')}")
+                        except Exception as e:
+                            print(f"Error parsing arguments: {e}")
+                elif hasattr(msg, 'function_return'):
+                    print(f"Function Return: {msg.function_return}")
+                    print(f"Status: {msg.status}")
+                    try:
+                        import json
+                        result = json.loads(msg.function_return)
+                        print(f"Action Result: {result}")
+                    except:
+                        pass
+                elif hasattr(msg, 'internal_monologue'):
+                    print(f"Internal Monologue: {msg.internal_monologue}")
+            
+            # Check if perform_action was called with 'follow'
+            action_called = any(
+                hasattr(msg, 'function_call') and 
+                msg.function_call.name == 'perform_action' and
+                'follow' in msg.function_call.arguments.lower()
+                for msg in response.messages
+            )
+            
+            if not action_called:
+                print("Warning: follow action was not called")
+            else:
+                print("Success: follow action was called!")
+                
+            return True
+        else:
+            print("\nWarning: No valid response received from agent")
+            return False
+            
+    except Exception as e:
+        print(f"\nError testing agent chat: {e}")
+        return False
+
 def main():
-    # Add argument parsing
     parser = argparse.ArgumentParser(description='Letta Quickstart Tool')
-    parser.add_argument('--keep', action='store_true', help='Keep the agent after testing (do not cleanup)')
+    parser.add_argument('--keep', action='store_true', 
+                      help='Keep the agent after testing (do not cleanup)')
+    parser.add_argument('--llm', choices=['openai', 'claude'], default='openai', 
+                      help='Choose LLM provider (default: openai)')
+    parser.add_argument('--name', default='emma_assistant', 
+                      help='Name for the agent (default: emma_assistant)')
+    parser.add_argument('--overwrite', action='store_true',
+                      help='Overwrite existing agent with same name')
+    parser.add_argument('--skip-test', action='store_true',
+                      help='Skip the test message verification')
     args = parser.parse_args()
 
-    # Initialize the client using environment variable or default to Docker version
-    port = os.getenv('LETTA_PORT')  # Get port from environment if set
-    port = int(port) if port else None  # Convert to int if exists
+    # Validate environment before proceeding
+    if not validate_environment():
+        sys.exit(1)
+
+    # Initialize the client with retry logic
+    port = os.getenv('LETTA_PORT')
+    port = int(port) if port else None
     base_url = os.getenv('LETTA_BASE_URL', 'http://localhost:8283')
     
     print("\nStarting Letta Quickstart with:")
     print(f"- Environment URL: {base_url}")
     print(f"- Environment Port: {port if port else 'default'}")
     print(f"- Keep Agent: {args.keep}")
+    print(f"- LLM Provider: {args.llm}")
+    print(f"- Agent Name: {args.name}")
+    print(f"- Overwrite: {args.overwrite}")
     
-    client = create_letta_client(base_url, port)
-
     try:
-        # Create a Roblox development agent
-        agent = create_roblox_agent(client, "RobloxHelper")
+        client = create_letta_client(base_url, port)
+        agent = create_personalized_agent(
+            name=args.name,
+            use_claude=(args.llm == 'claude'),
+            overwrite=args.overwrite
+        )
         print(f"\nCreated agent: {agent.id}")
         
         # Print initial configuration
         print_agent_details(client, agent.id, "INITIAL STATE")
 
-        # Example chat
-        response = chat_with_agent(client, agent.id, 
-            "Can you help me optimize a Lua script for my Roblox game?")
-        print(f"Response: {response}")
-
-        # Example updating persona
-        new_blocks = {
-            "human": "Name: RobloxDev\nRole: A senior Roblox developer focusing on performance optimization",
-            "persona": "You are an AI expert in Roblox development, specializing in performance optimization and best practices."
-        }
-        update_agent_persona(client, agent.id, new_blocks)
-        print("\nUpdated agent persona")
+        # Test the agent unless explicitly skipped
+        if not args.skip_test:
+            if not test_agent_chat(client, agent.id, args.llm):
+                print("Warning: Agent creation succeeded but chat test failed!")
         
-        # Print updated configuration
-        print_agent_details(client, agent.id, "AFTER UPDATE")
-
-        # Test the updated persona
-        response = chat_with_agent(client, agent.id, 
-            "Now that you're focused on optimization, what's your approach to performance tuning?")
-        print(f"Response: {response}")
-
         if args.keep:
             print(f"\nKeeping agent for examination: {agent.id}")
         else:

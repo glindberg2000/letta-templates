@@ -5,36 +5,13 @@ from letta import EmbeddingConfig, LLMConfig, create_client as letta_create_clie
 from letta.prompts import gpt_system
 from letta_local_client import LocalAPIClient
 import time
+import json
 
 # Load environment variables
 load_dotenv()
 
 def list_all_agents(client):
-    """
-    List all available agents with their details and memory blocks.
-    
-    Args:
-        client: Letta client instance
-    
-    Returns:
-        list: List of agents if successful, empty list on error
-        
-    Example:
-        >>> agents = list_all_agents(client)
-        
-        All Available Agents:
-        ID: agent-123
-        Name: TestAgent
-        Description: A test agent
-        
-        Memory Blocks:
-          Human:
-            Name: Alice
-            Role: Developer
-          Persona:
-            You are an AI assistant...
-        --------------------------------------------------
-    """
+    """List all available agents with their details, memory blocks, and LLM config."""
     try:
         agents = client.list_agents()
         print("\nAll Available Agents:")
@@ -42,6 +19,42 @@ def list_all_agents(client):
             print(f"ID: {agent.id}")
             print(f"Name: {agent.name}")
             print(f"Description: {agent.description}")
+            
+            # Add LLM Configuration display with correct attributes
+            try:
+                if hasattr(agent, 'llm_config'):
+                    print("\nLLM Configuration:")
+                    config = agent.llm_config
+                    print(f"  Model: {config.model}")
+                    print(f"  Endpoint Type: {config.model_endpoint_type}")
+                    print(f"  Endpoint: {config.model_endpoint}")
+                    if hasattr(config, 'model_wrapper'):
+                        print(f"  Model Wrapper: {config.model_wrapper}")
+                else:
+                    print("\nLLM Configuration: Not available")
+            except Exception as e:
+                print(f"\nError fetching LLM config: {e}")
+            
+            # Display attached tools
+            try:
+                print("\nAttached Tools:")
+                if hasattr(agent, 'tools') and agent.tools:
+                    for tool in agent.tools:
+                        print(f"  Tool: {tool.name}")
+                        if tool.description:
+                            print(f"    Description: {tool.description}")
+                        if tool.tags:
+                            print(f"    Tags: {', '.join(tool.tags)}")
+                        if tool.module:
+                            print(f"    Module: {tool.module}")
+                else:
+                    print("  No custom tools attached")
+                
+                # Display if base tools are included
+                if hasattr(agent, 'include_base_tools'):
+                    print(f"  Base Tools: {'Enabled' if agent.include_base_tools else 'Disabled'}")
+            except Exception as e:
+                print(f"  Error fetching tools: {e}")
             
             # Get memory blocks for each agent
             try:
@@ -156,23 +169,67 @@ def create_test_agent(client, name="TestAgent", description="A test agent"):
         print(f"Error creating agent: {e}")
         return None
 
-def delete_agent(client, agent_id):
-    """
-    Delete a specific agent by ID.
-    
-    Args:
-        client: Letta client instance
-        agent_id (str): ID of the agent to delete
-        
-    Example:
-        >>> delete_agent(client, "agent-123")
-        Successfully deleted agent: agent-123
-    """
+def delete_agent(client, agent_id: str, agent_name: str) -> bool:
+    """Delete a single agent with error handling."""
     try:
+        # First try to detach any sources
+        try:
+            sources = client.list_attached_sources(agent_id)
+            for source in sources:
+                client.detach_source_from_agent(agent_id, source.id)
+        except Exception as e:
+            print(f"Warning: Could not detach sources from {agent_name}: {e}")
+
+        # Get the agent's current state
+        try:
+            agent = client.get_agent(agent_id)
+            # Try to clean up the agent state
+            client.update_agent(
+                agent_id=agent_id,
+                name=agent.name,  # Keep the name
+                description="",   # Clear description
+                system="",       # Clear system
+                metadata={},     # Clear metadata
+                memory=None      # Clear memory
+            )
+        except Exception as e:
+            print(f"Warning: Could not clean up agent state: {e}")
+
+        # Try to delete archival memory first
+        try:
+            memories = client.get_archival_memory(agent_id)
+            for memory in memories:
+                try:
+                    client.delete_archival_memory(agent_id, memory.id)
+                except Exception as mem_e:
+                    print(f"Warning: Could not delete memory {memory.id}: {mem_e}")
+        except Exception as e:
+            print(f"Warning: Could not clean up archival memory: {e}")
+
+        # Try to delete the agent
         client.delete_agent(agent_id)
-        print(f"Successfully deleted agent: {agent_id}")
+        print(f"Deleted agent: {agent_name} (ID: {agent_id})")
+        return True
+
     except Exception as e:
-        print(f"Error deleting agent: {e}")
+        if "passage_legacy" in str(e):
+            print(f"Warning: Legacy passage format issue for {agent_name}")
+            try:
+                # Try minimal update before delete
+                client.update_agent(
+                    agent_id=agent_id,
+                    name=agent_name,
+                    description=""
+                )
+                # Try delete again
+                client.delete_agent(agent_id)
+                print(f"Successfully deleted agent after cleanup: {agent_name}")
+                return True
+            except Exception as retry_e:
+                print(f"Error in retry deletion: {retry_e}")
+        else:
+            print(f"Error deleting agent {agent_id}: {e}")
+        return False
 
 def chat_with_agent(client, agent_id, message):
     """
@@ -226,55 +283,93 @@ def create_letta_client(base_url=None, port=None):
         print(f"Connecting to Letta server at: {base_url}")
         return letta_create_client(base_url=base_url)  # Use renamed import
 
+def is_legacy_agent(agent_name: str) -> bool:
+    """Check if this is a legacy NPC agent."""
+    return agent_name.startswith('npc_') and len(agent_name.split('_')) >= 3
+
+def list_problematic_agents(client):
+    """List agents that can't be deleted and might cause name collisions."""
+    try:
+        agents = client.list_agents()
+        problematic = []
+        
+        for agent in agents:
+            try:
+                # Try to delete the agent
+                client.delete_agent(agent.id)
+                print(f"Successfully deleted test agent: {agent.name}")
+            except Exception as e:
+                if "passage_legacy" in str(e):
+                    problematic.append(agent)
+                    print(f"Warning: Undeletable agent found: {agent.name}")
+                    print(f"         ID: {agent.id}")
+                    print(f"         This name may cause conflicts if reused.")
+
+        return problematic
+    except Exception as e:
+        print(f"Error checking agents: {e}")
+        return []
+
 def delete_all_agents(client):
-    """
-    Delete all agents after user confirmation.
-    
-    Args:
-        client: Letta client instance
-        
-    Example:
-        >>> delete_all_agents(client)
-        
-        Found the following agents:
-        - TestAgent (ID: agent-123)
-        - RobloxHelper (ID: agent-456)
-        
-        Are you sure you want to delete ALL agents? (yes/no): yes
-        Deleted agent: TestAgent (ID: agent-123)
-        Deleted agent: RobloxHelper (ID: agent-456)
-        
-        All agents have been deleted.
-    
-    Note:
-        Requires explicit 'yes' confirmation
-        Continues with remaining deletions if one fails
-    """
+    """Delete all agents from the server."""
+    print("\nFound the following agents:")
     try:
         agents = client.list_agents()
         if not agents:
-            print("No agents to delete.")
+            print("No agents found.")
             return
 
-        print("\nFound the following agents:")
+        # First identify problematic agents
+        problematic_names = set()
         for agent in agents:
-            print(f"- {agent.name} (ID: {agent.id})")
-        
+            try:
+                print(f"- {agent.name} (ID: {agent.id})")
+                if "passage_legacy" in str(agent.id):  # Quick check for potential issues
+                    problematic_names.add(agent.name)
+            except Exception:
+                pass
+
+        if problematic_names:
+            print("\nWARNING: The following agent names cannot be deleted and may cause")
+            print("         conflicts if Roblox tries to recreate agents with these names:")
+            for name in problematic_names:
+                print(f"         - {name}")
+            print("\nConsider using different names for new agents in Roblox.")
+
         confirm = input("\nAre you sure you want to delete ALL agents? (yes/no): ")
         if confirm.lower() != 'yes':
             print("Operation cancelled.")
             return
 
+        success_count = 0
+        fail_count = 0
+        
         for agent in agents:
             try:
+                print(f"\nDeleting {agent.name}...")
                 client.delete_agent(agent.id)
-                print(f"Deleted agent: {agent.name} (ID: {agent.id})")
+                print(f"Successfully deleted {agent.name}")
+                success_count += 1
             except Exception as e:
-                print(f"Error deleting agent {agent.id}: {e}")
-        
-        print("\nAll agents have been deleted.")
+                if "passage_legacy" in str(e):
+                    print(f"Failed to delete {agent.name}: This appears to be an early test agent")
+                    print(f"Agent ID: {agent.id}")
+                    print(f"WARNING: This name may cause conflicts if reused in Roblox")
+                else:
+                    print(f"Failed to delete {agent.name}: {e}")
+                fail_count += 1
+
+        print(f"\nDeletion complete:")
+        print(f"Successfully deleted: {success_count} agents")
+        if fail_count > 0:
+            print(f"Failed to delete: {fail_count} agents")
+            print("\nIMPORTANT:")
+            print("1. Some agents could not be deleted (early test agents)")
+            print("2. Avoid reusing these names in Roblox to prevent conflicts")
+            print("3. Consider using different name suffixes for new agents")
+
     except Exception as e:
-        print(f"Error deleting agents: {e}")
+        print(f"Error listing/deleting agents: {e}")
 
 def get_agent_messages(client, agent_id, limit=None, role=None, include_system=False, show_human=False):
     """
@@ -459,29 +554,11 @@ def run_quick_test(client, npc_id="test-npc-1", user_id="test-user-1"):
 
 def get_agent_details(client, agent_id):
     """
-    Display detailed information about an agent including system prompt and memory blocks.
+    Display detailed information about an agent including system prompt, tools, and memory blocks.
     
     Args:
         client: Letta client instance
         agent_id (str): ID of the agent to query
-        
-    Example:
-        >>> get_agent_details(client, "agent-123")
-        
-        Agent Details:
-        ID: agent-123
-        Name: TestAgent
-        Description: A test agent
-        
-        System Prompt:
-        You are a helpful AI assistant...
-        --------------------------------------------------
-        
-        Memory Blocks:
-        Block: human
-        Value: Name: Alice
-              Role: Developer
-        --------------------------------------------------
     """
     try:
         # Get agent info
@@ -496,6 +573,29 @@ def get_agent_details(client, agent_id):
         print(agent.system)
         print("-" * 50)
         
+        # Display tools
+        print("\nTools Configuration:")
+        if hasattr(agent, 'tools') and agent.tools:
+            for tool in agent.tools:
+                print(f"\nTool: {tool.name}")
+                if tool.description:
+                    print(f"Description: {tool.description}")
+                if tool.source_type:
+                    print(f"Source Type: {tool.source_type}")
+                if tool.module:
+                    print(f"Module: {tool.module}")
+                if tool.tags:
+                    print(f"Tags: {', '.join(tool.tags)}")
+                if tool.json_schema:
+                    print("Schema:")
+                    print(json.dumps(tool.json_schema, indent=2))
+        else:
+            print("No custom tools attached")
+            
+        if hasattr(agent, 'include_base_tools'):
+            print(f"\nBase Tools: {'Enabled' if agent.include_base_tools else 'Disabled'}")
+        print("-" * 50)
+        
         # Get memory blocks
         memory = client.get_in_context_memory(agent_id)
         print("\nMemory Blocks:")
@@ -506,6 +606,89 @@ def get_agent_details(client, agent_id):
             
     except Exception as e:
         print(f"Error getting agent details: {e}")
+
+def list_global_tools(client):
+    """
+    List all globally available tools.
+    
+    Args:
+        client: Letta client instance
+        
+    Example output:
+        Available Global Tools:
+        
+        Tool: send_message
+        Description: Send a message to the user
+        Module: letta.tools.messaging
+        Tags: messaging, core
+        Schema: {
+          "type": "object",
+          "properties": {
+            "message": {"type": "string"}
+          }
+        }
+        --------------------------------------------------
+    """
+    try:
+        tools = client.list_tools()
+        if not tools:
+            print("\nNo global tools available")
+            return
+        
+        print("\nAvailable Global Tools:")
+        for tool in tools:
+            print(f"\nTool: {tool.name}")
+            if tool.description:
+                print(f"Description: {tool.description}")
+            if tool.source_type:
+                print(f"Source Type: {tool.source_type}")
+            if tool.module:
+                print(f"Module: {tool.module}")
+            if tool.tags:
+                print(f"Tags: {', '.join(tool.tags)}")
+            if tool.json_schema:
+                print("Schema:")
+                print(json.dumps(tool.json_schema, indent=2))
+            print("-" * 50)
+            
+    except Exception as e:
+        print(f"Error listing global tools: {e}")
+
+def get_tool_details(client, tool_id):
+    """
+    Get detailed information about a specific tool.
+    
+    Args:
+        client: Letta client instance
+        tool_id: ID of the tool to inspect
+    """
+    try:
+        tool = client.get_tool(tool_id)
+        if not tool:
+            print(f"\nTool with ID {tool_id} not found")
+            return
+            
+        print(f"\nTool Details:")
+        print(f"ID: {tool.id}")
+        print(f"Name: {tool.name}")
+        if tool.description:
+            print(f"Description: {tool.description}")
+        if tool.source_type:
+            print(f"Source Type: {tool.source_type}")
+        if tool.module:
+            print(f"Module: {tool.module}")
+        if tool.tags:
+            print(f"Tags: {', '.join(tool.tags)}")
+        if tool.source_code:
+            print("\nSource Code:")
+            print(tool.source_code)
+        if tool.json_schema:
+            print("\nSchema:")
+            print(json.dumps(tool.json_schema, indent=2))
+        print("-" * 50)
+            
+    except Exception as e:
+        print(f"Error getting tool details: {e}")
 
 def main():
     """
@@ -557,6 +740,10 @@ def main():
     create_parser = subparsers.add_parser('create', help='Create a new agent')
     create_parser.add_argument('--name', default='TestAgent', help='Name for the new agent')
     create_parser.add_argument('--description', default='A test agent', help='Description for the new agent')
+    create_parser.add_argument('--llm', 
+        choices=['openai', 'claude'], 
+        default='openai',
+        help='Choose LLM provider (default: openai)')
     
     # Delete agent command
     delete_parser = subparsers.add_parser('delete', help='Delete an agent')
@@ -628,6 +815,22 @@ def main():
         description='Display agent details including system prompt and memory blocks')
     details_parser.add_argument('agent_id', help='ID of the agent')
     
+    # Add tools command
+    tools_parser = subparsers.add_parser('tools', 
+        help='List or inspect tools',
+        description='List all available tools or get details about a specific tool')
+    tools_subparsers = tools_parser.add_subparsers(dest='tools_command')
+    
+    # List all tools
+    tools_subparsers.add_parser('list',
+        help='List all globally available tools')
+    
+    # Get tool details
+    tool_details_parser = tools_subparsers.add_parser('get',
+        help='Get detailed information about a specific tool')
+    tool_details_parser.add_argument('tool_id',
+        help='ID of the tool to inspect')
+    
     args = parser.parse_args()
     
     # Validate mode and endpoint
@@ -675,6 +878,11 @@ def main():
             print(f"Duration: {response['duration']:.3f}s")
     elif args.command == 'details':
         get_agent_details(client, args.agent_id)
+    elif args.command == 'tools':
+        if args.tools_command == 'list':
+            list_global_tools(client)
+        elif args.tools_command == 'get':
+            get_tool_details(client, args.tool_id)
     else:
         parser.print_help()
 
