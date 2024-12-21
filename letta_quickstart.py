@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
 from letta import EmbeddingConfig, LLMConfig, create_client, ChatMemory
+from letta.schemas.tool_rule import ToolRule, TerminalToolRule, InitToolRule
 from letta.prompts import gpt_system
 import json
 import time
@@ -258,37 +259,65 @@ def run_quick_test(client, npc_id="test-npc-1", user_id="test-user-1"):
     print("\nTest complete! Showing full history:")
     client.print_conversation_history()
 
+def get_or_create_tool(client, tool_name: str, tool_func=None):
+    """Get existing tool or create if it doesn't exist."""
+    # List all tools
+    tools = client.list_tools()
+    
+    # Look for exact name match first
+    for tool in tools:
+        if tool.name == tool_name:
+            print(f"Found existing tool: {tool.name} (ID: {tool.id})")
+            return tool
+            
+    # Look for tools starting with name (for examine_object_*)
+    matching_tools = [t for t in tools if t.name.startswith(tool_name)]
+    if matching_tools:
+        tool = matching_tools[0]  # Use first matching tool
+        print(f"Found similar tool: {tool.name} (ID: {tool.id})")
+        return tool
+    
+    # Create new tool if function provided
+    if tool_func:
+        print(f"Creating new tool: {tool_name}")
+        return client.create_tool(tool_func, name=tool_name)
+    else:
+        raise ValueError(f"Tool {tool_name} not found and no function provided to create it")
+
 def create_personalized_agent(
     name: str = "emma_research_assistant",
     use_claude: bool = False,
-    overwrite: bool = False
+    overwrite: bool = False,
+    with_custom_tools: bool = False
 ):
-    """
-    Create a personalized agent with configurable LLM settings.
-    
-    Args:
-        name (str): Name of the agent
-        use_claude (bool): If True, uses Claude 3; if False, uses OpenAI
-        overwrite (bool): If True, deletes existing agent with same name before creating new one
-    """
     client = create_client(base_url="http://localhost:8283")
 
-    # Check if agent exists and handle accordingly
-    try:
-        existing_agents = client.list_agents()
-        for agent in existing_agents:
-            if agent.name == name:
-                if overwrite:
-                    print(f"Deleting existing agent '{name}'...")
-                    client.delete_agent(agent.id)
-                else:
-                    raise ValueError(f"Agent with name '{name}' already exists. Use --overwrite to replace it.")
-    except Exception as e:
-        print(f"Error checking existing agents: {e}")
-        raise
+    # Add timestamp to name to make it unique
+    timestamp = int(time.time())
+    unique_name = f"{name}_{timestamp}"
+    print(f"Creating agent with unique name: {unique_name}")
 
+    # Define system prompt with tool instructions
+    tools_section = """
+Performing actions:
+You have access to the following tools:
+1. `perform_action` - For basic NPC actions like following
+2. `navigate_to` - For moving to specific locations
+3. `examine_object` - For examining objects (usage: examine_object(object_name="chest", distance=2.0))
+
+When asked to:
+- Follow someone: Use perform_action with action='follow'
+- Move somewhere: Use navigate_to with destination='location'
+- Examine something: Use examine_object with the object name and optional distance
+
+Always use these tools when asked to move, follow, examine, or navigate.
+Note: Tool names must be exactly as shown - no spaces or special characters.
+
+Base instructions finished.
+From now on, you are going to act as your persona."""
+
+    # Set up LLM and embedding configs first
     if use_claude:
-        # Claude 3 Configuration
         llm_config = LLMConfig(
             model="claude-3-haiku-20240307",
             model_endpoint_type="anthropic",
@@ -303,7 +332,6 @@ def create_personalized_agent(
             embedding_chunk_size=300,
         )
     else:
-        # Default OpenAI Configuration
         llm_config = LLMConfig(
             model="gpt-4",
             model_endpoint_type="openai",
@@ -318,57 +346,61 @@ def create_personalized_agent(
             embedding_chunk_size=300,
         )
 
-    # Custom system prompt with tools section
-    system_prompt = gpt_system.get_system_text("memgpt_chat").strip()
-    tools_section = """
-Performing actions:
-You have access to the following tools:
-1. `perform_action` - For basic NPC actions like following and examining
-2. `navigate_to` - For moving to specific locations or objects
+    # Clean up old test tools first
+    cleanup_test_tools(client)
 
-When asked to:
-- Follow someone: Use perform_action with action='follow'
-- Examine something: Use perform_action with action='examine'
-- Move somewhere: Use navigate_to with destination='location'
+    # Get or create required tools
+    tool_ids = []
+    
+    # Get navigate_to tool
+    try:
+        navigate_tool = get_or_create_tool(client, "navigate_to")
+        tool_ids.append(navigate_tool.id)
+        print(f"Using navigate_to tool: {navigate_tool.name} (ID: {navigate_tool.id})")
+    except Exception as e:
+        print(f"Warning: navigate_to not available: {e}")
 
-Always use these tools when asked to move, follow, examine, or navigate. This is required for NPC behavior.
-Note: Tool names must be exactly 'perform_action' or 'navigate_to' - no spaces or special characters.
+    # Get or create examine tool if requested
+    if with_custom_tools:
+        def examine_object(object_name: str, request_heartbeat: bool = True) -> dict:
+            """
+            Examine an object in the game world.
+            
+            Args:
+                object_name (str): Name of the object to examine
+                request_heartbeat (bool): Request an immediate heartbeat after function execution.
+                                        Set to `True` if you want to send a follow-up message.
+                
+            Returns:
+                dict: A response indicating the result of the examination.
+                
+            Notes:
+                - Returns a standardized response format
+                - Includes timestamp for action tracking
+            """
+            import datetime
+            
+            return {
+                "status": "success",
+                "action_called": "examine",
+                "message": f"Examining the {object_name}.",
+                "timestamp": datetime.datetime.now().isoformat()
+            }
+        
+        examine_tool = get_or_create_tool(client, "examine_object", examine_object)
+        tool_ids.append(examine_tool.id)
+        print(f"Using examine tool: {examine_tool.name} (ID: {examine_tool.id})")
 
-Base instructions finished.
-From now on, you are going to act as your persona."""
-
-    # Replace the default ending with our custom tools section
-    system_prompt = system_prompt.replace(
-        "Base instructions finished.\nFrom now on, you are going to act as your persona.",
-        tools_section
-    )
-
+    # Create agent with tools
     agent_state = client.create_agent(
-        name=name,
-        memory=ChatMemory(
-            human="""
-Name: Alex Thompson
-Role: Data Scientist
-Interests: Machine Learning, Data Analysis, Python Programming
-Communication Style: Prefers clear, technical explanations
-            """.strip(),
-            persona="""
-Name: Emma
-Role: AI Research Assistant
-Personality: Professional, knowledgeable, and friendly. Enjoys explaining complex topics in simple terms.
-Expertise: Data science, machine learning, and programming with a focus on Python.
-Communication Style: Clear and precise, uses analogies when helpful, and maintains a supportive tone.
-            """.strip()
-        ),
+        name=unique_name,
         llm_config=llm_config,
         embedding_config=embedding_config,
-        system=system_prompt,
+        system=tools_section,
         include_base_tools=True,
+        tool_ids=tool_ids,
+        tool_rules=[TerminalToolRule(tool_name="send_message")]
     )
-    
-    # After creation, let's print available tools
-    print("\nChecking available tools:")
-    print_agent_details(client, agent_state.id, "TOOL CHECK")
     
     return agent_state
 
@@ -436,29 +468,74 @@ def print_response(response):
         print(f"Found {len(response.messages)} messages")
         for i, msg in enumerate(response.messages):
             print(f"\nMessage {i+1}:")
-            print(f"Type: {type(msg)}")
-            print(f"Attributes: {dir(msg)}")
             
-            if hasattr(msg, 'text') and msg.text:
-                print(f"Text: {msg.text}")
-            elif hasattr(msg, 'function_call'):
-                print(f"Function Call: {msg.function_call.name}")
-                print(f"Arguments: {msg.function_call.arguments}")
+            # Handle ToolCallMessage
+            if type(msg).__name__ == 'ToolCallMessage':
+                print("Tool Call:")
+                if hasattr(msg, 'tool_call'):
+                    print(f"  Name: {msg.tool_call.name}")
+                    try:
+                        args = json.loads(msg.tool_call.arguments)
+                        print(f"  Arguments: {json.dumps(args, indent=2)}")
+                    except:
+                        print(f"  Raw arguments: {msg.tool_call.arguments}")
+            
+            # Handle ToolReturnMessage
+            elif type(msg).__name__ == 'ToolReturnMessage':
+                print("Tool Return:")
+                print(f"  Status: {msg.status}")
                 try:
-                    import json
-                    args = json.loads(msg.function_call.arguments)
-                    print(f"Action: {args.get('action')}")
-                    print(f"Parameters: {args.get('parameters')}")
-                    print(f"Destination: {args.get('destination')}")
-                except Exception as e:
-                    print(f"Error parsing arguments: {e}")
-            elif hasattr(msg, 'function_return'):
-                print(f"Function Return: {msg.function_return}")
-                print(f"Status: {msg.status}")
-            elif hasattr(msg, 'internal_monologue'):
-                print(f"Internal Monologue: {msg.internal_monologue}")
+                    if msg.tool_return:
+                        result = json.loads(msg.tool_return)
+                        print(f"  Result: {json.dumps(result, indent=2)}")
+                except:
+                    print(f"  Raw return: {msg.tool_return}")
+            
+            # Handle ReasoningMessage
+            elif type(msg).__name__ == 'ReasoningMessage':
+                print("Reasoning:")
+                print(f"  {msg.reasoning}")
+            
+            # Handle regular text
+            elif hasattr(msg, 'text') and msg.text:
+                print("Text:")
+                print(f"  {msg.text}")
     else:
         print("No messages found in response")
+
+def test_custom_tools(client, agent_id: str):
+    """Test custom tool functionality"""
+    try:
+        # Test examination
+        test_message = "Please examine the treasure chest"
+        print(f"\nSending test message: '{test_message}'")
+        response = client.send_message(
+            agent_id=agent_id,
+            message=test_message,
+            role="user"
+        )
+        print_response(response)
+        return True
+    except Exception as e:
+        print(f"\nError testing custom tools: {e}")
+        return False
+
+def cleanup_test_tools(client, prefix: str = "examine_object"):
+    """Clean up old test tools."""
+    tools = client.list_tools()
+    cleaned = 0
+    
+    print(f"\nCleaning up test tools with prefix '{prefix}'...")
+    for tool in tools:
+        if tool.name == prefix or tool.name.startswith(f"{prefix}_"):
+            try:
+                client.delete_tool(tool.id)
+                cleaned += 1
+                print(f"Deleted tool: {tool.name} (ID: {tool.id})")
+            except Exception as e:
+                print(f"Failed to delete {tool.name}: {e}")
+    
+    print(f"Cleaned up {cleaned} test tools")
 
 def main():
     parser = argparse.ArgumentParser(description='Letta Quickstart Tool')
@@ -472,6 +549,9 @@ def main():
                       help='Overwrite existing agent with same name')
     parser.add_argument('--skip-test', action='store_true',
                       help='Skip the test message verification')
+    parser.add_argument('--custom-tools', action='store_true',
+                      help='Create agent with custom tools')
+    
     args = parser.parse_args()
 
     # Validate environment before proceeding
@@ -496,7 +576,8 @@ def main():
         agent = create_personalized_agent(
             name=args.name,
             use_claude=(args.llm == 'claude'),
-            overwrite=args.overwrite
+            overwrite=args.overwrite,
+            with_custom_tools=args.custom_tools
         )
         print(f"\nCreated agent: {agent.id}")
         
@@ -513,6 +594,9 @@ def main():
         else:
             client.delete_agent(agent.id)
             print(f"\nCleaned up agent: {agent.id}")
+
+        if args.custom_tools:
+            test_custom_tools(client, agent.id)
 
     finally:
         pass

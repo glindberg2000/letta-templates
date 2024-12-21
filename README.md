@@ -417,3 +417,159 @@ Look for the container running the `letta/letta:latest` image.
 - Function call validation errors
 - Response parsing issues
 - Connection timeouts
+
+## Creating Custom Tools
+
+### Tool Implementation Pattern
+Custom tools should follow this pattern:
+
+```python
+def my_tool(param1: str, request_heartbeat: bool = True) -> dict:
+    """
+    Tool description.
+    
+    Args:
+        param1 (str): Description of parameter
+        request_heartbeat (bool): Request an immediate heartbeat after function execution.
+                                Set to `True` if you want to send a follow-up message.
+        
+    Returns:
+        dict: A response indicating the result of the action.
+        
+    Notes:
+        - Returns a standardized response format
+        - Includes timestamp for action tracking
+    """
+    import datetime
+    
+    return {
+        "status": "success",
+        "action_called": "action_name",
+        "message": f"Action result message for {param1}.",
+        "timestamp": datetime.datetime.now().isoformat()
+    }
+```
+
+### Example: Navigation Tool
+```python
+def navigate_to(destination: str, request_heartbeat: bool = True) -> dict:
+    """
+    Navigate to a specified location in the game world.
+
+    Args:
+        destination (str): The destination name or coordinate string
+        request_heartbeat (bool): Request heartbeat after execution
+        
+    Returns:
+        dict: Navigation result
+    """
+    import datetime
+    
+    return {
+        "status": "success",
+        "action_called": "navigate",
+        "message": f"Navigating to the named location '{destination}'.",
+        "timestamp": datetime.datetime.now().isoformat()
+    }
+```
+
+### Example: Examination Tool
+```python
+def examine_object(object_name: str, request_heartbeat: bool = True) -> dict:
+    """
+    Examine an object in the game world.
+    
+    Args:
+        object_name (str): Name of the object to examine
+        request_heartbeat (bool): Request heartbeat after execution
+        
+    Returns:
+        dict: Examination result
+    """
+    import datetime
+    
+    return {
+        "status": "success",
+        "action_called": "examine",
+        "message": f"Examining the {object_name}.",
+        "timestamp": datetime.datetime.now().isoformat()
+    }
+```
+
+### Creating and Using Tools
+
+```python
+# Create tools
+navigate_tool = client.create_tool(navigate_to)
+examine_tool = client.create_tool(examine_object)
+
+# Create agent with tools
+agent = client.create_agent(
+    name="npc_agent",
+    tool_ids=[navigate_tool.id, examine_tool.id],
+    tool_rules=[TerminalToolRule(tool_name="send_message")]
+)
+```
+
+### Tool Response Format
+All tools should return a standardized response:
+
+```python
+{
+    "status": "success",  # or "error"
+    "action_called": str, # name of the action
+    "message": str,       # human-readable result
+    "timestamp": str      # ISO format timestamp
+}
+```
+
+### Tool Management
+Clean up old tools before creating new ones:
+
+```python
+def cleanup_test_tools(client, prefix: str = "examine_object"):
+    """Clean up old test tools."""
+    tools = client.list_tools()
+    for tool in tools:
+        if tool.name == prefix or tool.name.startswith(f"{prefix}_"):
+            client.delete_tool(tool.id)
+```
+
+### Example Usage
+```python
+# Send navigation command
+response = client.send_message(
+    agent_id=agent.id,
+    message="Navigate to the stand",
+    role="user"
+)
+
+# Response will include:
+{
+    "messages": [
+        {
+            "message_type": "tool_call_message",
+            "tool_call": {
+                "name": "navigate_to",
+                "arguments": {"destination": "stand", "request_heartbeat": true}
+            }
+        },
+        {
+            "message_type": "tool_return_message",
+            "tool_return": {
+                "status": "success",
+                "action_called": "navigate",
+                "message": "Navigating to the named location 'stand'.",
+                "timestamp": "2024-12-21T03:59:38.056236"
+            }
+        }
+    ]
+}
+```
+
+### Key Points
+1. Always include `request_heartbeat` parameter
+2. Return standardized response format
+3. Include timestamps in ISO format
+4. Clean up old tools before creating new ones
+5. Use tool rules to control execution flow
