@@ -214,146 +214,206 @@ You can switch between providers using either:
 
 ## Custom Tools and Action Handling
 
-### Creating Agents with Custom Tools
-
-You can create agents with custom tools like the `perform_action` tool:
+### Message Types in 0.6.6+
+The latest version uses specific message types for tool interactions:
 
 ```python
-from letta_quickstart import create_personalized_agent
-
-# Create agent with perform_action tool
-agent = create_personalized_agent(
-    name="action_agent",
-    use_claude=False,  # Use OpenAI (default)
-    overwrite=True     # Replace if exists
-)
+# Response contains a sequence of messages:
+response.messages = [
+    ToolCallMessage,      # Tool being called
+    ToolReturnMessage,    # Result of the tool call
+    ReasoningMessage,     # AI's thought process
+]
 ```
 
-The agent will have:
-- Base tools enabled (`include_base_tools=True`)
-- The `perform_action` tool for NPC actions
-- Custom system prompt with tool usage instructions
-
 ### Handling Tool Responses
-
-When interacting with an agent that uses tools, you'll need to handle different types of responses:
+The new format requires different handling for each message type:
 
 ```python
-response = client.send_message(
-    agent_id=agent_id,
-    message="Follow me",
-    role="user"
-)
-
-if response and hasattr(response, 'messages'):
-    for msg in response.messages:
-        # Handle direct text responses
-        if hasattr(msg, 'text') and msg.text:
-            print(f"LLM Response: {msg.text}")
+def chat_with_agent(client, agent_id, message):
+    response = client.send_message(
+        agent_id=agent_id,
+        message=message,
+        role="user"
+    )
+    
+    if hasattr(response, 'messages'):
+        for msg in response.messages:
+            # Handle ToolCallMessage
+            if type(msg).__name__ == 'ToolCallMessage':
+                if hasattr(msg, 'tool_call'):
+                    print(f"Tool Call: {msg.tool_call.name}")
+                    args = json.loads(msg.tool_call.arguments)
+                    print(f"Arguments: {json.dumps(args, indent=2)}")
             
-        # Handle function calls (e.g., perform_action)
-        elif hasattr(msg, 'function_call'):
-            if msg.function_call.name == 'perform_action':
-                args = json.loads(msg.function_call.arguments)
-                action = args.get('action')
-                params = args.get('parameters')
-                print(f"Action Called: {action}")
-                print(f"Parameters: {params}")
-                
-        # Handle function returns
-        elif hasattr(msg, 'function_return'):
-            try:
-                result = json.loads(msg.function_return)
-                status = result.get('status')
-                action = result.get('action_called')
-                message = result.get('message')
-                print(f"Action Result: {action} - {status}")
-                print(f"Message: {message}")
-            except json.JSONDecodeError:
-                print(f"Raw Return: {msg.function_return}")
-                
-        # Handle internal thoughts
-        elif hasattr(msg, 'internal_monologue'):
-            print(f"Internal: {msg.internal_monologue}")
+            # Handle ToolReturnMessage
+            elif type(msg).__name__ == 'ToolReturnMessage':
+                if hasattr(msg, 'tool_return'):
+                    result = json.loads(msg.tool_return)
+                    if 'message' in result:
+                        inner_result = json.loads(result['message'])
+                        print(json.dumps(inner_result, indent=2))
+            
+            # Handle ReasoningMessage
+            elif type(msg).__name__ == 'ReasoningMessage':
+                if hasattr(msg, 'reasoning'):
+                    print(f"Reasoning: {msg.reasoning}")
 ```
 
 ### Example Response Structure
-
-A typical action response might look like:
+A navigation command response looks like:
 
 ```python
+# Tool Call Message
 {
-    'messages': [
-        # Internal thought process
-        {
-            'internal_monologue': 'User wants to be followed...'
-        },
-        # Tool call
-        {
-            'function_call': {
-                'name': 'perform_action',
-                'arguments': '{"action": "follow", "request_heartbeat": true}'
-            }
-        },
-        # Tool result
-        {
-            'function_return': {
-                'status': 'success',
-                'action_called': 'follow',
-                'message': 'Now following the current target.',
-                'timestamp': '2024-12-13T22:42:27.041760'
-            }
-        },
-        # Final LLM response
-        {
-            'text': "I'm now following you! Let's share some awesome insights together."
+    'tool_call': {
+        'name': 'navigate_to',
+        'arguments': '{"destination": "stand", "request_heartbeat": true}'
+    }
+}
+
+# Tool Return Message
+{
+    'tool_return': {
+        'status': 'OK',
+        'message': {
+            'status': 'success',
+            'action_called': 'navigate',
+            'message': 'Navigating to the named location "stand".',
+            'timestamp': '2024-12-20T23:33:19.934349'
         }
-    ]
+    },
+    'status': 'success'
+}
+
+# Reasoning Message
+{
+    'reasoning': "We're now set to navigate to the stand..."
 }
 ```
 
-### Aggregating Responses for Roblox
-
-When sending results back to Roblox, you might want to combine the action result and LLM response:
+### Helper for Roblox Integration
+Extract relevant information from the response:
 
 ```python
-def extract_action_result(response):
+def extract_tool_result(response):
+    """
+    Extract tool calls, results, and messages for Roblox.
+    
+    Returns:
+        dict: {
+            'tool_calls': List of tool calls and their results
+            'reasoning': AI's thought process
+            'final_message': Final response text
+        }
+    """
     result = {
-        'action_status': None,
-        'action_message': None,
-        'llm_response': None
+        'tool_calls': [],
+        'reasoning': None,
+        'final_message': None
     }
     
     if hasattr(response, 'messages'):
         for msg in response.messages:
-            # Get function return (action result)
-            if hasattr(msg, 'function_return'):
-                try:
-                    action_result = json.loads(msg.function_return)
-                    result['action_status'] = action_result.get('status')
-                    result['action_message'] = action_result.get('message')
-                except:
-                    pass
-                    
-            # Get final LLM response
+            # Extract Tool Calls
+            if type(msg).__name__ == 'ToolCallMessage':
+                if hasattr(msg, 'tool_call'):
+                    tool_call = {
+                        'name': msg.tool_call.name,
+                        'arguments': json.loads(msg.tool_call.arguments),
+                        'result': None
+                    }
+                    result['tool_calls'].append(tool_call)
+            
+            # Extract Tool Results
+            elif type(msg).__name__ == 'ToolReturnMessage':
+                if result['tool_calls'] and hasattr(msg, 'tool_return'):
+                    try:
+                        return_data = json.loads(msg.tool_return)
+                        if 'message' in return_data:
+                            result['tool_calls'][-1]['result'] = json.loads(return_data['message'])
+                    except:
+                        result['tool_calls'][-1]['result'] = msg.tool_return
+            
+            # Extract Reasoning
+            elif type(msg).__name__ == 'ReasoningMessage':
+                if hasattr(msg, 'reasoning'):
+                    result['reasoning'] = msg.reasoning
+            
+            # Extract Final Message
             elif hasattr(msg, 'text') and msg.text:
-                result['llm_response'] = msg.text
-                
+                result['final_message'] = msg.text
+    
     return result
 
-# Usage example:
-response = client.send_message(agent_id=agent_id, message="Follow me", role="user")
-result = extract_action_result(response)
+# Usage Example
+response = client.send_message(
+    agent_id=agent_id,
+    message="Navigate to the stand",
+    role="user"
+)
 
-# Send to Roblox:
-{
-    'action_status': 'success',
-    'action_message': 'Now following the current target.',
-    'llm_response': "I'm now following you! Let's share some awesome insights together."
-}
+result = extract_tool_result(response)
+print("Tool Calls:", result['tool_calls'])
+print("Reasoning:", result['reasoning'])
+print("Final Message:", result['final_message'])
 ```
 
-This structure allows Roblox to:
-1. Verify the action was successful
-2. Update NPC state based on the action result
-3. Display the LLM's conversational response to the user
+### Key Differences from Previous Versions
+1. Messages are now typed (ToolCallMessage, ToolReturnMessage, etc.)
+2. Tool results have a nested structure
+3. Reasoning/thought process is included
+4. Each message type has specific attributes
+5. Results need to be parsed from nested JSON structures
+
+### Integration Tips
+1. Always check message types before accessing attributes
+2. Parse nested JSON in tool returns
+3. Keep track of tool call/return pairs
+4. Use the helper function to extract relevant data
+5. Handle both success and error states in tool returns
+
+## Debugging and Logging
+
+### Docker Container Logs
+To view logs from the Letta Docker container:
+
+```bash
+# View logs in real-time
+docker logs -f letta-source-letta_server-1
+
+# View last N lines
+docker logs --tail 100 letta-source-letta_server-1
+
+# View logs since specific time
+docker logs --since 5m letta-source-letta_server-1  # Last 5 minutes
+docker logs --since 2024-01-01T00:00:00Z letta-source-letta_server-1  # Since specific date
+
+# Include timestamps
+docker logs -f --timestamps letta-source-letta_server-1
+```
+
+### Filtering Logs
+```bash
+# Filter for specific content
+docker logs letta-source-letta_server-1 2>&1 | grep "error"
+docker logs letta-source-letta_server-1 2>&1 | grep "tool"
+
+# Save logs to file
+docker logs letta-source-letta_server-1 > letta_server.log
+```
+
+### Finding Your Container Name
+If your container name is different, you can find it using:
+```bash
+# List all running containers
+docker ps | grep letta
+```
+
+Look for the container running the `letta/letta:latest` image.
+
+### Common Issues to Check
+- Tool registration errors
+- Function call validation errors
+- Response parsing issues
+- Connection timeouts

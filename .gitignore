@@ -10,3 +10,12 @@ letta-client-venv/
 
 # OS files
 .DS_Store
+2024-12-10
+after5.txt
+after_restart.txt
+before_restart.txt
+debug.md
+debug_server.py
+ids_after.txt
+ids_before.txt
+letta_local_client.py

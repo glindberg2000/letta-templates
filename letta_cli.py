@@ -234,41 +234,60 @@ def delete_agent(client, agent_id: str, agent_name: str) -> bool:
 def chat_with_agent(client, agent_id, message):
     """
     Send a message to an agent and display the response.
-    
-    Args:
-        client: Letta client instance
-        agent_id (str): ID of the agent to chat with
-        message (str): Message to send to the agent
-        
-    Example:
-        >>> chat_with_agent(
-        ...     client,
-        ...     "agent-123",
-        ...     "Hello! Can you help me with Python?"
-        ... )
-        Response: Hi! I'd be happy to help you with Python...
-    
-    Note:
-        Handles function call responses and extracts message content
     """
     try:
         response = client.send_message(
             agent_id=agent_id,
-            role="user",
-            message=message
+            message=message,
+            role="user"
         )
         
-        for msg in response.messages:
-            if hasattr(msg, 'function_call'):
-                try:
-                    import json
-                    args = json.loads(msg.function_call.arguments)
-                    if 'message' in args:
-                        print(f"Response: {args['message']}")
-                except:
-                    print(f"Raw response: {msg}")
+        print("\nResponse messages:")
+        if hasattr(response, 'messages'):
+            for msg in response.messages:
+                # Handle ToolCallMessage
+                if type(msg).__name__ == 'ToolCallMessage':
+                    if hasattr(msg, 'tool_call'):
+                        print(f"\nTool Call: {msg.tool_call.name}")
+                        try:
+                            args = json.loads(msg.tool_call.arguments)
+                            print(f"Arguments: {json.dumps(args, indent=2)}")
+                        except:
+                            print(f"Raw arguments: {msg.tool_call.arguments}")
+                
+                # Handle ToolReturnMessage
+                elif type(msg).__name__ == 'ToolReturnMessage':
+                    print("\nTool Return:")
+                    try:
+                        if hasattr(msg, 'tool_return'):
+                            result = json.loads(msg.tool_return)
+                            if 'message' in result:
+                                inner_result = json.loads(result['message'])
+                                print(json.dumps(inner_result, indent=2))
+                            else:
+                                print(json.dumps(result, indent=2))
+                            print(f"Status: {msg.status}")
+                    except:
+                        print(f"Raw return: {msg.tool_return}")
+                
+                # Handle ReasoningMessage
+                elif type(msg).__name__ == 'ReasoningMessage':
+                    if hasattr(msg, 'reasoning'):
+                        print(f"\nReasoning: {msg.reasoning}")
+                
+                # Handle regular Message
+                elif hasattr(msg, 'text') and msg.text:
+                    print(f"\nResponse: {msg.text}")
+        
+        # Print usage statistics
+        if hasattr(response, 'usage'):
+            print("\nUsage Statistics:")
+            print(json.dumps(response.usage.dict(), indent=2))
+                    
     except Exception as e:
         print(f"Error chatting with agent: {e}")
+        import traceback
+        traceback.print_exc()
 
 def create_letta_client(base_url=None, port=None):
     """Create a client for direct Letta server communication."""

@@ -322,7 +322,17 @@ def create_personalized_agent(
     system_prompt = gpt_system.get_system_text("memgpt_chat").strip()
     tools_section = """
 Performing actions:
-You have access to the `perform_action` tool. This tool allows you to direct NPC behavior by specifying an action and its parameters. Use it to control NPC actions such as following, unfollowing, examining objects, or navigating to destinations. Ensure actions align with the context of the conversation and the NPC's role.
+You have access to the following tools:
+1. `perform_action` - For basic NPC actions like following and examining
+2. `navigate_to` - For moving to specific locations or objects
+
+When asked to:
+- Follow someone: Use perform_action with action='follow'
+- Examine something: Use perform_action with action='examine'
+- Move somewhere: Use navigate_to with destination='location'
+
+Always use these tools when asked to move, follow, examine, or navigate. This is required for NPC behavior.
+Note: Tool names must be exactly 'perform_action' or 'navigate_to' - no spaces or special characters.
 
 Base instructions finished.
 From now on, you are going to act as your persona."""
@@ -350,17 +360,15 @@ Expertise: Data science, machine learning, and programming with a focus on Pytho
 Communication Style: Clear and precise, uses analogies when helpful, and maintains a supportive tone.
             """.strip()
         ),
-        llm_config=LLMConfig(
-            model="gpt-4o-mini",  # Using gpt-4o-mini
-            model_endpoint_type="openai",
-            model_endpoint="https://api.openai.com/v1",
-            context_window=8000,
-        ),
+        llm_config=llm_config,
         embedding_config=embedding_config,
         system=system_prompt,
         include_base_tools=True,
-        tools=["perform_action"],
     )
+    
+    # After creation, let's print available tools
+    print("\nChecking available tools:")
+    print_agent_details(client, agent_state.id, "TOOL CHECK")
     
     return agent_state
 
@@ -402,75 +410,55 @@ def validate_environment():
 
 def test_agent_chat(client, agent_id: str, llm_type: str) -> bool:
     """
-    Test the agent with a simple chat message to verify it's working.
+    Test the agent with both perform_action and navigate_to tools.
     """
     try:
-        test_message = "Follow me"  # Simple, direct action request
+        # Test navigation
+        test_message = "Navigate to the stand"
         print(f"\nSending test message: '{test_message}'")
-        
-        # Get agent details for debugging
-        agent = client.get_agent(agent_id)
-        print(f"\nDebug: Agent configuration:")
-        print(f"ID: {agent_id}")
-        print(f"Model: {getattr(agent, 'model', 'unknown')}")
-        
-        # Send message and get response
         response = client.send_message(
             agent_id=agent_id,
             message=test_message,
             role="user"
         )
+        print("\nRaw response:", response)
+        print_response(response)
         
-        if response and hasattr(response, 'messages'):
-            print("\nResponse messages:")
-            for msg in response.messages:
-                if hasattr(msg, 'text') and msg.text:
-                    print(f"Text: {msg.text}")
-                elif hasattr(msg, 'function_call'):
-                    print(f"Function Call: {msg.function_call.name}")
-                    print(f"Arguments: {msg.function_call.arguments}")
-                    if msg.function_call.name == 'perform_action':
-                        print("Found perform_action call!")
-                        try:
-                            import json
-                            args = json.loads(msg.function_call.arguments)
-                            print(f"Action: {args.get('action')}")
-                            print(f"Parameters: {args.get('parameters')}")
-                        except Exception as e:
-                            print(f"Error parsing arguments: {e}")
-                elif hasattr(msg, 'function_return'):
-                    print(f"Function Return: {msg.function_return}")
-                    print(f"Status: {msg.status}")
-                    try:
-                        import json
-                        result = json.loads(msg.function_return)
-                        print(f"Action Result: {result}")
-                    except:
-                        pass
-                elif hasattr(msg, 'internal_monologue'):
-                    print(f"Internal Monologue: {msg.internal_monologue}")
-            
-            # Check if perform_action was called with 'follow'
-            action_called = any(
-                hasattr(msg, 'function_call') and 
-                msg.function_call.name == 'perform_action' and
-                'follow' in msg.function_call.arguments.lower()
-                for msg in response.messages
-            )
-            
-            if not action_called:
-                print("Warning: follow action was not called")
-            else:
-                print("Success: follow action was called!")
-                
-            return True
-        else:
-            print("\nWarning: No valid response received from agent")
-            return False
-            
+        return True
     except Exception as e:
         print(f"\nError testing agent chat: {e}")
         return False
+
+def print_response(response):
+    """Helper to print response details"""
+    print("\nParsing response...")
+    if response and hasattr(response, 'messages'):
+        print(f"Found {len(response.messages)} messages")
+        for i, msg in enumerate(response.messages):
+            print(f"\nMessage {i+1}:")
+            print(f"Type: {type(msg)}")
+            print(f"Attributes: {dir(msg)}")
+            
+            if hasattr(msg, 'text') and msg.text:
+                print(f"Text: {msg.text}")
+            elif hasattr(msg, 'function_call'):
+                print(f"Function Call: {msg.function_call.name}")
+                print(f"Arguments: {msg.function_call.arguments}")
+                try:
+                    import json
+                    args = json.loads(msg.function_call.arguments)
+                    print(f"Action: {args.get('action')}")
+                    print(f"Parameters: {args.get('parameters')}")
+                    print(f"Destination: {args.get('destination')}")
+                except Exception as e:
+                    print(f"Error parsing arguments: {e}")
+            elif hasattr(msg, 'function_return'):
+                print(f"Function Return: {msg.function_return}")
+                print(f"Status: {msg.status}")
+            elif hasattr(msg, 'internal_monologue'):
+                print(f"Internal Monologue: {msg.internal_monologue}")
+    else:
+        print("No messages found in response")
 
 def main():
     parser = argparse.ArgumentParser(description='Letta Quickstart Tool')
