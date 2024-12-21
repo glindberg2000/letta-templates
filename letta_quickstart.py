@@ -164,8 +164,8 @@ def extract_message_from_response(response) -> str:
         if hasattr(response, 'messages'):
             for message in response.messages:
                 # Look for function calls to send_message
-                if getattr(message, 'message_type', '') == 'function_call':
-                    function_call = getattr(message, 'function_call', None)
+                if isinstance(message, ToolCallMessage):
+                    function_call = message.tool_call
                     if function_call and function_call.name == 'send_message':
                         # Parse the arguments JSON string
                         import json

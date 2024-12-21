@@ -630,3 +630,57 @@ Example Response After:
 ```
 
 Warning: Updating a tool affects all agents that use it. Consider creating a new tool with a different name if you need different behavior for different agents.
+
+### Message Handling in 0.6.6+
+The SDK provides specific message type models for handling responses:
+
+```python
+from letta.schemas.message import (
+    ToolCallMessage, 
+    ToolReturnMessage, 
+    ReasoningMessage
+)
+
+def print_response(response):
+    """Helper to print response details using SDK message types"""
+    if response and hasattr(response, 'messages'):
+        for msg in response.messages:
+            # Handle ToolCallMessage
+            if isinstance(msg, ToolCallMessage):
+                print(f"Tool Call: {msg.tool_call.name}")
+                print(f"Arguments: {msg.tool_call.arguments}")
+            
+            # Handle ToolReturnMessage
+            elif isinstance(msg, ToolReturnMessage):
+                print(f"Status: {msg.status}")
+                print(f"Result: {msg.tool_return}")
+            
+            # Handle ReasoningMessage
+            elif isinstance(msg, ReasoningMessage):
+                print(f"Reasoning: {msg.reasoning}")
+```
+
+### Example Response Structure
+A tool interaction sequence looks like:
+
+```python
+# Tool Call Message
+msg: ToolCallMessage
+msg.tool_call.name  # "examine_object"
+msg.tool_call.arguments  # {"object_name": "chest", "request_heartbeat": true}
+
+# Tool Return Message
+msg: ToolReturnMessage
+msg.status  # "success"
+msg.tool_return  # {"status": "success", "action_called": "examine", ...}
+
+# Reasoning Message
+msg: ReasoningMessage
+msg.reasoning  # "I'm examining the chest..."
+```
+
+### Key Points
+1. Use SDK message type models instead of manual JSON parsing
+2. Check message types with `isinstance()`
+3. Access fields directly through model attributes
+4. Let Pydantic handle validation and parsing
