@@ -9,6 +9,12 @@ import argparse
 from typing import Optional
 import sys
 from letta.schemas.tool import ToolUpdate
+from letta.schemas.message import (
+    ToolCallMessage, 
+    ToolReturnMessage, 
+    ReasoningMessage, 
+    Message
+)
 
 # Load environment variables
 load_dotenv()
@@ -466,7 +472,7 @@ def test_agent_chat(client, agent_id: str, llm_type: str) -> bool:
         return False
 
 def print_response(response):
-    """Helper to print response details"""
+    """Helper to print response details using SDK message types"""
     print("\nParsing response...")
     if response and hasattr(response, 'messages'):
         print(f"Found {len(response.messages)} messages")
@@ -474,36 +480,22 @@ def print_response(response):
             print(f"\nMessage {i+1}:")
             
             # Handle ToolCallMessage
-            if type(msg).__name__ == 'ToolCallMessage':
+            if isinstance(msg, ToolCallMessage):
                 print("Tool Call:")
                 if hasattr(msg, 'tool_call'):
                     print(f"  Name: {msg.tool_call.name}")
-                    try:
-                        args = json.loads(msg.tool_call.arguments)
-                        print(f"  Arguments: {json.dumps(args, indent=2)}")
-                    except:
-                        print(f"  Raw arguments: {msg.tool_call.arguments}")
+                    print(f"  Arguments: {msg.tool_call.arguments}")
             
             # Handle ToolReturnMessage
-            elif type(msg).__name__ == 'ToolReturnMessage':
+            elif isinstance(msg, ToolReturnMessage):
                 print("Tool Return:")
                 print(f"  Status: {msg.status}")
-                try:
-                    if msg.tool_return:
-                        result = json.loads(msg.tool_return)
-                        print(f"  Result: {json.dumps(result, indent=2)}")
-                except:
-                    print(f"  Raw return: {msg.tool_return}")
+                print(f"  Result: {msg.tool_return}")
             
             # Handle ReasoningMessage
-            elif type(msg).__name__ == 'ReasoningMessage':
+            elif isinstance(msg, ReasoningMessage):
                 print("Reasoning:")
                 print(f"  {msg.reasoning}")
-            
-            # Handle regular text
-            elif hasattr(msg, 'text') and msg.text:
-                print("Text:")
-                print(f"  {msg.text}")
     else:
         print("No messages found in response")
 
