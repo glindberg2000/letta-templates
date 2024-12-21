@@ -573,3 +573,60 @@ response = client.send_message(
 3. Include timestamps in ISO format
 4. Clean up old tools before creating new ones
 5. Use tool rules to control execution flow
+
+### Updating Existing Tools
+Tools can be updated, but note that this affects all agents using the tool:
+
+```python
+# Define new tool behavior
+def examine_object(object_name: str, request_heartbeat: bool = True) -> dict:
+    """
+    Examine an object with detailed observations.
+    
+    Args:
+        object_name (str): Name of the object to examine
+        request_heartbeat (bool): Request heartbeat after execution
+        
+    Returns:
+        dict: Detailed examination result
+    """
+    import datetime
+    
+    return {
+        "status": "success",
+        "action_called": "examine",
+        "message": f"Conducting detailed examination of {object_name}. Observing size, material, and condition.",
+        "timestamp": datetime.datetime.now().isoformat()
+    }
+
+# Update existing tool
+tool = get_or_create_tool(client, "examine_object", examine_object, update_existing=True)
+```
+
+Key points when updating tools:
+1. Keep the exact function name to match the tool
+2. Match the schema parameters exactly
+3. Maintain the same return format
+4. Remember updates affect all agents using the tool
+
+Example Response Before:
+```json
+{
+  "status": "success",
+  "action_called": "examine",
+  "message": "Examining the treasure chest.",
+  "timestamp": "2024-12-21T07:06:11.022114"
+}
+```
+
+Example Response After:
+```json
+{
+  "status": "success",
+  "action_called": "examine",
+  "message": "Conducting detailed examination of treasure chest. Observing size, material, and condition.",
+  "timestamp": "2024-12-21T07:06:21.551810"
+}
+```
+
+Warning: Updating a tool affects all agents that use it. Consider creating a new tool with a different name if you need different behavior for different agents.

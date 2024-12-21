@@ -8,6 +8,7 @@ import time
 import argparse
 from typing import Optional
 import sys
+from letta.schemas.tool import ToolUpdate
 
 # Load environment variables
 load_dotenv()
@@ -259,8 +260,8 @@ def run_quick_test(client, npc_id="test-npc-1", user_id="test-user-1"):
     print("\nTest complete! Showing full history:")
     client.print_conversation_history()
 
-def get_or_create_tool(client, tool_name: str, tool_func=None):
-    """Get existing tool or create if it doesn't exist."""
+def get_or_create_tool(client, tool_name: str, tool_func=None, update_existing: bool = False):
+    """Get existing tool or create/update if needed."""
     # List all tools
     tools = client.list_tools()
     
@@ -268,16 +269,19 @@ def get_or_create_tool(client, tool_name: str, tool_func=None):
     for tool in tools:
         if tool.name == tool_name:
             print(f"Found existing tool: {tool.name} (ID: {tool.id})")
+            if update_existing and tool_func:
+                print(f"Updating existing tool...")
+                # Pass parameters directly
+                client.update_tool(
+                    id=tool.id,
+                    name=tool_name,
+                    description=tool_func.__doc__,
+                    func=tool_func
+                )
+                print(f"Updated tool: {tool.name}")
             return tool
-            
-    # Look for tools starting with name (for examine_object_*)
-    matching_tools = [t for t in tools if t.name.startswith(tool_name)]
-    if matching_tools:
-        tool = matching_tools[0]  # Use first matching tool
-        print(f"Found similar tool: {tool.name} (ID: {tool.id})")
-        return tool
     
-    # Create new tool if function provided
+    # Create new tool if not found and function provided
     if tool_func:
         print(f"Creating new tool: {tool_name}")
         return client.create_tool(tool_func, name=tool_name)
@@ -537,6 +541,58 @@ def cleanup_test_tools(client, prefix: str = "examine_object"):
     
     print(f"Cleaned up {cleaned} test tools")
 
+def test_tool_update(client, agent_id: str):
+    """Test updating a tool's behavior."""
+    print("\nTesting tool update...")
+    
+    # First test with original examine behavior
+    print("\nTesting original examine behavior:")
+    response = client.send_message(
+        agent_id=agent_id,
+        message="Examine the treasure chest",
+        role="user"
+    )
+    print_response(response)
+    
+    # Define new examine behavior with exact same name as schema
+    def examine_object(object_name: str, request_heartbeat: bool = True) -> dict:  # Changed name
+        """
+        Examine an object with detailed observations.
+        
+        Args:
+            object_name (str): Name of the object to examine
+            request_heartbeat (bool): Request heartbeat after execution
+            
+        Returns:
+            dict: Detailed examination result
+        """
+        import datetime
+        
+        return {
+            "status": "success",
+            "action_called": "examine",
+            "message": f"Conducting detailed examination of {object_name}. Observing size, material, and condition.",
+            "timestamp": datetime.datetime.now().isoformat()
+        }
+    
+    # Update the tool
+    print("\nUpdating examine tool with new behavior...")
+    examine_tool = get_or_create_tool(
+        client, 
+        "examine_object", 
+        examine_object, 
+        update_existing=True
+    )
+    
+    # Test with updated behavior
+    print("\nTesting updated examine behavior:")
+    response = client.send_message(
+        agent_id=agent_id,
+        message="Examine the treasure chest",
+        role="user"
+    )
+    print_response(response)
+
 def main():
     parser = argparse.ArgumentParser(description='Letta Quickstart Tool')
     parser.add_argument('--keep', action='store_true', 
@@ -595,8 +651,10 @@ def main():
             client.delete_agent(agent.id)
             print(f"\nCleaned up agent: {agent.id}")
 
+        # Run custom tool tests if requested
         if args.custom_tools:
             test_custom_tools(client, agent.id)
+            test_tool_update(client, agent.id)
 
     finally:
         pass
