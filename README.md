@@ -685,81 +685,80 @@ msg.reasoning  # "I'm examining the chest..."
 3. Access fields directly through model attributes
 4. Let Pydantic handle validation and parsing
 
-## NPC Tools and Actions
+## NPC Tools
 
-The `npc_tools.py` module provides a complete set of NPC interaction tools and system prompts for Letta agents.
+The `npc_tools.py` module provides a complete set of tools for creating interactive NPCs:
 
-### Basic Usage
+### Quick Start
 
 ```python
 from npc_tools import TOOL_INSTRUCTIONS, TOOL_REGISTRY
 
-# Add tools to system prompt
-def create_npc(client, npc_details):
-    system_prompt = npc_details["system_prompt"].replace(
-        "Base instructions finished.",
-        TOOL_INSTRUCTIONS + "\nBase instructions finished."
-    )
-    
-    return client.create_agent(
-        name=npc_details["name"],
-        system=system_prompt,
-        include_base_tools=True
-    )
+# Add tool instructions to system prompt
+system_prompt = base_prompt.replace(
+    "Base instructions finished.",
+    TOOL_INSTRUCTIONS + "\nBase instructions finished."
+)
 
-# Register tools with Letta
-def setup_npc_tools(client):
-    tool_ids = []
-    for name, info in TOOL_REGISTRY.items():
-        tool = client.create_tool(info["function"], name=name)
-        tool_ids.append(tool.id)
-    return tool_ids
+# Create NPC with tools
+npc = client.create_agent(
+    name="shop_keeper",
+    system=system_prompt,
+    include_base_tools=True
+)
+
+# Register all NPC tools
+for name, info in TOOL_REGISTRY.items():
+    tool = client.create_tool(info["function"], name=name)
 ```
 
-### Available Tools
+### Available Actions
 
-1. `perform_action`:
-   - Follow/unfollow players
-   - Emotes (wave, laugh, dance, etc.)
-   - State-aware responses
+1. Basic Actions:
+   - `follow` - Follow a player
+   - `unfollow` - Stop following
+   - `emote` - Express emotions
 
-2. `navigate_to`:
-   - Movement to locations
-   - Progress tracking
-   - Interruptible navigation
+2. Navigation:
+   - Move to locations
+   - State-aware transit
+   - Arrival notifications
 
-3. `examine_object`:
-   - Object interaction
-   - Detailed observations
-   - Focus management
+3. Examination:
+   - Inspect objects
+   - Progressive details
+   - System-controlled observations
 
-### Tool States
+### State Management
 
-All tools provide rich state information:
+NPCs maintain awareness of their current state:
 ```python
-{
-    "status": "success",
-    "action_called": str,
-    "state": {
-        "current_action": str,
-        "progress": str,
-        "position": str
-    },
-    "context": {
-        "can_interact": bool,
-        "interruption_allowed": bool
-    },
-    "message": str,
-    "timestamp": str
-}
+# Navigation with state
+> "Go to the shop"
+< "Beginning navigation... Currently in transit..."
+> [System: "You have arrived"]
+
+# Examination with details
+> "Look at the chest"
+< "Starting examination... awaiting details..."
+> [System: "You see old wood and brass fittings"]
 ```
 
-### System Instructions
+### Best Practices
 
-The module includes ready-to-use system prompt instructions (`TOOL_INSTRUCTIONS`) that:
-1. Document all available tools
-2. Provide usage examples
-3. Explain state requirements
-4. Show proper parameter usage
+1. Always use system messages for:
+   - State changes (arrival, completion)
+   - Environmental details
+   - Examination results
 
-See `npc_tools.py` for complete documentation and implementation details.
+2. Let the AI handle:
+   - State tracking
+   - Action sequences
+   - Natural responses
+
+3. Tool responses are intentionally simple:
+   - Clear state indicators
+   - No premature conclusions
+   - Await system details
+
+See `npc_tools.py` for complete documentation and examples.

@@ -15,6 +15,7 @@ from letta.schemas.message import (
     ReasoningMessage, 
     Message
 )
+from npc_tools import TOOL_INSTRUCTIONS, TOOL_REGISTRY, examine_object, navigate_to, perform_action
 
 # Load environment variables
 load_dotenv()
@@ -267,27 +268,11 @@ def run_quick_test(client, npc_id="test-npc-1", user_id="test-user-1"):
     client.print_conversation_history()
 
 def get_or_create_tool(client, tool_name: str, tool_func=None, update_existing: bool = False):
-    """Get existing tool or create/update if needed."""
+    """Get existing tool or create if needed."""
     # List all tools
     tools = client.list_tools()
     
-    # Look for exact name match first
-    for tool in tools:
-        if tool.name == tool_name:
-            print(f"Found existing tool: {tool.name} (ID: {tool.id})")
-            if update_existing and tool_func:
-                print(f"Updating existing tool...")
-                # Pass parameters directly
-                client.update_tool(
-                    id=tool.id,
-                    name=tool_name,
-                    description=tool_func.__doc__,
-                    func=tool_func
-                )
-                print(f"Updated tool: {tool.name}")
-            return tool
-    
-    # Create new tool if not found and function provided
+    # During testing, always create new tools
     if tool_func:
         print(f"Creating new tool: {tool_name}")
         return client.create_tool(tool_func, name=tool_name)
@@ -307,24 +292,14 @@ def create_personalized_agent(
     unique_name = f"{name}_{timestamp}"
     print(f"Creating agent with unique name: {unique_name}")
 
-    # Define system prompt with tool instructions
-    tools_section = """
-Performing actions:
-You have access to the following tools:
-1. `perform_action` - For basic NPC actions like following
-2. `navigate_to` - For moving to specific locations
-3. `examine_object` - For examining objects (usage: examine_object(object_name="chest", distance=2.0))
+    # Get base system prompt
+    system_prompt = gpt_system.get_system_text("memgpt_chat")
 
-When asked to:
-- Follow someone: Use perform_action with action='follow'
-- Move somewhere: Use navigate_to with destination='location'
-- Examine something: Use examine_object with the object name and optional distance
-
-Always use these tools when asked to move, follow, examine, or navigate.
-Note: Tool names must be exactly as shown - no spaces or special characters.
-
-Base instructions finished.
-From now on, you are going to act as your persona."""
+    # Add our tool instructions at the end
+    system_prompt = system_prompt.replace(
+        "Base instructions finished.",
+        TOOL_INSTRUCTIONS + "\nBase instructions finished."
+    )
 
     # Set up LLM and embedding configs first
     if use_claude:
@@ -359,57 +334,27 @@ From now on, you are going to act as your persona."""
     # Clean up old test tools first
     cleanup_test_tools(client)
 
-    # Get or create required tools
+    # Get or create tools from registry
     tool_ids = []
-    
-    # Get navigate_to tool
-    try:
-        navigate_tool = get_or_create_tool(client, "navigate_to")
-        tool_ids.append(navigate_tool.id)
-        print(f"Using navigate_to tool: {navigate_tool.name} (ID: {navigate_tool.id})")
-    except Exception as e:
-        print(f"Warning: navigate_to not available: {e}")
+    for name, info in TOOL_REGISTRY.items():
+        tool = get_or_create_tool(
+            client, 
+            name, 
+            info["function"],
+            update_existing=True
+        )
+        tool_ids.append(tool.id)
+        print(f"Using tool: {name} (ID: {tool.id}, version: {info['version']})")
 
-    # Get or create examine tool if requested
-    if with_custom_tools:
-        def examine_object(object_name: str, request_heartbeat: bool = True) -> dict:
-            """
-            Examine an object in the game world.
-            
-            Args:
-                object_name (str): Name of the object to examine
-                request_heartbeat (bool): Request an immediate heartbeat after function execution.
-                                        Set to `True` if you want to send a follow-up message.
-                
-            Returns:
-                dict: A response indicating the result of the examination.
-                
-            Notes:
-                - Returns a standardized response format
-                - Includes timestamp for action tracking
-            """
-            import datetime
-            
-            return {
-                "status": "success",
-                "action_called": "examine",
-                "message": f"Examining the {object_name}.",
-                "timestamp": datetime.datetime.now().isoformat()
-            }
-        
-        examine_tool = get_or_create_tool(client, "examine_object", examine_object)
-        tool_ids.append(examine_tool.id)
-        print(f"Using examine tool: {examine_tool.name} (ID: {examine_tool.id})")
-
-    # Create agent with tools
+    # Create agent with just one tool rule
     agent_state = client.create_agent(
         name=unique_name,
         llm_config=llm_config,
         embedding_config=embedding_config,
-        system=tools_section,
-        include_base_tools=True,
-        tool_ids=tool_ids,
-        tool_rules=[TerminalToolRule(tool_name="send_message")]
+        system=system_prompt,
+        include_base_tools=True,  # Keep base tools
+        tool_ids=tool_ids,  # Add our custom tools
+        tool_rules=[TerminalToolRule(tool_name="send_message")]  # Just one rule
     )
     
     return agent_state
@@ -516,14 +461,14 @@ def test_custom_tools(client, agent_id: str):
         print(f"\nError testing custom tools: {e}")
         return False
 
-def cleanup_test_tools(client, prefix: str = "examine_object"):
+def cleanup_test_tools(client, prefixes: list = ["examine_object", "navigate_to", "perform_action"]):
     """Clean up old test tools."""
     tools = client.list_tools()
     cleaned = 0
     
-    print(f"\nCleaning up test tools with prefix '{prefix}'...")
+    print(f"\nCleaning up test tools with prefixes: {prefixes}")
     for tool in tools:
-        if tool.name == prefix or tool.name.startswith(f"{prefix}_"):
+        if any(tool.name == prefix or tool.name.startswith(f"{prefix}_") for prefix in prefixes):
             try:
                 client.delete_tool(tool.id)
                 cleaned += 1
@@ -537,53 +482,84 @@ def test_tool_update(client, agent_id: str):
     """Test updating a tool's behavior."""
     print("\nTesting tool update...")
     
-    # First test with original examine behavior
-    print("\nTesting original examine behavior:")
-    response = client.send_message(
-        agent_id=agent_id,
-        message="Examine the treasure chest",
-        role="user"
-    )
-    print_response(response)
-    
-    # Define new examine behavior with exact same name as schema
-    def examine_object(object_name: str, request_heartbeat: bool = True) -> dict:  # Changed name
-        """
-        Examine an object with detailed observations.
+    test_sequence = [
+        # Initial examination
+        ("Examine the treasure chest", None),
+        ("", "Initial observation: The chest appears to be wooden."),  # System detail
         
-        Args:
-            object_name (str): Name of the object to examine
-            request_heartbeat (bool): Request heartbeat after execution
+        # Update tool
+        (None, "Updating examination capabilities..."),  # System message
+    ]
+    
+    for message, system_update in test_sequence:
+        if message:
+            print(f"\nSending user message: '{message}'")
+            response = client.send_message(
+                agent_id=agent_id,
+                message=message,
+                role="user"
+            )
+            print_response(response)
+        
+        if system_update:
+            if system_update == "Updating examination capabilities...":
+                # Update the tool using our npc_tools version
+                print("\nUpdating examine tool...")
+                tools = client.list_tools()
+                for tool in tools:
+                    if tool.name == "examine_object":
+                        client.delete_tool(tool.id)
+                new_tool = client.create_tool(examine_object, name="examine_object")
+                print(f"Created new tool: {new_tool.id}")
+            else:
+                # Regular system update
+                print(f"\nSending system update: '{system_update}'")
+                response = client.send_message(
+                    agent_id=agent_id,
+                    message=system_update,
+                    role="system"
+                )
+                print_response(response)
             
-        Returns:
-            dict: Detailed examination result
-        """
-        import datetime
+        time.sleep(1)
+
+def test_npc_actions(client, agent_id: str):
+    """Test NPC actions including state transitions"""
+    print("\nTesting NPC actions...")
+    
+    test_sequence = [
+        # Navigation with state
+        ("Navigate to the stand", None),
+        ("", "You have arrived at the stand. A large treasure chest is visible."),  # Arrival
         
-        return {
-            "status": "success",
-            "action_called": "examine",
-            "message": f"Conducting detailed examination of {object_name}. Observing size, material, and condition.",
-            "timestamp": datetime.datetime.now().isoformat()
-        }
+        # Examination with progressive details
+        ("Examine the treasure chest", None),
+        ("", "Initial observation: The chest is made of dark wood."),  # First detail
+        ("Look closer", None),
+        ("", "You notice brass fittings with intricate carvings."),  # More detail
+        ("", "The carvings appear to be nautical in nature.")  # Even more detail
+    ]
     
-    # Update the tool
-    print("\nUpdating examine tool with new behavior...")
-    examine_tool = get_or_create_tool(
-        client, 
-        "examine_object", 
-        examine_object, 
-        update_existing=True
-    )
-    
-    # Test with updated behavior
-    print("\nTesting updated examine behavior:")
-    response = client.send_message(
-        agent_id=agent_id,
-        message="Examine the treasure chest",
-        role="user"
-    )
-    print_response(response)
+    for message, system_update in test_sequence:
+        if message:
+            print(f"\nSending user message: '{message}'")
+            response = client.send_message(
+                agent_id=agent_id,
+                message=message,
+                role="user"
+            )
+            print_response(response)
+        
+        if system_update:
+            print(f"\nSending system update: '{system_update}'")
+            response = client.send_message(
+                agent_id=agent_id,
+                message=system_update,
+                role="system"
+            )
+            print_response(response)
+            
+        time.sleep(1)
 
 def main():
     parser = argparse.ArgumentParser(description='Letta Quickstart Tool')

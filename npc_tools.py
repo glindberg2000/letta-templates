@@ -1,44 +1,43 @@
 """NPC Tool Definitions for Letta Integration
 
-This module provides the core NPC action tools and system prompt instructions for Letta agents.
+This module provides a complete set of NPC action tools for creating interactive game characters.
 
-Usage:
-    1. Import tools and instructions:
-        from npc_tools import TOOL_INSTRUCTIONS, TOOL_REGISTRY, get_tool
+Quick Start:
+    from npc_tools import TOOL_INSTRUCTIONS, TOOL_REGISTRY
+    
+    # 1. Create agent with tools
+    agent = client.create_agent(
+        name="game_npc",
+        system=system_prompt + TOOL_INSTRUCTIONS,
+        include_base_tools=True
+    )
+    
+    # 2. Register NPC tools
+    for name, info in TOOL_REGISTRY.items():
+        tool = client.create_tool(info["function"], name=name)
+        print(f"Created {name}: {tool.id}")
 
-    2. Create NPC agent with tools:
-        def create_npc_agent(client, npc_details):
-            # Add tool instructions to system prompt
-            system_prompt = npc_details["system_prompt"].replace(
-                "Base instructions finished.",
-                TOOL_INSTRUCTIONS + "\nBase instructions finished."
-            )
-            
-            return client.create_agent(
-                name=npc_details["name"],
-                system=system_prompt,
-                include_base_tools=True
-            )
+Features:
+    - Basic NPC actions (follow, unfollow)
+    - Emotes (wave, laugh, dance, etc.)
+    - Navigation with state tracking
+    - Object examination with progressive details
+    
+State Management:
+    - Tools return current state in messages
+    - Use system messages to update states
+    - AI maintains state awareness automatically
 
-    3. Register tools with Letta:
-        def register_npc_tools(client):
-            tool_ids = []
-            for name, info in TOOL_REGISTRY.items():
-                tool = client.create_tool(info["function"], name=name)
-                tool_ids.append(tool.id)
-            return tool_ids
-
-Available Tools:
-    - perform_action: Basic NPC actions (follow, unfollow, emotes)
-    - navigate_to: Movement to locations
-    - examine_object: Object interaction
-
-Tool States:
-    All tools return rich state information including:
-    - Current action and progress
-    - Position and target information
-    - Interaction capabilities
-    - Natural language messages
+Example Usage:
+    # Navigation with state
+    > "Navigate to the shop"
+    < "Beginning navigation... Currently in transit..."
+    > [System: "You have arrived at the shop"]
+    
+    # Examination with details
+    > "Examine the chest"
+    < "Beginning to examine... awaiting observations..."
+    > [System: "Initial observation: The chest is wooden"]
 
 See TOOL_INSTRUCTIONS for complete usage documentation.
 """
@@ -46,6 +45,7 @@ from typing import Dict, Callable, Optional
 import datetime
 from dataclasses import dataclass
 from enum import Enum
+import json
 
 # System prompt instructions for tools
 TOOL_INSTRUCTIONS = """
@@ -103,136 +103,30 @@ def _format_action_message(action: str, target: Optional[str], state: ActionStat
     
     return messages.get(action, f"Performing action: {action}{' targeting ' + target if target else ''}")
 
-def perform_action(
-    action: str, 
-    type: Optional[str] = None, 
-    target: Optional[str] = None, 
-    request_heartbeat: bool = True
-) -> dict:
+def perform_action(action: str, type: Optional[str] = None, target: Optional[str] = None, request_heartbeat: bool = True) -> str:
     """
-    Perform a basic NPC action like following, unfollowing, or emoting.
+    Perform a basic NPC action like following or emoting.
     
     Args:
         action (str): The action to perform ('follow', 'unfollow', 'emote')
-        type (str, optional): For emotes, the type ('wave', 'laugh', 'dance', 'cheer', 'point', 'sit')
+        type (str, optional): For emotes, the type ('wave', 'laugh', 'dance', etc)
         target (str, optional): Target of the action (player name or object)
         request_heartbeat (bool): Request heartbeat after execution
         
     Returns:
-        dict: Rich action result with state information
+        str: Description of the action performed
     """
-    # Define states for different actions
-    states = {
-        "follow": ActionState(
-            current_action="following",
-            progress=ActionProgress.IN_PROGRESS.value,
-            position="maintaining follow distance",
-            can_interact=True,
-            interruption_allowed=True
-        ),
-        "unfollow": ActionState(
-            current_action="idle",
-            progress=ActionProgress.COMPLETED.value,
-            position="stationary",
-            can_interact=True,
-            interruption_allowed=True
-        ),
-        "emote": {
-            "wave": ActionState(
-                current_action="waving",
-                progress=ActionProgress.IN_PROGRESS.value,
-                position="in place",
-                can_interact=False,
-                interruption_allowed=True
-            ),
-            "laugh": ActionState(
-                current_action="laughing",
-                progress=ActionProgress.IN_PROGRESS.value,
-                position="in place",
-                can_interact=True,
-                interruption_allowed=True
-            ),
-            "dance": ActionState(
-                current_action="dancing",
-                progress=ActionProgress.IN_PROGRESS.value,
-                position="in place",
-                can_interact=False,
-                interruption_allowed=True
-            ),
-            "cheer": ActionState(
-                current_action="cheering",
-                progress=ActionProgress.IN_PROGRESS.value,
-                position="in place",
-                can_interact=True,
-                interruption_allowed=True
-            ),
-            "point": ActionState(
-                current_action="pointing",
-                progress=ActionProgress.IN_PROGRESS.value,
-                position="in place",
-                can_interact=True,
-                interruption_allowed=True
-            ),
-            "sit": ActionState(
-                current_action="sitting",
-                progress=ActionProgress.COMPLETED.value,
-                position="seated",
-                can_interact=True,
-                interruption_allowed=True
-            )
-        }
-    }
-    
-    # Get appropriate state
     if action == 'emote' and type:
-        state = states['emote'].get(type, ActionState(
-            current_action=type,
-            progress=ActionProgress.IN_PROGRESS.value,
-            position="in place"
-        ))
-    else:
-        state = states.get(action, ActionState(
-            current_action=action,
-            progress=ActionProgress.IN_PROGRESS.value,
-            position="unknown"
-        ))
-    
-    # Format message based on action type
-    if action == 'emote' and type:
-        message = {
-            "wave": f"I'm waving{' at ' + target if target else ''}!",
-            "laugh": f"I'm laughing{' with ' + target if target else ''}!",
-            "dance": "I'm dancing!",
-            "cheer": f"I'm cheering{' for ' + target if target else ''}!",
-            "point": f"I'm pointing{' at ' + target if target else ''}.",
-            "sit": "I've taken a seat."
-        }.get(type, f"Performing {type}{' at ' + target if target else ''}")
-    else:
-        message = {
-            "follow": f"I am now following {target}. I'll maintain a respectful distance.",
-            "unfollow": f"I've stopped following {target}.",
-        }.get(action, f"Performing action: {action}{' targeting ' + target if target else ''}")
-    
-    return {
-        "status": "success",
-        "action_called": action,
-        "state": {
-            "current_action": state.current_action,
-            "target": target,
-            "progress": state.progress,
-            "position": state.position,
-            "emote_type": type if action == 'emote' else None
-        },
-        "context": {
-            "can_interact": state.can_interact,
-            "interruption_allowed": state.interruption_allowed,
-            "target_type": "player" if target else None
-        },
-        "message": message,
-        "timestamp": datetime.datetime.now().isoformat()
-    }
+        if type in ['wave', 'laugh', 'dance', 'cheer', 'point', 'sit']:
+            return f"Performing emote: {type}" + (f" at {target}" if target else "")
+        return f"Unknown emote type: {type}"
+    elif action == 'follow' and target:
+        return f"Starting to follow {target}. Will maintain appropriate distance."
+    elif action == 'unfollow':
+        return f"Stopping follow action. Now stationary."
+    return f"Unknown action: {action}"
 
-def navigate_to(destination: str, request_heartbeat: bool = True) -> dict:
+def navigate_to(destination: str, request_heartbeat: bool = True) -> str:
     """
     Navigate to a specified location in the game world.
     
@@ -241,74 +135,25 @@ def navigate_to(destination: str, request_heartbeat: bool = True) -> dict:
         request_heartbeat (bool): Request heartbeat after execution
         
     Returns:
-        dict: Rich navigation result with state information
+        str: Description of the navigation action and its current state
     """
-    state = ActionState(
-        current_action="moving",
-        progress=ActionProgress.INITIATED.value,
-        position="moving towards destination"
-    )
-    
-    return {
-        "status": "success",
-        "action_called": "navigate",
-        "state": {
-            "current_action": state.current_action,
-            "destination": destination,
-            "progress": state.progress,
-            "position": state.position
-        },
-        "context": {
-            "can_interact": state.can_interact,
-            "interruption_allowed": state.interruption_allowed,
-            "estimated_time": "in progress"
-        },
-        "message": (
-            f"I am now moving towards {destination}. "
-            "I'll let you know when I arrive. "
-            "Feel free to give me other instructions while I'm on my way."
-        ),
-        "timestamp": datetime.datetime.now().isoformat()
-    }
+    return f"Beginning navigation to {destination}. Currently in transit..."
 
-def examine_object(object_name: str, request_heartbeat: bool = True) -> dict:
+def examine_object(object_name: str, request_heartbeat: bool = True) -> str:
     """
-    Examine an object in the game world.
+    Begin examining an object in the game world.
     
     Args:
-        object_name (str): Name of the object to examine
+        object_name (str): The name of the object to examine in detail
         request_heartbeat (bool): Request heartbeat after execution
         
     Returns:
-        dict: Rich examination result with state information
+        str: Description of examination initiation, awaiting details
     """
-    state = ActionState(
-        current_action="examining",
-        progress=ActionProgress.IN_PROGRESS.value,
-        position="at examination distance"
+    return (
+        f"Beginning to examine the {object_name}. "
+        "Focusing attention on the object, awaiting detailed observations..."
     )
-    
-    return {
-        "status": "success",
-        "action_called": "examine",
-        "state": {
-            "current_action": state.current_action,
-            "target": object_name,
-            "progress": state.progress,
-            "position": state.position
-        },
-        "context": {
-            "can_interact": state.can_interact,
-            "focus": object_name,
-            "observation_complete": False,
-            "interruption_allowed": state.interruption_allowed
-        },
-        "message": (
-            f"I am examining the {object_name} carefully. "
-            "I can describe what I observe or interact with it further."
-        ),
-        "timestamp": datetime.datetime.now().isoformat()
-    }
 
 # Tool registry with metadata
 TOOL_REGISTRY: Dict[str, Dict] = {
