@@ -15,7 +15,7 @@ from letta.schemas.message import (
     ReasoningMessage, 
     Message
 )
-from npc_tools import TOOL_INSTRUCTIONS, TOOL_REGISTRY, examine_object, navigate_to, perform_action
+from letta_templates.npc_tools import TOOL_INSTRUCTIONS, TOOL_REGISTRY
 
 # Load environment variables
 load_dotenv()

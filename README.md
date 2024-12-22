@@ -22,12 +22,26 @@ pip install --upgrade letta
 
 ## Installation
 
-1. Create and activate a virtual environment:
+### Option 1: From PyPI (Coming Soon)
 ```bash
-python3 -m venv venv
-source venv/bin/activate  # On Unix/MacOS
-# or
-venv\Scripts\activate  # On Windows
+pip install letta_templates
+```
+
+### Option 2: From Source
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/letta-templates.git
+cd letta-templates
+
+# Install in development mode
+pip install -e .
+```
+
+### Verify Installation
+```python
+# Test imports
+from letta_templates import TOOL_INSTRUCTIONS, perform_action, navigate_to, examine_object
+print("Installation successful!")
 ```
 
 2. Install requirements:
