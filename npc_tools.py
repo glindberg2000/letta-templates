@@ -1,4 +1,47 @@
-"""NPC Tool Definitions for Letta Integration"""
+"""NPC Tool Definitions for Letta Integration
+
+This module provides the core NPC action tools and system prompt instructions for Letta agents.
+
+Usage:
+    1. Import tools and instructions:
+        from npc_tools import TOOL_INSTRUCTIONS, TOOL_REGISTRY, get_tool
+
+    2. Create NPC agent with tools:
+        def create_npc_agent(client, npc_details):
+            # Add tool instructions to system prompt
+            system_prompt = npc_details["system_prompt"].replace(
+                "Base instructions finished.",
+                TOOL_INSTRUCTIONS + "\nBase instructions finished."
+            )
+            
+            return client.create_agent(
+                name=npc_details["name"],
+                system=system_prompt,
+                include_base_tools=True
+            )
+
+    3. Register tools with Letta:
+        def register_npc_tools(client):
+            tool_ids = []
+            for name, info in TOOL_REGISTRY.items():
+                tool = client.create_tool(info["function"], name=name)
+                tool_ids.append(tool.id)
+            return tool_ids
+
+Available Tools:
+    - perform_action: Basic NPC actions (follow, unfollow, emotes)
+    - navigate_to: Movement to locations
+    - examine_object: Object interaction
+
+Tool States:
+    All tools return rich state information including:
+    - Current action and progress
+    - Position and target information
+    - Interaction capabilities
+    - Natural language messages
+
+See TOOL_INSTRUCTIONS for complete usage documentation.
+"""
 from typing import Dict, Callable, Optional
 import datetime
 from dataclasses import dataclass

@@ -684,3 +684,82 @@ msg.reasoning  # "I'm examining the chest..."
 2. Check message types with `isinstance()`
 3. Access fields directly through model attributes
 4. Let Pydantic handle validation and parsing
+
+## NPC Tools and Actions
+
+The `npc_tools.py` module provides a complete set of NPC interaction tools and system prompts for Letta agents.
+
+### Basic Usage
+
+```python
+from npc_tools import TOOL_INSTRUCTIONS, TOOL_REGISTRY
+
+# Add tools to system prompt
+def create_npc(client, npc_details):
+    system_prompt = npc_details["system_prompt"].replace(
+        "Base instructions finished.",
+        TOOL_INSTRUCTIONS + "\nBase instructions finished."
+    )
+    
+    return client.create_agent(
+        name=npc_details["name"],
+        system=system_prompt,
+        include_base_tools=True
+    )
+
+# Register tools with Letta
+def setup_npc_tools(client):
+    tool_ids = []
+    for name, info in TOOL_REGISTRY.items():
+        tool = client.create_tool(info["function"], name=name)
+        tool_ids.append(tool.id)
+    return tool_ids
+```
+
+### Available Tools
+
+1. `perform_action`:
+   - Follow/unfollow players
+   - Emotes (wave, laugh, dance, etc.)
+   - State-aware responses
+
+2. `navigate_to`:
+   - Movement to locations
+   - Progress tracking
+   - Interruptible navigation
+
+3. `examine_object`:
+   - Object interaction
+   - Detailed observations
+   - Focus management
+
+### Tool States
+
+All tools provide rich state information:
+```python
+{
+    "status": "success",
+    "action_called": str,
+    "state": {
+        "current_action": str,
+        "progress": str,
+        "position": str
+    },
+    "context": {
+        "can_interact": bool,
+        "interruption_allowed": bool
+    },
+    "message": str,
+    "timestamp": str
+}
+```
+
+### System Instructions
+
+The module includes ready-to-use system prompt instructions (`TOOL_INSTRUCTIONS`) that:
+1. Document all available tools
+2. Provide usage examples
+3. Explain state requirements
+4. Show proper parameter usage
+
+See `npc_tools.py` for complete documentation and implementation details.
