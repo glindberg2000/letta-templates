@@ -318,7 +318,7 @@ def create_personalized_agent(
         )
     else:
         llm_config = LLMConfig(
-            model="gpt-4",
+            model="gpt-4o-mini",
             model_endpoint_type="openai",
             model_endpoint="https://api.openai.com/v1",
             context_window=8000,
