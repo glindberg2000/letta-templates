@@ -6,7 +6,8 @@ setup(
     packages=find_packages(),
     install_requires=[
         "letta>=0.6.6",
-        "protobuf<5.0.0",
+        "grpcio-tools>=1.68.1",
+        "protobuf>=5.26.1,<6.0dev",
     ],
     author="LettaDev",
     description="Templates and tools for Letta AI server",
