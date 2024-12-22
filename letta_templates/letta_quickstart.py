@@ -111,7 +111,7 @@ def create_roblox_agent(client, name: str, persona: str = None):
             model="gpt-4o-mini",
             model_endpoint_type="openai",
             model_endpoint="https://api.openai.com/v1",
-            context_window=8000,
+            context_window=128000,
         ),
         memory=ChatMemory(
             human="Name: RobloxDev\nRole: A Roblox developer working on game development",
@@ -321,7 +321,7 @@ def create_personalized_agent(
             model="gpt-4o-mini",
             model_endpoint_type="openai",
             model_endpoint="https://api.openai.com/v1",
-            context_window=8000,
+            context_window=128000,
         )
         embedding_config = EmbeddingConfig(
             embedding_endpoint_type="openai",
