@@ -133,7 +133,7 @@ def perform_action(action: str, type: Optional[str] = None, target: Optional[str
         return f"Stopping follow action. Now stationary."
     return f"Unknown action: {action}"
 
-def navigate_to(destination: str, request_heartbeat: bool = True) -> str:
+def navigate_to(destination: str, request_heartbeat: bool = True) -> dict:
     """
     Navigate to a location using semantic search.
     
@@ -142,7 +142,16 @@ def navigate_to(destination: str, request_heartbeat: bool = True) -> str:
         request_heartbeat (bool): Request heartbeat after execution
         
     Returns:
-        str: Navigation status message describing current state
+        dict: Navigation result with format:
+        {
+            "status": "success" | "failure",
+            "message": str,  # Human-readable message for Letta
+            "coordinates": {  # Only present if status is "success"
+                "x": float,
+                "y": float,
+                "z": float
+            } | None
+        }
     """
     import requests
     import json
@@ -167,26 +176,40 @@ def navigate_to(destination: str, request_heartbeat: bool = True) -> str:
         data = response.json()
         
         if not data.get("locations"):
-            return f"I'm not sure where '{destination}' is. Could you be more specific?"
+            return {
+                "status": "failure",
+                "message": f"I'm not sure where '{destination}' is. Could you be more specific?",
+                "coordinates": None
+            }
             
         location = data["locations"][0]
         
         # Check confidence
         if location["similarity"] < threshold:
-            return f"Did you mean '{location['name']}'? Please confirm."
+            return {
+                "status": "failure", 
+                "message": f"Did you mean '{location['name']}'? Please confirm.",
+                "coordinates": None
+            }
             
-        # Include coordinates in message
-        return (
-            f"Beginning navigation to {location['name']} "
-            f"at coordinates ({location['position_x']}, {location['position_y']}, {location['position_z']}). "
-            "Currently in transit... "
-            "I'll need a system message to confirm arrival."
-        )
+        return {
+            "status": "success",
+            "message": f"Found {location['name']}. Beginning navigation... Currently in transit.",
+            "coordinates": {
+                "x": location["position_x"],
+                "y": location["position_y"],
+                "z": location["position_z"]
+            }
+        }
             
     except Exception as e:
         error_msg = f"Navigation Error: {str(e)}"
         print(f"\n{error_msg}")
-        return error_msg
+        return {
+            "status": "failure",
+            "message": error_msg,
+            "coordinates": None
+        }
 
 def examine_object(object_name: str, request_heartbeat: bool = True) -> str:
     """
