@@ -15,7 +15,7 @@ from letta.schemas.message import (
     ReasoningMessage, 
     Message
 )
-from letta_templates.npc_tools import TOOL_INSTRUCTIONS, TOOL_REGISTRY
+from letta_templates.npc_tools import TOOL_INSTRUCTIONS, TOOL_REGISTRY, navigate_to, examine_object, perform_action
 
 # Load environment variables
 load_dotenv()
@@ -528,16 +528,20 @@ def test_npc_actions(client, agent_id: str):
     print("\nTesting NPC actions...")
     
     test_sequence = [
-        # Navigation with state
-        ("Navigate to the stand", None),
-        ("", "You have arrived at the stand. A large treasure chest is visible."),  # Arrival
+        # Test navigation with location service
+        ("Navigate to Pete's stand", None),
+        # Should return coordinates and transit message
         
-        # Examination with progressive details
-        ("Examine the treasure chest", None),
-        ("", "Initial observation: The chest is made of dark wood."),  # First detail
-        ("Look closer", None),
-        ("", "You notice brass fittings with intricate carvings."),  # More detail
-        ("", "The carvings appear to be nautical in nature.")  # Even more detail
+        # Test unknown location
+        ("Go to the secret shop", None),
+        # Should return error and suggestion
+        
+        # Test with low confidence
+        ("Go to petes", None),
+        # Should ask for confirmation
+        
+        # Test with arrival
+        ("", "You have arrived at Pete's Merch Stand."),  # System update
     ]
     
     for message, system_update in test_sequence:
@@ -575,6 +579,8 @@ def main():
                       help='Skip the test message verification')
     parser.add_argument('--custom-tools', action='store_true',
                       help='Create agent with custom tools')
+    parser.add_argument('--test', choices=['navigate', 'examine', 'all'], 
+                      help='Run specific test (navigate, examine) or all')
     
     args = parser.parse_args()
 
@@ -608,21 +614,28 @@ def main():
         # Print initial configuration
         print_agent_details(client, agent.id, "INITIAL STATE")
 
-        # Test the agent unless explicitly skipped
-        if not args.skip_test:
-            if not test_agent_chat(client, agent.id, args.llm):
-                print("Warning: Agent creation succeeded but chat test failed!")
-        
+        # Run specific test based on flag
+        if args.test == 'navigate':
+            test_message = "Navigate to Pete's stand"
+            print(f"\nSending test message: '{test_message}'")
+            response = client.send_message(
+                agent_id=agent.id,
+                message=test_message,
+                role="user"
+            )
+            print_response(response)
+        elif args.test == 'examine':
+            test_custom_tools(client, agent.id)
+            test_tool_update(client, agent.id)
+        elif args.test == 'all':
+            test_custom_tools(client, agent.id)
+            test_tool_update(client, agent.id)
+            
         if args.keep:
             print(f"\nKeeping agent for examination: {agent.id}")
         else:
             client.delete_agent(agent.id)
             print(f"\nCleaned up agent: {agent.id}")
-
-        # Run custom tool tests if requested
-        if args.custom_tools:
-            test_custom_tools(client, agent.id)
-            test_tool_update(client, agent.id)
 
     finally:
         pass

@@ -41,11 +41,18 @@ Example Usage:
 
 See TOOL_INSTRUCTIONS for complete usage documentation.
 """
-from typing import Dict, Callable, Optional
+from typing import Dict, Callable, Optional, TypedDict
 import datetime
 from dataclasses import dataclass
 from enum import Enum
 import json
+import os
+import requests
+
+# Configuration
+GAME_ID = int(os.getenv("LETTA_GAME_ID", "61"))
+NAVIGATION_CONFIDENCE_THRESHOLD = float(os.getenv("LETTA_NAV_THRESHOLD", "0.8"))
+LOCATION_API_URL = os.getenv("LOCATION_SERVICE_URL", "http://172.17.0.1:7777")
 
 # System prompt instructions for tools
 TOOL_INSTRUCTIONS = """
@@ -126,18 +133,93 @@ def perform_action(action: str, type: Optional[str] = None, target: Optional[str
         return f"Stopping follow action. Now stationary."
     return f"Unknown action: {action}"
 
-def navigate_to(destination: str, request_heartbeat: bool = True) -> str:
+def navigate_to(destination: str, request_heartbeat: bool = True) -> Dict:
     """
-    Navigate to a specified location in the game world.
+    Navigate to a location using semantic search.
     
     Args:
-        destination (str): The destination name or coordinate string
+        destination (str): The destination name or location to navigate to
         request_heartbeat (bool): Request heartbeat after execution
         
     Returns:
-        str: Description of the navigation action and its current state
+        Dict: Navigation result with format:
+        {
+            "status": "success" | "failure",
+            "message": str,  # Human-readable message for Letta
+            "coordinates": {  # Only present if status is "success"
+                "x": float,
+                "y": float,
+                "z": float
+            } | None
+        }
     """
-    return f"Beginning navigation to {destination}. Currently in transit..."
+    import requests
+    import json
+    import os
+    
+    try:
+        # Configuration - moved inside function
+        game_id = int(os.getenv("LETTA_GAME_ID", "61"))
+        threshold = float(os.getenv("LETTA_NAV_THRESHOLD", "0.8"))
+        location_api_url = os.getenv("LOCATION_SERVICE_URL", "http://172.17.0.1:7777")
+        
+        print(f"\nLocation Search:")
+        print(f"Query: '{destination}'")
+        print(f"Service URL: {location_api_url}")
+        
+        response = requests.get(
+            f"{location_api_url}/api/locations/semantic-search",
+            params={
+                "game_id": game_id,
+                "query": destination,
+                "threshold": threshold
+            }
+        )
+        
+        print("\nLocation Service Response:")
+        print(f"Status Code: {response.status_code}")
+        print(f"Headers: {dict(response.headers)}")
+        print(f"Response Text: {response.text[:1000]}")
+        
+        response.raise_for_status()
+        data = response.json()
+        
+        # Process response into result
+        if not data.get("locations"):
+            return {
+                "status": "failure",
+                "message": f"I'm not sure where '{destination}' is. Could you be more specific?",
+                "coordinates": None
+            }
+            
+        location = data["locations"][0]
+        
+        # Check confidence
+        if location["similarity"] < threshold:
+            return {
+                "status": "failure", 
+                "message": f"Did you mean '{location['name']}'? Please confirm.",
+                "coordinates": None
+            }
+            
+        return {
+            "status": "success",
+            "message": f"Found {location['name']}",
+            "coordinates": {
+                "x": location["position_x"],
+                "y": location["position_y"],
+                "z": location["position_z"]
+            }
+        }
+            
+    except Exception as e:
+        error_msg = f"Navigation Error: {type(e).__name__}: {str(e)}"
+        print(f"\n{error_msg}")
+        return {
+            "status": "failure",
+            "message": error_msg,
+            "coordinates": None
+        }
 
 def examine_object(object_name: str, request_heartbeat: bool = True) -> str:
     """
@@ -179,3 +261,52 @@ TOOL_REGISTRY: Dict[str, Dict] = {
 def get_tool(name: str) -> Callable:
     """Get tool function from registry"""
     return TOOL_REGISTRY[name]["function"] 
+
+class LocationData(TypedDict):
+    name: str
+    position: Dict[str, float]
+    metadata: Dict[str, any]
+
+class NavigationResponse(TypedDict):
+    status: str
+    action: str
+    data: LocationData
+    message: str 
+
+def find_location(query: str, game_id: int = GAME_ID) -> Dict:
+    """Query location service for destination."""
+    try:
+        print(f"\nLocation Search:")
+        print(f"Query: '{query}'")
+        
+        # Try to connect to service
+        try:
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            result = s.connect_ex(('localhost', 7777))
+            print(f"Port 7777 is {'open' if result == 0 else 'closed'}")
+            s.close()
+        except Exception as e:
+            print(f"Port check failed: {e}")
+            
+        # Make request
+        response = requests.get(
+            "http://localhost:7777/api/locations/semantic-search",
+            params={
+                "game_id": game_id,
+                "query": query,
+                "threshold": NAVIGATION_CONFIDENCE_THRESHOLD
+            }
+        )
+        
+        print("\nLocation Service Response:")
+        print(f"Status Code: {response.status_code}")
+        print(f"Headers: {dict(response.headers)}")
+        print(f"Response Text: {response.text[:1000]}")
+        
+        response.raise_for_status()
+        return response.json()
+        
+    except Exception as e:
+        print(f"\nLocation Service Error: {str(e)}")
+        return {"message": "Service error", "locations": []}
