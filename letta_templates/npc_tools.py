@@ -133,7 +133,7 @@ def perform_action(action: str, type: Optional[str] = None, target: Optional[str
         return f"Stopping follow action. Now stationary."
     return f"Unknown action: {action}"
 
-def navigate_to(destination: str, request_heartbeat: bool = True) -> Dict:
+def navigate_to(destination: str, request_heartbeat: bool = True) -> str:
     """
     Navigate to a location using semantic search.
     
@@ -142,30 +142,17 @@ def navigate_to(destination: str, request_heartbeat: bool = True) -> Dict:
         request_heartbeat (bool): Request heartbeat after execution
         
     Returns:
-        Dict: Navigation result with format:
-        {
-            "status": "success" | "failure",
-            "message": str,  # Human-readable message for Letta
-            "coordinates": {  # Only present if status is "success"
-                "x": float,
-                "y": float,
-                "z": float
-            } | None
-        }
+        str: Navigation status message describing current state
     """
     import requests
     import json
     import os
     
     try:
-        # Configuration - moved inside function
+        # Configuration
         game_id = int(os.getenv("LETTA_GAME_ID", "61"))
         threshold = float(os.getenv("LETTA_NAV_THRESHOLD", "0.8"))
         location_api_url = os.getenv("LOCATION_SERVICE_URL", "http://172.17.0.1:7777")
-        
-        print(f"\nLocation Search:")
-        print(f"Query: '{destination}'")
-        print(f"Service URL: {location_api_url}")
         
         response = requests.get(
             f"{location_api_url}/api/locations/semantic-search",
@@ -176,50 +163,30 @@ def navigate_to(destination: str, request_heartbeat: bool = True) -> Dict:
             }
         )
         
-        print("\nLocation Service Response:")
-        print(f"Status Code: {response.status_code}")
-        print(f"Headers: {dict(response.headers)}")
-        print(f"Response Text: {response.text[:1000]}")
-        
         response.raise_for_status()
         data = response.json()
         
-        # Process response into result
         if not data.get("locations"):
-            return {
-                "status": "failure",
-                "message": f"I'm not sure where '{destination}' is. Could you be more specific?",
-                "coordinates": None
-            }
+            return f"I'm not sure where '{destination}' is. Could you be more specific?"
             
         location = data["locations"][0]
         
         # Check confidence
         if location["similarity"] < threshold:
-            return {
-                "status": "failure", 
-                "message": f"Did you mean '{location['name']}'? Please confirm.",
-                "coordinates": None
-            }
+            return f"Did you mean '{location['name']}'? Please confirm."
             
-        return {
-            "status": "success",
-            "message": f"Found {location['name']}",
-            "coordinates": {
-                "x": location["position_x"],
-                "y": location["position_y"],
-                "z": location["position_z"]
-            }
-        }
+        # Include coordinates in message
+        return (
+            f"Beginning navigation to {location['name']} "
+            f"at coordinates ({location['position_x']}, {location['position_y']}, {location['position_z']}). "
+            "Currently in transit... "
+            "I'll need a system message to confirm arrival."
+        )
             
     except Exception as e:
-        error_msg = f"Navigation Error: {type(e).__name__}: {str(e)}"
+        error_msg = f"Navigation Error: {str(e)}"
         print(f"\n{error_msg}")
-        return {
-            "status": "failure",
-            "message": error_msg,
-            "coordinates": None
-        }
+        return error_msg
 
 def examine_object(object_name: str, request_heartbeat: bool = True) -> str:
     """
