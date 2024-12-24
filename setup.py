@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="letta_templates",
-    version="0.2.6",
+    version="0.2.6",  # Navigation system update
     description="Templates and tools for Letta AI server",
     author="LettaDev",
     packages=find_packages(),
