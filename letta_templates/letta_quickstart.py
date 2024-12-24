@@ -16,6 +16,7 @@ from letta.schemas.message import (
     Message
 )
 from letta_templates.npc_tools import TOOL_INSTRUCTIONS, TOOL_REGISTRY, navigate_to, examine_object, perform_action
+import requests
 
 # Load environment variables
 load_dotenv()
@@ -564,7 +565,7 @@ def test_npc_actions(client, agent_id: str):
             
         time.sleep(1)
 
-def main():
+def parse_args():
     parser = argparse.ArgumentParser(description='Letta Quickstart Tool')
     parser.add_argument('--keep', action='store_true', 
                       help='Keep the agent after testing (do not cleanup)')
@@ -580,61 +581,223 @@ def main():
                       help='Create agent with custom tools')
     parser.add_argument('--test', choices=['navigate', 'examine', 'all'], 
                       help='Run specific test (navigate, examine) or all')
-    
-    args = parser.parse_args()
+    parser.add_argument(
+        "--use-api",
+        action="store_true",
+        help="Route chat messages through FastAPI instead of direct to Letta"
+    )
+    return parser.parse_args()
 
+def get_api_url():
+    """Get FastAPI chat endpoint URL matching Roblox config"""
+    base_url = os.getenv("LETTA_API_URL", "https://roblox.ella-ai-care.com")
+    return f"{base_url}/letta/v1/chat/v2"
+
+def get_test_npc():
+    """Get Pete's NPC ID and verify tools"""
+    try:
+        # Get NPC info
+        response = requests.get("http://localhost:7777/api/npcs?game_id=61")
+        response.raise_for_status()
+        npcs = response.json()["npcs"]
+        
+        # Find Pete and verify abilities
+        pete = next((npc for npc in npcs 
+                    if npc["npcId"] == "693ec89f-40f1-4321-aef9-5aac428f478b"), None)
+        
+        if pete:
+            print(f"\nPete's abilities: {pete.get('abilities', [])}")
+            
+        return "693ec89f-40f1-4321-aef9-5aac428f478b"
+    except Exception as e:
+        print(f"\nWarning: Could not fetch NPC info: {e}")
+        return "693ec89f-40f1-4321-aef9-5aac428f478b"
+
+def send_chat_message(message: str, agent_id: str, use_api: bool = False) -> dict:
+    """Send chat message either directly or through API"""
+    if use_api:
+        print("\n=== Using FastAPI Endpoint ===")
+        
+        # Use real NPC ID
+        npc_id = get_test_npc()
+        
+        request = {
+            "npc_id": npc_id,  # Use Pete's ID instead of agent_id
+            "participant_id": "test_user_1",
+            "message": message,
+            "context": {
+                "participant_type": "player",
+                "participant_name": "TestUser"
+            }
+        }
+        
+        print(f"\nRequest URL: {get_api_url()}")
+        print(f"Request Body: {json.dumps(request, indent=2)}")
+
+        try:
+            response = requests.post(
+                get_api_url(),
+                json=request,
+                headers={"Content-Type": "application/json"},
+                timeout=30  # Increase timeout for tool calls
+            )
+            print(f"\nResponse Status: {response.status_code}")
+            print(f"Response Headers: {dict(response.headers)}")
+            print(f"Response Body: {response.text[:1000]}")  # First 1000 chars
+            
+            response.raise_for_status()
+            data = response.json()
+            return data
+        except requests.exceptions.HTTPError as e:
+            print(f"\nHTTP Error: {e}")
+            print(f"Response Body: {e.response.text}")
+            raise
+        except Exception as e:
+            print(f"\nError: {type(e).__name__}: {str(e)}")
+            raise
+    else:
+        print("\n=== Using Direct Letta Connection ===")
+        return client.chat(message, agent_id)
+
+def parse_and_validate_response(response: dict):
+    """Validate response matches expected format"""
+    print("\nValidating response format...")
+    
+    # Check required fields
+    required = ["message", "metadata"]
+    missing = [f for f in required if f not in response]
+    if missing:
+        print(f"Warning: Missing required fields: {missing}")
+    
+    # Check action format if present
+    if "action" in response:
+        action = response["action"]
+        if action.get("type") == "navigate":
+            coords = action.get("data", {}).get("coordinates")
+            if coords:
+                print(f"Navigation coordinates: ({coords['x']}, {coords['y']}, {coords['z']})")
+
+    return response
+
+def test_navigation(agent_id: str, use_api: bool = False):
+    """Test navigation without API"""
+    print("\nTesting navigation...")
+    
+    try:
+        # Direct tool test
+        result = navigate_to("Pete's stand", request_heartbeat=True)
+        print(f"\nNavigation result: {json.dumps(result, indent=2)}")
+        
+        # Verify response format
+        assert "status" in result, "Missing status field"
+        assert "message" in result, "Missing message field"
+        
+        if result["status"] == "success":
+            assert "coordinates" in result, "Missing coordinates in success response"
+            coords = result["coordinates"]
+            print(f"\nFound coordinates: ({coords['x']}, {coords['y']}, {coords['z']})")
+        else:
+            print(f"\nNavigation failed: {result['message']}")
+            
+    except Exception as e:
+        print(f"\nError in navigation test: {type(e).__name__}: {str(e)}")
+        raise
+
+def test_api_navigation():
+    """Test navigation using real NPC through API"""
+    print("\nTesting API Navigation with Pete...")
+    
+    # Pete's known NPC ID and a new player ID
+    PETE_NPC_ID = "693ec89f-40f1-4321-aef9-5aac428f478b"
+    PLAYER_ID = f"test_player_{int(time.time())}"
+    
+    try:
+        print(f"\nTesting with:")
+        print(f"NPC ID: {PETE_NPC_ID}")
+        print(f"Player ID: {PLAYER_ID}")
+        
+        # Test sequence: chat -> follow -> navigate
+        test_messages = [
+            "Hello! How are you?",  # Basic chat
+            "follow me",  # Simple follow command
+            "Can you take me to Pete's stand?"  # Navigation
+        ]
+        
+        for message in test_messages:
+            print(f"\nSending message: '{message}'")
+            
+            chat_response = requests.post(
+                "https://roblox.ella-ai-care.com/letta/v1/chat/v2",
+                json={
+                    "message": message,
+                    "npc_id": PETE_NPC_ID,
+                    "participant_type": "player",
+                    "participant_id": PLAYER_ID,
+                    "context": {
+                        "participant_name": "TestUser",
+                        "interaction_history": [],
+                        "participant_type": "player",
+                        "is_new_conversation": True,
+                        "npc_location": "Unknown",
+                        "nearby_players": ["TestUser"]
+                    }
+                }
+            )
+            chat_response.raise_for_status()
+            data = chat_response.json()
+            print(f"\nResponse: {json.dumps(data, indent=2)}")
+            
+            # Verify actions
+            if message == "follow me":
+                assert data["action"]["type"] == "follow", "Expected follow action"
+                assert data["action"].get("target") == "TestUser", "Expected follow target"
+            elif "take me to" in message.lower():
+                assert data["action"]["type"] == "navigate", "Expected navigate action"
+                coords = data["action"]["data"]["coordinates"]
+                print(f"\nNavigation coordinates: ({coords['x']}, {coords['y']}, {coords['z']})")
+            
+            time.sleep(2)
+            
+    except Exception as e:
+        print(f"\nError in API test: {type(e).__name__}: {str(e)}")
+        raise
+
+def main():
+    args = parse_args()
+    
     # Validate environment before proceeding
     if not validate_environment():
         sys.exit(1)
 
-    # Initialize the client with retry logic
-    port = os.getenv('LETTA_PORT')
-    port = int(port) if port else None
-    base_url = os.getenv('LETTA_BASE_URL', 'http://localhost:8283')
-    
-    print("\nStarting Letta Quickstart with:")
-    print(f"- Environment URL: {base_url}")
-    print(f"- Environment Port: {port if port else 'default'}")
-    print(f"- Keep Agent: {args.keep}")
-    print(f"- LLM Provider: {args.llm}")
-    print(f"- Agent Name: {args.name}")
-    print(f"- Overwrite: {args.overwrite}")
-    
     try:
-        client = create_letta_client(base_url, port)
-        agent = create_personalized_agent(
-            name=args.name,
-            use_claude=(args.llm == 'claude'),
-            overwrite=args.overwrite,
-            with_custom_tools=args.custom_tools
-        )
-        print(f"\nCreated agent: {agent.id}")
-        
-        # Print initial configuration
-        print_agent_details(client, agent.id, "INITIAL STATE")
-
-        # Run specific test based on flag
-        if args.test == 'navigate':
-            test_message = "Navigate to Pete's stand"
-            print(f"\nSending test message: '{test_message}'")
-            response = client.send_message(
-                agent_id=agent.id,
-                message=test_message,
-                role="user"
-            )
-            print_response(response)
-        elif args.test == 'examine':
-            test_custom_tools(client, agent.id)
-            test_tool_update(client, agent.id)
-        elif args.test == 'all':
-            test_custom_tools(client, agent.id)
-            test_tool_update(client, agent.id)
-            
-        if args.keep:
-            print(f"\nKeeping agent for examination: {agent.id}")
+        if args.use_api:
+            # Skip agent creation, just test API with existing NPC
+            print("\nTesting with existing NPC (Pete)...")
+            test_api_navigation()
         else:
-            client.delete_agent(agent.id)
-            print(f"\nCleaned up agent: {agent.id}")
+            # Normal flow for direct testing
+            port = os.getenv('LETTA_PORT')
+            port = int(port) if port else None
+            base_url = os.getenv('LETTA_BASE_URL', 'http://localhost:8283')
+            
+            print("\nStarting Letta Quickstart with:")
+            print(f"- Environment URL: {base_url}")
+            print(f"- Environment Port: {port if port else 'default'}")
+            print(f"- Keep Agent: {args.keep}")
+            print(f"- LLM Provider: {args.llm}")
+            print(f"- Agent Name: {args.name}")
+            print(f"- Overwrite: {args.overwrite}")
+            
+            client = create_letta_client(base_url, port)
+            agent = create_personalized_agent(
+                name=args.name,
+                use_claude=(args.llm == 'claude'),
+                overwrite=args.overwrite,
+                with_custom_tools=args.custom_tools
+            )
+            print(f"\nCreated agent: {agent.id}")
+            print_agent_details(client, agent.id, "INITIAL STATE")
+            test_navigation(agent.id, use_api=False)
 
     finally:
         pass
