@@ -168,12 +168,17 @@ def navigate_to(destination: str, request_heartbeat: bool = True) -> dict:
         NAVIGATION_CONFIDENCE_THRESHOLD = float(os.getenv("LETTA_NAV_THRESHOLD", "0.8"))
         LOCATION_API_URL = os.getenv("LOCATION_SERVICE_URL", "http://172.17.0.1:7777")
         
+        print(f"\nAttempting navigation to: {destination}")
+        print(f"Using Location API: {LOCATION_API_URL}")
+        print(f"Game ID: {GAME_ID}")
+        
         # Setup session with retries and timeouts
         session = requests.Session()
         retries = Retry(total=3, backoff_factor=0.1)
         session.mount('http://', HTTPAdapter(max_retries=retries))
         
         try:
+            print("\nSending semantic search request...")
             response = session.get(
                 f"{LOCATION_API_URL}/api/locations/semantic-search",
                 params={
@@ -181,10 +186,13 @@ def navigate_to(destination: str, request_heartbeat: bool = True) -> dict:
                     "query": destination,
                     "threshold": NAVIGATION_CONFIDENCE_THRESHOLD
                 },
-                timeout=5
+                timeout=30
             )
+            print(f"Response status: {response.status_code}")
+            print(f"Response headers: {dict(response.headers)}")
             response.raise_for_status()
             data = response.json()
+            print(f"Response data: {json.dumps(data, indent=2)}")
         finally:
             session.close()
             
