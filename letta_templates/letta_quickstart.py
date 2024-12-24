@@ -379,11 +379,10 @@ def validate_environment():
 
     print("\nValidating environment variables...")
     
-    # Check common variables
-    missing_common = check_vars(['LETTA_BASE_URL'])
-    if missing_common:
-        print(f"Missing common variables: {', '.join(missing_common)}")
-        return False
+    # Use default URL if not set
+    if not os.getenv('LETTA_BASE_URL'):
+        os.environ['LETTA_BASE_URL'] = "http://localhost:8283"
+        print("Using default base URL: http://localhost:8283")
 
     # Check provider-specific variables
     provider = os.getenv('LETTA_LLM_ENDPOINT_TYPE', 'openai')

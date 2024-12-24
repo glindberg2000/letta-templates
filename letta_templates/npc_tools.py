@@ -48,6 +48,8 @@ from enum import Enum
 import json
 import os
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Configuration
 GAME_ID = int(os.getenv("LETTA_GAME_ID", "61"))
@@ -153,29 +155,39 @@ def navigate_to(destination: str, request_heartbeat: bool = True) -> dict:
             } | None
         }
     """
-    # Move all imports inside function
+    # All imports and config must be inside function
     import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
     import json
     import os
     
     try:
-        # Configuration
-        game_id = int(os.getenv("LETTA_GAME_ID", "61"))
-        threshold = float(os.getenv("LETTA_NAV_THRESHOLD", "0.8"))
-        location_api_url = os.getenv("LOCATION_SERVICE_URL", "http://172.17.0.1:7777")
+        # Configuration inside function
+        GAME_ID = int(os.getenv("LETTA_GAME_ID", "61"))
+        NAVIGATION_CONFIDENCE_THRESHOLD = float(os.getenv("LETTA_NAV_THRESHOLD", "0.8"))
+        LOCATION_API_URL = os.getenv("LOCATION_SERVICE_URL", "http://172.17.0.1:7777")
         
-        response = requests.get(
-            f"{location_api_url}/api/locations/semantic-search",
-            params={
-                "game_id": game_id,
-                "query": destination,
-                "threshold": threshold
-            }
-        )
+        # Setup session with retries and timeouts
+        session = requests.Session()
+        retries = Retry(total=3, backoff_factor=0.1)
+        session.mount('http://', HTTPAdapter(max_retries=retries))
         
-        response.raise_for_status()
-        data = response.json()
-        
+        try:
+            response = session.get(
+                f"{LOCATION_API_URL}/api/locations/semantic-search",
+                params={
+                    "game_id": GAME_ID,
+                    "query": destination,
+                    "threshold": NAVIGATION_CONFIDENCE_THRESHOLD
+                },
+                timeout=5
+            )
+            response.raise_for_status()
+            data = response.json()
+        finally:
+            session.close()
+            
         if not data.get("locations"):
             return {
                 "status": "failure",
@@ -186,7 +198,7 @@ def navigate_to(destination: str, request_heartbeat: bool = True) -> dict:
         location = data["locations"][0]
         
         # Check confidence
-        if location["similarity"] < threshold:
+        if location["similarity"] < NAVIGATION_CONFIDENCE_THRESHOLD:
             return {
                 "status": "failure", 
                 "message": f"Did you mean '{location['name']}'? Please confirm.",

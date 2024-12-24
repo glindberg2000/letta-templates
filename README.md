@@ -776,3 +776,42 @@ NPCs maintain awareness of their current state:
    - Await system details
 
 See `npc_tools.py` for complete documentation and examples.
+
+### Setup Requirements
+
+1. Docker Configuration
+```bash
+# Run Letta server with host network access
+docker run -d --name letta-server \
+  -v ~/.letta/.persist/pgdata:/var/lib/postgresql/data \
+  -p 8283:8283 \
+  -e OPENAI_API_KEY="your_api_key" \
+  --add-host=host.docker.internal:host-gateway \  # Required for location service
+  letta/letta:latest
+```
+
+2. Verify Location Service Access
+```bash
+# Test from inside container
+docker exec letta-server python3 -c "
+import requests
+response = requests.get('http://172.17.0.1:7777/api/locations/semantic-search?game_id=61&query=petes%20stand')
+print(f'Status: {response.status_code}')
+"
+# Should print: Status: 200
+```
+
+### Navigation Tool
+
+The `navigate_to` tool uses semantic search to find and navigate to locations:
+
+```python
+result = navigate_to("Pete's stand")
+# Returns:
+"Found Pete's Merch Stand at coordinates (-12.0, 18.9, -127.0). Beginning navigation... Currently in transit."
+```
+
+The tool requires:
+- Location service running on host machine (port 7777)
+- Docker container configured with host access
+- Valid game_id and location data
