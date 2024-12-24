@@ -197,33 +197,13 @@ def chat_with_agent(client, agent_id: str, message: str, role: str = "user") -> 
         print(f"Error in chat_with_agent: {e}")
         raise
 
-def create_letta_client(base_url=None, port=None):
-    """
-    Create a Letta client based on the configuration.
-    If base_url is memory://, it will use the in-memory version.
-    Otherwise, it will connect to the specified URL (e.g., Docker version)
-    """
-    # Default to Docker URL if not specified
-    if not base_url:
-        base_url = "http://localhost:8283"
-    
-    if base_url == "memory://":
-        print("Using in-memory Letta server")
-        return create_client()
-    else:
-        if port:
-            # Parse the base_url and replace the port
-            from urllib.parse import urlparse, urlunparse
-            parsed = urlparse(base_url)
-            # Reconstruct the URL with new port
-            base_url = urlunparse(parsed._replace(netloc=f"{parsed.hostname}:{port}"))
-        
-        print(f"\nLetta Quickstart Configuration:")
-        print(f"Base URL: {base_url}")
-        if port:
-            print(f"Port Override: {port}")
-        print("-" * 50)
-        return create_client(base_url=base_url)
+def create_letta_client():
+    """Create Letta client with configuration"""
+    base_url = os.getenv("LETTA_BASE_URL", "http://localhost:8283")  # Default to local
+    print("\nLetta Quickstart Configuration:")
+    print(f"Base URL: {base_url}")
+    print("-" * 50 + "\n")
+    return create_client(base_url=base_url)
 
 def run_quick_test(client, npc_id="test-npc-1", user_id="test-user-1"):
     """Run test sequence with identifiable messages."""
@@ -282,83 +262,69 @@ def get_or_create_tool(client, tool_name: str, tool_func=None, update_existing: 
 
 def create_personalized_agent(
     name: str = "emma_research_assistant",
+    client = None,
     use_claude: bool = False,
     overwrite: bool = False,
-    with_custom_tools: bool = False
+    with_custom_tools: bool = False,
+    custom_registry = None  # Add parameter for custom registry
 ):
-    client = create_client(base_url="http://localhost:8283")
+    """Create a personalized agent with tools"""
+    # Use passed client or create new one
+    if client is None:
+        client = create_letta_client()
 
     # Add timestamp to name to make it unique
     timestamp = int(time.time())
     unique_name = f"{name}_{timestamp}"
     print(f"Creating agent with unique name: {unique_name}")
-
+    
     # Get base system prompt
     system_prompt = gpt_system.get_system_text("memgpt_chat")
-
-    # Add our tool instructions at the end
+    
+    # Add location knowledge
+    location_knowledge = """
+    Known Locations:
+    - Pete's Stand
+      Description: A friendly food stand run by Pete
+      Location: (-12.0, 18.9, -127.0)
+      Slug: petes_stand
+    """
+    
     system_prompt = system_prompt.replace(
         "Base instructions finished.",
-        TOOL_INSTRUCTIONS + "\nBase instructions finished."
+        location_knowledge + "\n" + TOOL_INSTRUCTIONS + "\nBase instructions finished."
     )
 
-    # Set up LLM and embedding configs first
-    if use_claude:
-        llm_config = LLMConfig(
-            model="claude-3-haiku-20240307",
-            model_endpoint_type="anthropic",
-            model_endpoint="https://api.anthropic.com/v1",
-            context_window=200000,
-        )
-        embedding_config = EmbeddingConfig(
-            embedding_endpoint_type="anthropic",
-            embedding_endpoint="https://api.anthropic.com/v1/embeddings",
-            embedding_model="claude-3-haiku-20240307",
-            embedding_dim=1536,
-            embedding_chunk_size=300,
-        )
-    else:
-        llm_config = LLMConfig(
+    # Create agent
+    agent = client.create_agent(
+        name=unique_name,
+        system=system_prompt,
+        include_base_tools=True,
+        llm_config=LLMConfig(
             model="gpt-4o-mini",
             model_endpoint_type="openai",
             model_endpoint="https://api.openai.com/v1",
             context_window=128000,
-        )
-        embedding_config = EmbeddingConfig(
+        ),
+        embedding_config=EmbeddingConfig(
             embedding_endpoint_type="openai",
             embedding_endpoint="https://api.openai.com/v1",
             embedding_model="text-embedding-ada-002",
             embedding_dim=1536,
             embedding_chunk_size=300,
         )
-
-    # Clean up old test tools first
-    cleanup_test_tools(client)
-
-    # Get or create tools from registry
-    tool_ids = []
-    for name, info in TOOL_REGISTRY.items():
-        tool = get_or_create_tool(
-            client, 
-            name, 
-            info["function"],
-            update_existing=True
-        )
-        tool_ids.append(tool.id)
-        print(f"Using tool: {name} (ID: {tool.id}, version: {info['version']})")
-
-    # Create agent with just one tool rule
-    agent_state = client.create_agent(
-        name=unique_name,
-        llm_config=llm_config,
-        embedding_config=embedding_config,
-        system=system_prompt,
-        include_base_tools=True,  # Keep base tools
-        tool_ids=tool_ids,  # Add our custom tools
-        tool_rules=[TerminalToolRule(tool_name="send_message")]  # Just one rule
     )
-    
-    return agent_state
+
+    # Register tools if requested
+    if with_custom_tools:
+        # Use custom registry if provided, otherwise use default
+        registry_to_use = custom_registry if custom_registry else TOOL_REGISTRY
+        for name, info in registry_to_use.items():
+            tool = client.create_tool(info["function"], name=name)
+            print(f"Created tool: {name} (ID: {tool.id})")
+            client.add_tool_to_agent(agent.id, tool.id)
+
+    return agent
 
 def validate_environment():
     """Validate required environment variables are set."""
@@ -704,63 +670,59 @@ def test_navigation(agent_id: str, use_api: bool = False):
         raise
 
 def test_api_navigation():
-    """Test navigation using real NPC through API"""
-    print("\nTesting API Navigation with Pete...")
+    """Test navigation using unique test tool"""
+    print("\nTesting navigation with unique test tool...")
     
-    # Pete's known NPC ID and a new player ID
-    PETE_NPC_ID = "693ec89f-40f1-4321-aef9-5aac428f478b"
-    PLAYER_ID = f"test_player_{int(time.time())}"
+    # Create Letta client
+    client = create_letta_client()
     
-    try:
-        print(f"\nTesting with:")
-        print(f"NPC ID: {PETE_NPC_ID}")
-        print(f"Player ID: {PLAYER_ID}")
+    # Clean up any existing test tools first
+    cleanup_test_tools(client)
+    
+    # Create test registry with ONLY our test tool
+    test_registry = {
+        "navigate_to_test_v4": TOOL_REGISTRY["navigate_to_test_v4"]
+    }
+    
+    # Create a new test agent
+    agent = create_personalized_agent(
+        name=f"test_npc_{int(time.time())}",
+        client=client,
+        with_custom_tools=True,
+        custom_registry=test_registry  # Pass only our test tool
+    )
+    
+    print(f"\nCreated new test agent: {agent.id}")
+    
+    # Test the navigation
+    print("\nTesting navigation...")
+    response = client.send_message(
+        agent_id=agent.id,
+        message="Can you take me to Pete's stand?",
+        role="user"
+    )
+    
+    # Print response
+    print("\nResponse:")
+    for msg in response.messages:
+        print(f"\n{'-'*50}")
+        print(f"Type: {msg.message_type}")
+        print(f"Raw message: {msg}")  # Add raw message debug
         
-        # Test sequence: chat -> follow -> navigate
-        test_messages = [
-            "Hello! How are you?",  # Basic chat
-            "follow me",  # Simple follow command
-            "Can you take me to Pete's stand?"  # Navigation
-        ]
-        
-        for message in test_messages:
-            print(f"\nSending message: '{message}'")
+        if hasattr(msg, 'tool_call'):
+            print(f"Tool: {msg.tool_call.name}")
+            print(f"Args: {msg.tool_call.arguments}")
             
-            chat_response = requests.post(
-                "https://roblox.ella-ai-care.com/letta/v1/chat/v2",
-                json={
-                    "message": message,
-                    "npc_id": PETE_NPC_ID,
-                    "participant_type": "player",
-                    "participant_id": PLAYER_ID,
-                    "context": {
-                        "participant_name": "TestUser",
-                        "interaction_history": [],
-                        "participant_type": "player",
-                        "is_new_conversation": True,
-                        "npc_location": "Unknown",
-                        "nearby_players": ["TestUser"]
-                    }
-                }
-            )
-            chat_response.raise_for_status()
-            data = chat_response.json()
-            print(f"\nResponse: {json.dumps(data, indent=2)}")
+        elif hasattr(msg, 'tool_response'):
+            print(f"Tool Response: {msg.tool_response}")
             
-            # Verify actions
-            if message == "follow me":
-                assert data["action"]["type"] == "follow", "Expected follow action"
-                assert data["action"].get("target") == "TestUser", "Expected follow target"
-            elif "take me to" in message.lower():
-                assert data["action"]["type"] == "navigate", "Expected navigate action"
-                coords = data["action"]["data"]["coordinates"]
-                print(f"\nNavigation coordinates: ({coords['x']}, {coords['y']}, {coords['z']})")
+        elif hasattr(msg, 'reasoning'):
+            print(f"Reasoning: {msg.reasoning}")
             
-            time.sleep(2)
+        elif hasattr(msg, 'message'):
+            print(f"Message: {msg.message}")
             
-    except Exception as e:
-        print(f"\nError in API test: {type(e).__name__}: {str(e)}")
-        raise
+        print(f"{'-'*50}")
 
 def main():
     args = parse_args()

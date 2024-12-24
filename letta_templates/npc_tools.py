@@ -42,6 +42,7 @@ Example Usage:
 See TOOL_INSTRUCTIONS for complete usage documentation.
 """
 from typing import Dict, Callable, Optional, TypedDict
+from typing_extensions import Any  # Use typing_extensions for Any
 import datetime
 from dataclasses import dataclass
 from enum import Enum
@@ -233,6 +234,52 @@ def navigate_to(destination: str, request_heartbeat: bool = True) -> dict:
             "coordinates": None
         }
 
+def navigate_to_test_v4(destination: str, request_heartbeat: bool = True) -> dict:
+    """
+    Test version of navigation tool that requires location slugs.
+    
+    Args:
+        destination (str): Location slug to navigate to. Must be one of:
+            - "petes_stand" (Pete's Stand)
+            - "town_square" (Town Square)
+            - "market_district" (Market District)
+        request_heartbeat (bool): Request heartbeat after execution
+        
+    Returns:
+        dict: Navigation result with format:
+        {
+            "status": "success",
+            "message": str,
+            "coordinates": {"x": float, "y": float, "z": float}
+        }
+        
+    Note:
+        This tool requires exact slugs. The agent should use its location knowledge
+        to convert human-readable names (e.g. "Pete's Stand") to slugs (e.g. "petes_stand")
+    """
+    # Only accept exact slugs
+    known_locations = {
+        "petes_stand": (-12.0, 18.9, -127.0),
+        "town_square": (45.2, 12.0, -89.5),
+        "market_district": (-28.4, 15.0, -95.2)
+    }
+    
+    # Get location from exact slug match
+    location = known_locations.get(destination.lower())
+    if not location:
+        return {
+            "status": "failure",
+            "message": f"Unknown location slug: {destination}. Must be one of: {list(known_locations.keys())}",
+            "coordinates": None
+        }
+        
+    x, y, z = location
+    return {
+        "status": "success",
+        "message": f"Navigating to {destination} at coordinates ({x}, {y}, {z})",
+        "coordinates": {"x": x, "y": y, "z": z}
+    }
+
 def examine_object(object_name: str, request_heartbeat: bool = True) -> str:
     """
     Begin examining an object in the game world.
@@ -261,6 +308,11 @@ TOOL_REGISTRY: Dict[str, Dict] = {
     "navigate_to": {
         "function": navigate_to,
         "version": "2.0.0",
+        "supports_state": True
+    },
+    "navigate_to_test_v4": {
+        "function": navigate_to_test_v4,
+        "version": "2.0.0-test4",
         "supports_state": True
     },
     "examine_object": {
