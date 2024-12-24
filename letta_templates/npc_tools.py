@@ -153,6 +153,7 @@ def navigate_to(destination: str, request_heartbeat: bool = True) -> dict:
             } | None
         }
     """
+    # Move all imports inside function
     import requests
     import json
     import os
@@ -192,6 +193,7 @@ def navigate_to(destination: str, request_heartbeat: bool = True) -> dict:
                 "coordinates": None
             }
             
+        # Return dict directly, let Letta handle encoding
         return {
             "status": "success",
             "message": f"Found {location['name']}. Beginning navigation... Currently in transit.",
