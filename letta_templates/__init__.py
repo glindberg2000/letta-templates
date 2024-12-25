@@ -9,9 +9,9 @@ This package provides reusable components for Letta AI:
 from .npc_tools import (
     TOOL_INSTRUCTIONS,
     TOOL_REGISTRY,
-    perform_action,
+    NAVIGATION_TOOLS,
     navigate_to,
-    examine_object
+    perform_action
 )
 
 __version__ = "0.2.6"

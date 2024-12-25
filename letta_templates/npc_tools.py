@@ -41,7 +41,7 @@ Example Usage:
 
 See TOOL_INSTRUCTIONS for complete usage documentation.
 """
-from typing import Dict, Callable, Optional, TypedDict
+from typing import Dict, Callable, Optional, TypedDict, Union, List
 from typing_extensions import Any  # Use typing_extensions for Any
 import datetime
 from dataclasses import dataclass
@@ -64,14 +64,20 @@ You have access to the following tools:
 1. `perform_action` - For basic NPC actions:
    - follow/unfollow: For player tracking
    - emote: For expressions and gestures
-2. `navigate_to` - For moving to specific locations
+2. `navigate_to` - For moving to specific locations:
+   - Using slugs: navigate_to("petes_stand")
+   - Using coordinates: navigate_to("x,y,z")
+     Example: navigate_to("15.5,20.0,-110.8")
+   - For locations without slugs, use their coordinates as a comma-separated string
 3. `examine_object` - For examining objects
 
 When asked to:
 - Follow someone: Use perform_action with action='follow', target='player_name'
 - Stop following: Use perform_action with action='unfollow'
 - Show emotion: Use perform_action with action='emote', type='wave|laugh|dance|cheer|point|sit'
-- Move somewhere: Use navigate_to with destination='location'
+- Move somewhere: 
+    - For known locations: Use navigate_to with destination='slug'
+    - For coordinate locations: Use navigate_to with destination='x,y,z'
 - Examine something: Use examine_object with object_name='item'
 
 Important notes:
@@ -80,11 +86,7 @@ Important notes:
 - Available emote types: wave, laugh, dance, cheer, point, sit
 - Tool names must be exactly as shown - no spaces or special characters
 - Always include request_heartbeat=True in tool calls
-
-Example emotes:
-- Wave at player: perform_action(action='emote', type='wave', target='player_name')
-- Dance: perform_action(action='emote', type='dance')
-- Point at object: perform_action(action='emote', type='point', target='treasure_chest')
+- For locations without slugs in your memory, use their coordinates in format: "x,y,z"
 """
 
 # State enums for consistency
@@ -138,101 +140,63 @@ def perform_action(action: str, type: Optional[str] = None, target: Optional[str
 
 def navigate_to(destination: str, request_heartbeat: bool = True) -> dict:
     """
-    Navigate to a location using semantic search.
+    Navigate to location using location slugs or coordinates.
     
     Args:
-        destination (str): The destination name or location to navigate to
+        destination (str): Either:
+            - Location slug (e.g. "petes_stand")
+            - Coordinate string "x,y,z" (e.g. "-12.0,18.9,-127.0")
         request_heartbeat (bool): Request heartbeat after execution
         
     Returns:
-        dict: Navigation result with format:
-        {
-            "status": "success" | "failure",
-            "message": str,  # Human-readable message for Letta
-            "coordinates": {  # Only present if status is "success"
-                "x": float,
-                "y": float,
-                "z": float
-            } | None
-        }
+        dict: Navigation result with coordinates
     """
-    # All imports and config must be inside function
-    import requests
-    from requests.adapters import HTTPAdapter
-    from urllib3.util.retry import Retry
-    import json
-    import os
-    
-    try:
-        # Configuration inside function
-        GAME_ID = int(os.getenv("LETTA_GAME_ID", "61"))
-        NAVIGATION_CONFIDENCE_THRESHOLD = float(os.getenv("LETTA_NAV_THRESHOLD", "0.8"))
-        LOCATION_API_URL = os.getenv("LOCATION_SERVICE_URL", "http://172.17.0.1:7777")
-        
-        print(f"\nAttempting navigation to: {destination}")
-        print(f"Using Location API: {LOCATION_API_URL}")
-        print(f"Game ID: {GAME_ID}")
-        
-        # Setup session with retries and timeouts
-        session = requests.Session()
-        retries = Retry(total=3, backoff_factor=0.1)
-        session.mount('http://', HTTPAdapter(max_retries=retries))
-        
+    # Handle coordinate input (format: "x,y,z")
+    if ',' in destination:
         try:
-            print("\nSending semantic search request...")
-            response = session.get(
-                f"{LOCATION_API_URL}/api/locations/semantic-search",
-                params={
-                    "game_id": GAME_ID,
-                    "query": destination,
-                    "threshold": NAVIGATION_CONFIDENCE_THRESHOLD
-                },
-                timeout=30
-            )
-            print(f"Response status: {response.status_code}")
-            print(f"Response headers: {dict(response.headers)}")
-            response.raise_for_status()
-            data = response.json()
-            print(f"Response data: {json.dumps(data, indent=2)}")
-        finally:
-            session.close()
-            
-        if not data.get("locations"):
+            x, y, z = map(float, destination.split(','))
+            return {
+                "status": "success",
+                "message": f"Navigating to coordinates ({x}, {y}, {z})",
+                "coordinates": {"x": x, "y": y, "z": z}
+            }
+        except ValueError:
             return {
                 "status": "failure",
-                "message": f"I'm not sure where '{destination}' is. Could you be more specific?",
+                "message": "Invalid coordinate format. Use 'x,y,z' (e.g. '-12.0,18.9,-127.0')",
                 "coordinates": None
             }
-            
-        location = data["locations"][0]
-        
-        # Check confidence
-        if location["similarity"] < NAVIGATION_CONFIDENCE_THRESHOLD:
-            return {
-                "status": "failure", 
-                "message": f"Did you mean '{location['name']}'? Please confirm.",
-                "coordinates": None
-            }
-            
-        # Return dict directly, let Letta handle encoding
-        return {
-            "status": "success",
-            "message": f"Found {location['name']}. Beginning navigation... Currently in transit.",
-            "coordinates": {
-                "x": location["position_x"],
-                "y": location["position_y"],
-                "z": location["position_z"]
-            }
-        }
-            
-    except Exception as e:
-        error_msg = f"Navigation Error: {str(e)}"
-        print(f"\n{error_msg}")
+    
+    # Handle slug input
+    if not isinstance(destination, str):
         return {
             "status": "failure",
-            "message": error_msg,
+            "message": "Destination must be either a location slug or [x, y, z] coordinates",
             "coordinates": None
         }
+        
+    # Only accept exact slugs
+    known_locations = {
+        "petes_stand": (-12.0, 18.9, -127.0),
+        "town_square": (45.2, 12.0, -89.5),
+        "market_district": (-28.4, 15.0, -95.2)
+    }
+    
+    # Get location from exact slug match
+    location = known_locations.get(destination.lower())
+    if not location:
+        return {
+            "status": "failure",
+            "message": f"Unknown location slug: {destination}. Must be one of: {list(known_locations.keys())}",
+            "coordinates": None
+        }
+        
+    x, y, z = location
+    return {
+        "status": "success",
+        "message": f"Navigating to {destination} at coordinates ({x}, {y}, {z})",
+        "coordinates": {"x": x, "y": y, "z": z}
+    }
 
 def navigate_to_test_v4(destination: str, request_heartbeat: bool = True) -> dict:
     """
@@ -280,6 +244,10 @@ def navigate_to_test_v4(destination: str, request_heartbeat: bool = True) -> dic
         "coordinates": {"x": x, "y": y, "z": z}
     }
 
+def navigate_to_v1(destination: str, request_heartbeat: bool = True) -> dict:
+    """Old semantic search navigation (deprecated)"""
+    # Old implementation here...
+
 def examine_object(object_name: str, request_heartbeat: bool = True) -> str:
     """
     Begin examining an object in the game world.
@@ -298,15 +266,13 @@ def examine_object(object_name: str, request_heartbeat: bool = True) -> str:
 
 # Tool registry with metadata
 TOOL_REGISTRY: Dict[str, Dict] = {
-    "perform_action": {
-        "function": perform_action,
-        "version": "2.0.0",
-        "supports_state": True,
-        "allowed_actions": ["follow", "unfollow", "emote"],
-        "allowed_emotes": ["wave", "laugh", "dance", "cheer", "point", "sit"]
-    },
     "navigate_to": {
         "function": navigate_to,
+        "version": "2.0.0",
+        "supports_state": True
+    },
+    "perform_action": {
+        "function": perform_action,
         "version": "2.0.0",
         "supports_state": True
     },
@@ -320,6 +286,12 @@ TOOL_REGISTRY: Dict[str, Dict] = {
         "version": "2.0.0",
         "supports_state": True
     }
+}
+
+# Production navigation tools
+NAVIGATION_TOOLS: Dict[str, Dict] = {
+    "navigate_to": TOOL_REGISTRY["navigate_to"],
+    "perform_action": TOOL_REGISTRY["perform_action"]
 }
 
 def get_tool(name: str) -> Callable:

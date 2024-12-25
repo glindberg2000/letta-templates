@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from letta import EmbeddingConfig, LLMConfig, create_client, ChatMemory
+from letta import EmbeddingConfig, LLMConfig, create_client, ChatMemory, BasicBlockMemory
 from letta.schemas.tool_rule import ToolRule, TerminalToolRule, InitToolRule
 from letta.prompts import gpt_system
 import json
@@ -15,7 +15,12 @@ from letta.schemas.message import (
     ReasoningMessage, 
     Message
 )
-from letta_templates.npc_tools import TOOL_INSTRUCTIONS, TOOL_REGISTRY, navigate_to, examine_object, perform_action
+from letta_templates.npc_tools import (
+    TOOL_INSTRUCTIONS, 
+    TOOL_REGISTRY,
+    NAVIGATION_TOOLS,
+    navigate_to  # Add this import
+)
 import requests
 
 # Load environment variables
@@ -115,8 +120,36 @@ def create_roblox_agent(client, name: str, persona: str = None):
             context_window=128000,
         ),
         memory=ChatMemory(
-            human="Name: RobloxDev\nRole: A Roblox developer working on game development",
-            persona=persona or "You are a knowledgeable AI assistant with expertise in Roblox development, Lua programming, and game design."
+            persona="A helpful NPC guide",
+            human="A Roblox player exploring the game",
+            locations={
+                "known_locations": [
+                    {
+                        "name": "Pete's Stand",
+                        "description": "A friendly food stand run by Pete",
+                        "coordinates": [-12.0, 18.9, -127.0],
+                        "slug": "petes_stand"
+                    },
+                    {
+                        "name": "Town Square",
+                        "description": "Central gathering place with fountain", 
+                        "coordinates": [45.2, 12.0, -89.5],
+                        "slug": "town_square"
+                    },
+                    {
+                        "name": "Market District",
+                        "description": "Busy shopping area with many vendors",
+                        "coordinates": [-28.4, 15.0, -95.2],
+                        "slug": "market_district"
+                    },
+                    {
+                        "name": "Secret Garden",
+                        "description": "A hidden garden with rare flowers",
+                        "coordinates": [15.5, 20.0, -110.8]
+                        # No slug - agent should use coordinates
+                    }
+                ]
+            }
         ),
         system=gpt_system.get_system_text("memgpt_chat"),
         include_base_tools=True,  # Keep base tools enabled
@@ -199,7 +232,7 @@ def chat_with_agent(client, agent_id: str, message: str, role: str = "user") -> 
 
 def create_letta_client():
     """Create Letta client with configuration"""
-    base_url = os.getenv("LETTA_BASE_URL", "http://localhost:8283")  # Default to local
+    base_url = os.getenv("LETTA_BASE_URL", "http://localhost:8283")
     print("\nLetta Quickstart Configuration:")
     print(f"Base URL: {base_url}")
     print("-" * 50 + "\n")
@@ -281,24 +314,62 @@ def create_personalized_agent(
     # Get base system prompt
     system_prompt = gpt_system.get_system_text("memgpt_chat")
     
-    # Add location knowledge
-    location_knowledge = """
-    Known Locations:
-    - Pete's Stand
-      Description: A friendly food stand run by Pete
-      Location: (-12.0, 18.9, -127.0)
-      Slug: petes_stand
-    """
+    # Create blocks first
+    persona_block = client.create_block(
+        label="persona",
+        value="A helpful NPC guide",
+        limit=2000
+    )
     
-    system_prompt = system_prompt.replace(
-        "Base instructions finished.",
-        location_knowledge + "\n" + TOOL_INSTRUCTIONS + "\nBase instructions finished."
+    human_block = client.create_block(
+        label="human",
+        value="A Roblox player exploring the game",
+        limit=2000
+    )
+    
+    locations_block = client.create_block(
+        label="locations",
+        value=json.dumps({
+            "known_locations": [
+                {
+                    "name": "Pete's Stand",
+                    "description": "A friendly food stand run by Pete",
+                    "coordinates": [-12.0, 18.9, -127.0],
+                    "slug": "petes_stand"
+                },
+                {
+                    "name": "Town Square",
+                    "description": "Central gathering place with fountain", 
+                    "coordinates": [45.2, 12.0, -89.5],
+                    "slug": "town_square"
+                },
+                {
+                    "name": "Market District",
+                    "description": "Busy shopping area with many vendors",
+                    "coordinates": [-28.4, 15.0, -95.2],
+                    "slug": "market_district"
+                },
+                {
+                    "name": "Secret Garden",
+                    "description": "A hidden garden with rare flowers",
+                    "coordinates": [15.5, 20.0, -110.8]
+                    # No slug - agent should use coordinates
+                }
+            ]
+        }),
+        limit=5000
+    )
+    
+    # Create memory with blocks
+    memory = BasicBlockMemory(
+        blocks=[persona_block, human_block, locations_block]
     )
 
     # Create agent
     agent = client.create_agent(
         name=unique_name,
-        system=system_prompt,
+        system=system_prompt + TOOL_INSTRUCTIONS,
+        memory=memory,
         include_base_tools=True,
         llm_config=LLMConfig(
             model="gpt-4o-mini",
@@ -317,11 +388,17 @@ def create_personalized_agent(
 
     # Register tools if requested
     if with_custom_tools:
-        # Use custom registry if provided, otherwise use default
-        registry_to_use = custom_registry if custom_registry else TOOL_REGISTRY
-        for name, info in registry_to_use.items():
+        # Clean up existing tools first
+        existing_tools = client.list_tools()
+        for tool in existing_tools:
+            if tool.name in NAVIGATION_TOOLS:
+                print(f"Removing existing tool: {tool.name}")
+                client.delete_tool(tool.id)
+        
+        # Register new tools
+        for name, info in NAVIGATION_TOOLS.items():
             tool = client.create_tool(info["function"], name=name)
-            print(f"Created tool: {name} (ID: {tool.id})")
+            print(f"Created {name}: {tool.id}")
             client.add_tool_to_agent(agent.id, tool.id)
 
     return agent
@@ -645,29 +722,45 @@ def parse_and_validate_response(response: dict):
 
     return response
 
-def test_navigation(agent_id: str, use_api: bool = False):
+def test_navigation(client, agent_id: str, use_api: bool = False):
     """Test navigation without API"""
     print("\nTesting navigation...")
     
-    try:
-        # Direct tool test
-        result = navigate_to("Pete's stand", request_heartbeat=True)
-        print(f"\nNavigation result: {json.dumps(result, indent=2)}")
-        
-        # Verify response format
-        assert "status" in result, "Missing status field"
-        assert "message" in result, "Missing message field"
-        
-        if result["status"] == "success":
-            assert "coordinates" in result, "Missing coordinates in success response"
-            coords = result["coordinates"]
-            print(f"\nFound coordinates: ({coords['x']}, {coords['y']}, {coords['z']})")
-        else:
-            print(f"\nNavigation failed: {result['message']}")
-            
-    except Exception as e:
-        print(f"\nError in navigation test: {type(e).__name__}: {str(e)}")
-        raise
+    # Test 1: Navigation with slug
+    print("\nTesting slug-based navigation...")
+    response = client.send_message(
+        agent_id=agent_id,
+        message="Can you take me to Pete's Stand?",
+        role="user"
+    )
+    print("\nSlug Navigation Response:")
+    for msg in response.messages:
+        print(f"\nMessage type: {msg.message_type}")
+        if hasattr(msg, 'tool_call'):
+            print(f"Tool: {msg.tool_call.name}")
+            print(f"Args: {msg.tool_call.arguments}")
+        elif hasattr(msg, 'tool_response'):
+            print(f"Tool response: {msg.tool_response}")
+        elif hasattr(msg, 'message'):
+            print(f"Message: {msg.message}")
+    
+    # Test 2: Navigation with coordinates
+    print("\nTesting coordinate navigation...")
+    response = client.send_message(
+        agent_id=agent_id,
+        message="Can you take me to the Secret Garden?",
+        role="user"
+    )
+    print("\nCoordinate Navigation Response:")
+    for msg in response.messages:
+        print(f"\nMessage type: {msg.message_type}")
+        if hasattr(msg, 'tool_call'):
+            print(f"Tool: {msg.tool_call.name}")
+            print(f"Args: {msg.tool_call.arguments}")
+        elif hasattr(msg, 'tool_response'):
+            print(f"Tool response: {msg.tool_response}")
+        elif hasattr(msg, 'message'):
+            print(f"Message: {msg.message}")
 
 def test_api_navigation():
     """Test navigation using unique test tool"""
@@ -750,7 +843,7 @@ def main():
             print(f"- Agent Name: {args.name}")
             print(f"- Overwrite: {args.overwrite}")
             
-            client = create_letta_client(base_url, port)
+            client = create_letta_client()
             agent = create_personalized_agent(
                 name=args.name,
                 use_claude=(args.llm == 'claude'),
@@ -759,7 +852,7 @@ def main():
             )
             print(f"\nCreated agent: {agent.id}")
             print_agent_details(client, agent.id, "INITIAL STATE")
-            test_navigation(agent.id, use_api=False)
+            test_navigation(client, agent.id, use_api=False)
 
     finally:
         pass

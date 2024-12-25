@@ -815,3 +815,34 @@ The tool requires:
 - Location service running on host machine (port 7777)
 - Docker container configured with host access
 - Valid game_id and location data
+
+## Navigation Tools
+
+The package provides navigation tools for NPCs:
+
+### Location Types
+- Slug-based locations: Use predefined slugs like "petes_stand"
+- Coordinate locations: Use comma-separated coordinates "x,y,z"
+
+```python
+# Using slugs
+navigate_to("petes_stand")
+
+# Using coordinates
+navigate_to("15.5,20.0,-110.8")
+```
+
+### Memory Configuration
+Locations can be defined in the agent's memory:
+```python
+locations_block = {
+    "known_locations": [
+        {
+            "name": "Pete's Stand",
+            "description": "A friendly food stand run by Pete",
+            "coordinates": [-12.0, 18.9, -127.0],
+            "slug": "petes_stand"  # Optional - will use coordinates if missing
+        }
+    ]
+}
+```
