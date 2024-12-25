@@ -7,7 +7,9 @@ setup(
     author="LettaDev",
     packages=find_packages(),
     install_requires=[
-        "letta>=0.2.0",
-        "python-dotenv>=0.19.0"
+        "letta>=0.6.6",
+        "python-dotenv>=0.19.0",
+        "grpcio-tools>=1.68.1",
+        "protobuf>=5.26.1"
     ],
 )
