@@ -2,10 +2,11 @@ from setuptools import setup, find_packages
 
 setup(
     name="letta_templates",
-    version="0.2.7",
+    version="0.2.8",
     description="Templates and tools for Letta AI server",
     author="LettaDev",
     packages=find_packages(),
+    scripts=['letta_cli.py'],
     install_requires=[
         "letta>=0.6.6",
         "python-dotenv>=0.19.0",

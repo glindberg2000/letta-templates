@@ -846,3 +846,28 @@ locations_block = {
     ]
 }
 ```
+
+## Quick Start
+```python
+from letta_templates import create_letta_client
+
+# Create Letta client
+client = create_letta_client()
+
+# Create agent with tools
+agent = client.create_agent(...)
+```
+
+## CLI Tools
+After installation, you can use the CLI:
+
+```bash
+# List all agents
+python letta_cli.py list
+
+# Create new agent
+python letta_cli.py create
+
+# Delete agent
+python letta_cli.py delete <agent_id>
+```
