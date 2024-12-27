@@ -139,18 +139,7 @@ def perform_action(action: str, type: Optional[str] = None, target: Optional[str
     return f"Unknown action: {action}"
 
 def navigate_to(destination: str, request_heartbeat: bool = True) -> dict:
-    """
-    Navigate to location using location slugs or coordinates.
-    
-    Args:
-        destination (str): Either:
-            - Location slug (e.g. "petes_stand")
-            - Coordinate string "x,y,z" (e.g. "-12.0,18.9,-127.0")
-        request_heartbeat (bool): Request heartbeat after execution
-        
-    Returns:
-        dict: Navigation result with coordinates
-    """
+    """Navigate to location using location slugs"""
     # Handle coordinate input (format: "x,y,z")
     if ',' in destination:
         try:
@@ -163,39 +152,23 @@ def navigate_to(destination: str, request_heartbeat: bool = True) -> dict:
         except ValueError:
             return {
                 "status": "failure",
-                "message": "Invalid coordinate format. Use 'x,y,z' (e.g. '-12.0,18.9,-127.0')",
+                "message": "Invalid coordinate format",
                 "coordinates": None
             }
     
-    # Handle slug input
-    if not isinstance(destination, str):
+    # Validate slug format (lowercase, no spaces, etc)
+    slug = destination.lower().strip()
+    if not slug.replace('_', '').isalnum():
         return {
             "status": "failure",
-            "message": "Destination must be either a location slug or [x, y, z] coordinates",
+            "message": f"Invalid slug format: {destination}",
             "coordinates": None
         }
-        
-    # Only accept exact slugs
-    known_locations = {
-        "petes_stand": (-12.0, 18.9, -127.0),
-        "town_square": (45.2, 12.0, -89.5),
-        "market_district": (-28.4, 15.0, -95.2)
-    }
     
-    # Get location from exact slug match
-    location = known_locations.get(destination.lower())
-    if not location:
-        return {
-            "status": "failure",
-            "message": f"Unknown location slug: {destination}. Must be one of: {list(known_locations.keys())}",
-            "coordinates": None
-        }
-        
-    x, y, z = location
     return {
         "status": "success",
-        "message": f"Navigating to {destination} at coordinates ({x}, {y}, {z})",
-        "coordinates": {"x": x, "y": y, "z": z}
+        "message": f"Navigating to {destination}",
+        "slug": destination.lower()  # Return clean slug for API to use
     }
 
 def navigate_to_test_v4(destination: str, request_heartbeat: bool = True) -> dict:
@@ -274,11 +247,6 @@ TOOL_REGISTRY: Dict[str, Dict] = {
     "perform_action": {
         "function": perform_action,
         "version": "2.0.0",
-        "supports_state": True
-    },
-    "navigate_to_test_v4": {
-        "function": navigate_to_test_v4,
-        "version": "2.0.0-test4",
         "supports_state": True
     },
     "examine_object": {
