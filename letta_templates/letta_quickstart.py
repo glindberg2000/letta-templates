@@ -16,10 +16,11 @@ from letta.schemas.message import (
     Message
 )
 from letta_templates.npc_tools import (
-    TOOL_INSTRUCTIONS, 
-    TOOL_REGISTRY,
-    NAVIGATION_TOOLS,
-    navigate_to  # Add this import
+    navigate_to,
+    navigate_to_coordinates,
+    perform_action,
+    examine_object,
+    TOOL_REGISTRY
 )
 import requests
 
@@ -298,77 +299,91 @@ def create_personalized_agent(
     client = None,
     use_claude: bool = False,
     overwrite: bool = False,
-    with_custom_tools: bool = False,
-    custom_registry = None  # Add parameter for custom registry
+    with_custom_tools: bool = True
 ):
-    """Create a personalized agent with tools"""
-    # Use passed client or create new one
+    """Create a personalized agent with modern tool registration"""
     if client is None:
         client = create_letta_client()
 
-    # Add timestamp to name to make it unique
     timestamp = int(time.time())
     unique_name = f"{name}_{timestamp}"
     print(f"Creating agent with unique name: {unique_name}")
     
-    # Get base system prompt
-    system_prompt = gpt_system.get_system_text("memgpt_chat")
-    
-    # Create blocks first
-    persona_block = client.create_block(
-        label="persona",
-        value="A helpful NPC guide",
-        limit=2000
-    )
-    
-    human_block = client.create_block(
-        label="human",
-        value="A Roblox player exploring the game",
-        limit=2000
-    )
-    
-    locations_block = client.create_block(
-        label="locations",
-        value=json.dumps({
-            "known_locations": [
-                {
-                    "name": "Pete's Stand",
-                    "description": "A friendly food stand run by Pete",
-                    "coordinates": [-12.0, 18.9, -127.0],
-                    "slug": "petes_stand"
-                },
-                {
-                    "name": "Town Square",
-                    "description": "Central gathering place with fountain", 
-                    "coordinates": [45.2, 12.0, -89.5],
-                    "slug": "town_square"
-                },
-                {
-                    "name": "Market District",
-                    "description": "Busy shopping area with many vendors",
-                    "coordinates": [-28.4, 15.0, -95.2],
-                    "slug": "market_district"
-                },
-                {
-                    "name": "Secret Garden",
-                    "description": "A hidden garden with rare flowers",
-                    "coordinates": [15.5, 20.0, -110.8]
-                    # No slug - agent should use coordinates
-                }
-            ]
-        }),
-        limit=5000
-    )
-    
-    # Create memory with blocks
+    # Create memory blocks
     memory = BasicBlockMemory(
-        blocks=[persona_block, human_block, locations_block]
+        blocks=[
+            client.create_block(
+                label="persona",
+                value="A helpful NPC guide",
+                limit=2000
+            ),
+            client.create_block(
+                label="human", 
+                value="A Roblox player exploring the game",
+                limit=2000
+            ),
+            client.create_block(
+                label="locations",
+                value=json.dumps({
+                    "known_locations": [
+                        {
+                            "name": "Pete's Stand",
+                            "description": "A friendly food stand run by Pete",
+                            "coordinates": [-12.0, 18.9, -127.0],
+                            "slug": "petes_stand"
+                        },
+                        {
+                            "name": "Town Square",
+                            "description": "Central gathering place with fountain", 
+                            "coordinates": [45.2, 12.0, -89.5],
+                            "slug": "town_square"
+                        },
+                        {
+                            "name": "Market District",
+                            "description": "Busy shopping area with many vendors",
+                            "coordinates": [-28.4, 15.0, -95.2],
+                            "slug": "market_district"
+                        },
+                        {
+                            "name": "Secret Garden",
+                            "description": "A hidden garden with rare flowers",
+                            "coordinates": [15.5, 20.0, -110.8],
+                            "slug": "secret_garden"
+                        }
+                    ]
+                }),
+                limit=5000
+            )
+        ]
     )
 
-    # Create agent
+    # Create tool instructions with proper docstrings
+    tool_instructions = """
+Performing actions:
+IMPORTANT: You MUST use these tools for navigation - do not just send messages!
+
+1. navigate_to: REQUIRED for moving to locations with slugs
+   Example: navigate_to("petes_stand")
+   You MUST call this before sending any message about navigation
+
+2. navigate_to_coordinates: REQUIRED for moving to coordinates
+   Example: navigate_to_coordinates(15.5, 20.0, -110.8)
+   You MUST call this before sending any message about navigation
+
+3. perform_action: Required for NPC actions
+   Example: perform_action("follow", target="player1")
+
+4. examine_object: Required for examining objects
+   Example: examine_object("treasure_chest")
+
+CRITICAL: You must ALWAYS use the appropriate navigation tool BEFORE sending any message about movement.
+Failure to use navigation tools will result in the player being unable to move.
+"""
+
+    # Create agent with proper instructions
     agent = client.create_agent(
         name=unique_name,
-        system=system_prompt + TOOL_INSTRUCTIONS,
+        system=gpt_system.get_system_text("memgpt_chat") + tool_instructions,
         memory=memory,
         include_base_tools=True,
         llm_config=LLMConfig(
@@ -386,20 +401,52 @@ def create_personalized_agent(
         )
     )
 
-    # Register tools if requested
+    # Register tools with debug info
     if with_custom_tools:
-        # Clean up existing tools first
-        existing_tools = client.list_tools()
-        for tool in existing_tools:
-            if tool.name in NAVIGATION_TOOLS:
-                print(f"Removing existing tool: {tool.name}")
-                client.delete_tool(tool.id)
-        
-        # Register new tools
-        for name, info in NAVIGATION_TOOLS.items():
-            tool = client.create_tool(info["function"], name=name)
-            print(f"Created {name}: {tool.id}")
+        print("\nRegistering tools:")
+        for name, tool_func in TOOL_REGISTRY.items():
+            try:
+                print(f"\nCreating tool: {name}")
+                print(f"Function: {tool_func.__name__}")
+                print(f"Docstring: {tool_func.__doc__}")
+                tool = client.create_tool(tool_func, name=name)
+                print(f"Tool created with ID: {tool.id}")
+                client.add_tool_to_agent(agent.id, tool.id)
+                print(f"Tool {name} added to agent {agent.id}")
+            except Exception as e:
+                print(f"Error adding tool {name}: {e}")
+                raise  # Re-raise to see full traceback
+
+    # List tools to verify
+    print("\nVerifying registered tools:")
+    tools = client.list_tools()
+    for tool in tools:
+        print(f"Found tool: {tool.name} (ID: {tool.id})")
+
+    print("\nDEBUG: Available tools in TOOL_REGISTRY:")
+    for name, func in TOOL_REGISTRY.items():
+        print(f"- {name}: {func}")
+
+    # Then explicitly attach each tool
+    print("\nAttaching tools to agent:")
+    tools = client.list_tools()
+    for tool in tools:
+        try:
+            print(f"Attaching {tool.name} to agent...")
             client.add_tool_to_agent(agent.id, tool.id)
+            print(f"Successfully attached {tool.name}")
+        except Exception as e:
+            print(f"Failed to attach {tool.name}: {e}")
+
+    # Verify tools are attached by getting agent details
+    print("\nVerifying agent tools:")
+    updated_agent = client.get_agent(agent.id)
+    if hasattr(updated_agent, 'tools'):
+        print(f"Agent has {len(updated_agent.tools)} tools:")
+        for tool in updated_agent.tools:
+            print(f"- {tool.name}")
+    else:
+        print("Note: Agent tools can only be verified through usage")
 
     return agent
 
@@ -722,45 +769,47 @@ def parse_and_validate_response(response: dict):
 
     return response
 
-def test_navigation(client, agent_id: str, use_api: bool = False):
-    """Test navigation without API"""
+def test_navigation(client, agent_id: str):
+    """Test navigation with proper tool verification"""
     print("\nTesting navigation...")
     
-    # Test 1: Navigation with slug
+    # Test slug-based navigation
     print("\nTesting slug-based navigation...")
     response = client.send_message(
         agent_id=agent_id,
-        message="Can you take me to Pete's Stand?",
+        message="Please use navigate_to to take me to Pete's Stand",  # Be explicit
         role="user"
     )
+    
     print("\nSlug Navigation Response:")
     for msg in response.messages:
         print(f"\nMessage type: {msg.message_type}")
-        if hasattr(msg, 'tool_call'):
+        if isinstance(msg, ToolCallMessage):
             print(f"Tool: {msg.tool_call.name}")
             print(f"Args: {msg.tool_call.arguments}")
-        elif hasattr(msg, 'tool_response'):
-            print(f"Tool response: {msg.tool_response}")
-        elif hasattr(msg, 'message'):
-            print(f"Message: {msg.message}")
+        elif isinstance(msg, ToolReturnMessage):
+            print(f"Tool result: {msg.tool_return}")
+        elif isinstance(msg, ReasoningMessage):
+            print(f"Reasoning: {msg.reasoning}")
     
-    # Test 2: Navigation with coordinates
+    # Test coordinate navigation
     print("\nTesting coordinate navigation...")
     response = client.send_message(
         agent_id=agent_id,
-        message="Can you take me to the Secret Garden?",
+        message="Please use navigate_to_coordinates to take me to the Secret Garden's coordinates",  # Be explicit
         role="user"
     )
+    
     print("\nCoordinate Navigation Response:")
     for msg in response.messages:
         print(f"\nMessage type: {msg.message_type}")
-        if hasattr(msg, 'tool_call'):
+        if isinstance(msg, ToolCallMessage):
             print(f"Tool: {msg.tool_call.name}")
             print(f"Args: {msg.tool_call.arguments}")
-        elif hasattr(msg, 'tool_response'):
-            print(f"Tool response: {msg.tool_response}")
-        elif hasattr(msg, 'message'):
-            print(f"Message: {msg.message}")
+        elif isinstance(msg, ToolReturnMessage):
+            print(f"Tool result: {msg.tool_return}")
+        elif isinstance(msg, ReasoningMessage):
+            print(f"Reasoning: {msg.reasoning}")
 
 def test_api_navigation():
     """Test navigation using unique test tool"""
@@ -817,42 +866,67 @@ def test_api_navigation():
             
         print(f"{'-'*50}")
 
+def test_actions(client, agent_id: str):
+    """Test perform_action tool with various actions"""
+    print("\nTesting perform_action...")
+    
+    # Test follow
+    print("\nTesting follow action...")
+    response = client.send_message(
+        agent_id=agent_id,
+        message="SYSTEM COMMAND: Use perform_action to follow the player 'TestUser'",
+        role="user"
+    )
+    print_response(response)
+    
+    # Test emote
+    print("\nTesting emote action...")
+    response = client.send_message(
+        agent_id=agent_id,
+        message="SYSTEM COMMAND: Use perform_action to wave at the player",
+        role="user"
+    )
+    print_response(response)
+    
+    # Test unfollow
+    print("\nTesting unfollow action...")
+    response = client.send_message(
+        agent_id=agent_id,
+        message="SYSTEM COMMAND: Use perform_action to stop following the player",
+        role="user"
+    )
+    print_response(response)
+
 def main():
     args = parse_args()
     
-    # Validate environment before proceeding
     if not validate_environment():
         sys.exit(1)
 
     try:
-        if args.use_api:
-            # Skip agent creation, just test API with existing NPC
-            print("\nTesting with existing NPC (Pete)...")
-            test_api_navigation()
-        else:
-            # Normal flow for direct testing
-            port = os.getenv('LETTA_PORT')
-            port = int(port) if port else None
-            base_url = os.getenv('LETTA_BASE_URL', 'http://localhost:8283')
-            
-            print("\nStarting Letta Quickstart with:")
-            print(f"- Environment URL: {base_url}")
-            print(f"- Environment Port: {port if port else 'default'}")
-            print(f"- Keep Agent: {args.keep}")
-            print(f"- LLM Provider: {args.llm}")
-            print(f"- Agent Name: {args.name}")
-            print(f"- Overwrite: {args.overwrite}")
-            
-            client = create_letta_client()
-            agent = create_personalized_agent(
-                name=args.name,
-                use_claude=(args.llm == 'claude'),
-                overwrite=args.overwrite,
-                with_custom_tools=args.custom_tools
-            )
-            print(f"\nCreated agent: {agent.id}")
-            print_agent_details(client, agent.id, "INITIAL STATE")
-            test_navigation(client, agent.id, use_api=False)
+        port = os.getenv('LETTA_PORT')
+        port = int(port) if port else None
+        base_url = os.getenv('LETTA_BASE_URL', 'http://localhost:8283')
+        
+        print("\nStarting Letta Quickstart with:")
+        print(f"- Environment URL: {base_url}")
+        print(f"- Environment Port: {port if port else 'default'}")
+        print(f"- Keep Agent: {args.keep}")
+        print(f"- LLM Provider: {args.llm}")
+        print(f"- Agent Name: {args.name}")
+        print(f"- Overwrite: {args.overwrite}")
+        
+        client = create_letta_client()
+        agent = create_personalized_agent(
+            name=args.name,
+            use_claude=(args.llm == 'claude'),
+            overwrite=args.overwrite,
+            with_custom_tools=args.custom_tools
+        )
+        print(f"\nCreated agent: {agent.id}")
+        print_agent_details(client, agent.id, "INITIAL STATE")
+        test_navigation(client, agent.id)  # Removed use_api parameter
+        test_actions(client, agent.id)  # Add this line
 
     finally:
         pass
