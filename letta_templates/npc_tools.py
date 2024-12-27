@@ -171,52 +171,6 @@ def navigate_to(destination: str, request_heartbeat: bool = True) -> dict:
         "slug": destination.lower()  # Return clean slug for API to use
     }
 
-def navigate_to_test_v4(destination: str, request_heartbeat: bool = True) -> dict:
-    """
-    Test version of navigation tool that requires location slugs.
-    
-    Args:
-        destination (str): Location slug to navigate to. Must be one of:
-            - "petes_stand" (Pete's Stand)
-            - "town_square" (Town Square)
-            - "market_district" (Market District)
-        request_heartbeat (bool): Request heartbeat after execution
-        
-    Returns:
-        dict: Navigation result with format:
-        {
-            "status": "success",
-            "message": str,
-            "coordinates": {"x": float, "y": float, "z": float}
-        }
-        
-    Note:
-        This tool requires exact slugs. The agent should use its location knowledge
-        to convert human-readable names (e.g. "Pete's Stand") to slugs (e.g. "petes_stand")
-    """
-    # Only accept exact slugs
-    known_locations = {
-        "petes_stand": (-12.0, 18.9, -127.0),
-        "town_square": (45.2, 12.0, -89.5),
-        "market_district": (-28.4, 15.0, -95.2)
-    }
-    
-    # Get location from exact slug match
-    location = known_locations.get(destination.lower())
-    if not location:
-        return {
-            "status": "failure",
-            "message": f"Unknown location slug: {destination}. Must be one of: {list(known_locations.keys())}",
-            "coordinates": None
-        }
-        
-    x, y, z = location
-    return {
-        "status": "success",
-        "message": f"Navigating to {destination} at coordinates ({x}, {y}, {z})",
-        "coordinates": {"x": x, "y": y, "z": z}
-    }
-
 def navigate_to_v1(destination: str, request_heartbeat: bool = True) -> dict:
     """Old semantic search navigation (deprecated)"""
     # Old implementation here...
