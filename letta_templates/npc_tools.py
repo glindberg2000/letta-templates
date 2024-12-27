@@ -62,22 +62,27 @@ TOOL_INSTRUCTIONS = """
 Performing actions:
 You have access to the following tools:
 1. `perform_action` - For basic NPC actions:
-   - follow/unfollow: For player tracking
+   - follow: For tracking specific players or NPCs
+     Example: perform_action("follow", target="greggytheegg")
+   - unfollow: Stop following current target
+     Example: perform_action("unfollow")
    - emote: For expressions and gestures
 2. `navigate_to` - For moving to specific locations:
-   - Using slugs: navigate_to("petes_stand")
-   - Using coordinates: navigate_to("x,y,z")
-     Example: navigate_to("15.5,20.0,-110.8")
-   - For locations without slugs, use their coordinates as a comma-separated string
+   - ONLY use slugs from your locations memory block
+   - Example: If your memory has "the_crematorium", use navigate_to("the_crematorium")
+   - Do not create or guess slugs - only use exact slugs from memory
 3. `examine_object` - For examining objects
 
 When asked to:
-- Follow someone: Use perform_action with action='follow', target='player_name'
+- Follow someone: 
+   - Use perform_action with action='follow', target='specific_name'
+   - If no target specified, follow the user you're talking to
 - Stop following: Use perform_action with action='unfollow'
 - Show emotion: Use perform_action with action='emote', type='wave|laugh|dance|cheer|point|sit'
 - Move somewhere: 
-    - For known locations: Use navigate_to with destination='slug'
-    - For coordinate locations: Use navigate_to with destination='x,y,z'
+    - Check your locations memory for the correct slug
+    - Only use navigate_to with exact slugs from memory
+    - If location not in memory, inform the user
 - Examine something: Use examine_object with object_name='item'
 
 Important notes:
@@ -86,7 +91,7 @@ Important notes:
 - Available emote types: wave, laugh, dance, cheer, point, sit
 - Tool names must be exactly as shown - no spaces or special characters
 - Always include request_heartbeat=True in tool calls
-- For locations without slugs in your memory, use their coordinates in format: "x,y,z"
+- Never guess or create slugs - only use exact slugs from your locations memory
 """
 
 # State enums for consistency
@@ -139,23 +144,29 @@ def perform_action(action: str, type: Optional[str] = None, target: Optional[str
     return f"Unknown action: {action}"
 
 def navigate_to(destination: str, request_heartbeat: bool = True) -> dict:
-    """Navigate to location using location slugs"""
-    # Handle coordinate input (format: "x,y,z")
-    if ',' in destination:
-        try:
-            x, y, z = map(float, destination.split(','))
-            return {
-                "status": "success",
-                "message": f"Navigating to coordinates ({x}, {y}, {z})",
-                "coordinates": {"x": x, "y": y, "z": z}
-            }
-        except ValueError:
-            return {
-                "status": "failure",
-                "message": "Invalid coordinate format",
-                "coordinates": None
+    """
+    Navigate to a location using its slug from memory.
+    
+    Args:
+        destination (str): Location slug from memory (e.g. "the_crematorium")
+        request_heartbeat (bool, optional): Request heartbeat after execution. Defaults to True.
+        
+    Returns:
+        dict: Navigation result with format:
+            {
+                "status": str,        # "success" or "failure"
+                "message": str,       # Human readable message
+                "slug": str | None    # Clean slug if success, None if failure
             }
     
+    Example:
+        >>> navigate_to("the_crematorium")
+        {
+            "status": "success",
+            "message": "Navigating to the_crematorium",
+            "slug": "the_crematorium"
+        }
+    """
     # Validate slug format (lowercase, no spaces, etc)
     slug = destination.lower().strip()
     if not slug.replace('_', '').isalnum():
@@ -168,7 +179,39 @@ def navigate_to(destination: str, request_heartbeat: bool = True) -> dict:
     return {
         "status": "success",
         "message": f"Navigating to {destination}",
-        "slug": destination.lower()  # Return clean slug for API to use
+        "slug": destination.lower()
+    }
+
+def navigate_to_coordinates(x: float, y: float, z: float, request_heartbeat: bool = True) -> dict:
+    """
+    Navigate to specific XYZ coordinates.
+    
+    Args:
+        x (float): X coordinate
+        y (float): Y coordinate
+        z (float): Z coordinate
+        request_heartbeat (bool, optional): Request heartbeat after execution. Defaults to True.
+        
+    Returns:
+        dict: Navigation result with format:
+            {
+                "status": str,           # "success" or "failure"
+                "message": str,          # Human readable message
+                "coordinates": dict      # {x: float, y: float, z: float}
+            }
+    
+    Example:
+        >>> navigate_to_coordinates(15.5, 20.0, -110.8)
+        {
+            "status": "success",
+            "message": "Navigating to coordinates (15.5, 20.0, -110.8)",
+            "coordinates": {"x": 15.5, "y": 20.0, "z": -110.8}
+        }
+    """
+    return {
+        "status": "success",
+        "message": f"Navigating to coordinates ({x}, {y}, {z})",
+        "coordinates": {"x": x, "y": y, "z": z}
     }
 
 def navigate_to_v1(destination: str, request_heartbeat: bool = True) -> dict:
@@ -198,6 +241,11 @@ TOOL_REGISTRY: Dict[str, Dict] = {
         "version": "2.0.0",
         "supports_state": True
     },
+    "navigate_to_coordinates": {
+        "function": navigate_to_coordinates,
+        "version": "1.0.0",
+        "supports_state": True
+    },
     "perform_action": {
         "function": perform_action,
         "version": "2.0.0",
@@ -213,6 +261,7 @@ TOOL_REGISTRY: Dict[str, Dict] = {
 # Production navigation tools
 NAVIGATION_TOOLS: Dict[str, Dict] = {
     "navigate_to": TOOL_REGISTRY["navigate_to"],
+    "navigate_to_coordinates": TOOL_REGISTRY["navigate_to_coordinates"],
     "perform_action": TOOL_REGISTRY["perform_action"]
 }
 
