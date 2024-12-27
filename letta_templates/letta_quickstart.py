@@ -294,8 +294,20 @@ def get_or_create_tool(client, tool_name: str, tool_func=None, update_existing: 
     else:
         raise ValueError(f"Tool {tool_name} not found and no function provided to create it")
 
+def cleanup_agents(client, name_prefix: str):
+    """Clean up any existing agents with our prefix"""
+    print(f"\nCleaning up existing agents with prefix: {name_prefix}")
+    try:
+        agents = client.list_agents()
+        for agent in agents:
+            if agent.name.startswith(name_prefix):
+                print(f"Deleting agent: {agent.name} ({agent.id})")
+                client.delete_agent(agent.id)
+    except Exception as e:
+        print(f"Warning: Error during cleanup: {e}")
+
 def create_personalized_agent(
-    name: str = "emma_research_assistant",
+    name: str = "emma_assistant",
     client = None,
     use_claude: bool = False,
     overwrite: bool = False,
@@ -304,10 +316,30 @@ def create_personalized_agent(
     """Create a personalized agent with modern tool registration"""
     if client is None:
         client = create_letta_client()
-
+        
+    # Clean up existing agents if overwrite is True
+    if overwrite:
+        cleanup_agents(client, name)
+    
+    # Add timestamp to name to avoid conflicts
     timestamp = int(time.time())
     unique_name = f"{name}_{timestamp}"
-    print(f"Creating agent with unique name: {unique_name}")
+    
+    # Create configs first
+    llm_config = LLMConfig(
+        model="gpt-4o-mini",
+        model_endpoint_type="openai",
+        model_endpoint="https://api.openai.com/v1",
+        context_window=128000,
+    )
+    
+    embedding_config = EmbeddingConfig(
+        embedding_endpoint_type="openai",
+        embedding_endpoint="https://api.openai.com/v1",
+        embedding_model="text-embedding-ada-002",
+        embedding_dim=1536,
+        embedding_chunk_size=300,
+    )
     
     # Create memory blocks
     memory = BasicBlockMemory(
@@ -359,48 +391,52 @@ def create_personalized_agent(
 
     # Create tool instructions with proper docstrings
     tool_instructions = """
-Performing actions:
-IMPORTANT: You MUST use these tools for navigation - do not just send messages!
+    Performing actions:
+    IMPORTANT: You MUST use these tools for navigation - do not just send messages!
+    
+    1. navigate_to: REQUIRED for moving to locations with slugs
+       Example: navigate_to("petes_stand")
+       You MUST call this before sending any message about navigation
+    
+    2. navigate_to_coordinates: REQUIRED for moving to coordinates
+       Example: navigate_to_coordinates(15.5, 20.0, -110.8)
+       You MUST call this before sending any message about navigation
+    
+    3. perform_action: Required for NPC actions
+       Example: perform_action("follow", target="player1")
+    
+    4. examine_object: Required for examining objects
+       Example: examine_object("treasure_chest")
+    
+    CRITICAL: You must ALWAYS use the appropriate navigation tool BEFORE sending any message about movement.
+    Failure to use navigation tools will result in the player being unable to move.
+    """
 
-1. navigate_to: REQUIRED for moving to locations with slugs
-   Example: navigate_to("petes_stand")
-   You MUST call this before sending any message about navigation
-
-2. navigate_to_coordinates: REQUIRED for moving to coordinates
-   Example: navigate_to_coordinates(15.5, 20.0, -110.8)
-   You MUST call this before sending any message about navigation
-
-3. perform_action: Required for NPC actions
-   Example: perform_action("follow", target="player1")
-
-4. examine_object: Required for examining objects
-   Example: examine_object("treasure_chest")
-
-CRITICAL: You must ALWAYS use the appropriate navigation tool BEFORE sending any message about movement.
-Failure to use navigation tools will result in the player being unable to move.
-"""
-
-    # Create agent with proper instructions
+    # Create system prompt
+    system_prompt = gpt_system.get_system_text("memgpt_chat") + tool_instructions
+    
+    # Log params in a readable way
+    print("\nCreating agent with params:")
+    print(f"Name: {unique_name}")
+    print(f"System prompt length: {len(system_prompt)} chars")
+    print("Memory blocks:")
+    for block in memory.blocks:
+        print(f"- {block.label}: {len(block.value)} chars")
+    print("\nConfigs:")
+    print(f"LLM: {llm_config.model} via {llm_config.model_endpoint_type}")
+    print(f"Embeddings: {embedding_config.embedding_model}")
+    print(f"Include base tools: {True}")
+    
+    # Create agent
     agent = client.create_agent(
         name=unique_name,
-        system=gpt_system.get_system_text("memgpt_chat") + tool_instructions,
+        system=system_prompt,
         memory=memory,
-        include_base_tools=True,
-        llm_config=LLMConfig(
-            model="gpt-4o-mini",
-            model_endpoint_type="openai",
-            model_endpoint="https://api.openai.com/v1",
-            context_window=128000,
-        ),
-        embedding_config=EmbeddingConfig(
-            embedding_endpoint_type="openai",
-            embedding_endpoint="https://api.openai.com/v1",
-            embedding_model="text-embedding-ada-002",
-            embedding_dim=1536,
-            embedding_chunk_size=300,
-        )
+        llm_config=llm_config,
+        embedding_config=embedding_config,
+        include_base_tools=True
     )
-
+    
     # Register tools with debug info
     if with_custom_tools:
         print("\nRegistering tools:")
@@ -447,6 +483,19 @@ Failure to use navigation tools will result in the player being unable to move.
             print(f"- {tool.name}")
     else:
         print("Note: Agent tools can only be verified through usage")
+
+    # Add version check
+    print("\nChecking Letta versions:")
+    try:
+        import letta
+        print(f"Letta client version: {letta.__version__}")
+        
+        # Get server version from env
+        server_url = os.getenv('LETTA_BASE_URL', 'http://localhost:8283')
+        response = requests.get(f"{server_url}/version")
+        print(f"Letta server version: {response.json()['version']}")
+    except Exception as e:
+        print(f"Warning: Could not check versions: {e}")
 
     return agent
 
