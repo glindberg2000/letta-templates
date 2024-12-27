@@ -14,7 +14,7 @@ from .npc_tools import (
     perform_action
 )
 
-__version__ = "0.2.8"
+__version__ = "0.2.9"
 __all__ = [
     "TOOL_INSTRUCTIONS",
     "TOOL_REGISTRY",
