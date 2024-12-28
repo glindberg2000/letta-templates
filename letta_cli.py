@@ -836,19 +836,22 @@ def main():
     
     # Add tools command
     tools_parser = subparsers.add_parser('tools', 
-        help='List or inspect tools',
-        description='List all available tools or get details about a specific tool')
-    tools_subparsers = tools_parser.add_subparsers(dest='tools_command')
-    
-    # List all tools
+        help='Tool management commands')
+    tools_subparsers = tools_parser.add_subparsers(
+        dest='tools_command',
+        help='Tool command to execute')
+      
+    # Add existing tool commands
     tools_subparsers.add_parser('list',
-        help='List all globally available tools')
+        help='List all tools')
+    tools_subparsers.add_parser('get',
+        help='Get tool details')
+    tools_subparsers.add_parser('delete',
+        help='Delete all tools')
     
-    # Get tool details
-    tool_details_parser = tools_subparsers.add_parser('get',
-        help='Get detailed information about a specific tool')
-    tool_details_parser.add_argument('tool_id',
-        help='ID of the tool to inspect')
+    # Add delete subcommand
+    delete_parser = tools_subparsers.add_parser('delete', help='Delete tools')
+    delete_parser.add_argument('name', help='Name of tool to delete')
     
     args = parser.parse_args()
     
@@ -899,9 +902,37 @@ def main():
         get_agent_details(client, args.agent_id)
     elif args.command == 'tools':
         if args.tools_command == 'list':
-            list_global_tools(client)
-        elif args.tools_command == 'get':
-            get_tool_details(client, args.tool_id)
+            tools = client.list_tools()
+            print("\nAll Available Tools:")
+            for tool in tools:
+                print(f"\nTool: {tool.name}")
+                print(f"ID: {tool.id}")
+                if tool.description:
+                    print(f"Description: {tool.description}")
+                if tool.tags:
+                    print(f"Tags: {', '.join(tool.tags)}")
+                if tool.module:
+                    print(f"Module: {tool.module}")
+        elif args.tools_command == 'delete':
+            tools = client.list_tools()
+            deleted = False
+            for tool in tools:
+                if tool.name == args.name:
+                    client.delete_tool(tool.id)
+                    print(f"Deleted tool: {tool.name}")
+                    deleted = True
+                    break
+            if not deleted:
+                print(f"Tool '{args.name}' not found")
+    elif args.command == 'delete-tools':
+        tools = client.list_tools()
+        if not tools:
+            print("No tools found")
+            return
+        print(f"Found {len(tools)} tools. Deleting...")
+        for tool in tools:
+            client.delete_tool(tool.id)
+            print(f"Deleted tool: {tool.name}")
     else:
         parser.print_help()
 
