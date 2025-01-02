@@ -412,6 +412,14 @@ def create_personalized_agent(
                     ]
                 }),
                 limit=5000
+            ),
+            # Add new block for user states
+            client.create_block(
+                label="user_states",
+                value=json.dumps({
+                    "users": {}  # Empty dict to start
+                }),
+                limit=5000
             )
         ]
     )
@@ -1018,13 +1026,7 @@ def test_multi_user_conversation(client, agent_id: str):
     """Test conversation with multiple named users"""
     print("\nTesting multi-user conversation...")
     
-    # Track conversation state per user (we'll keep this in memory)
-    user_states = {
-        "Alice": {"location": None, "following": None},
-        "Bob": {"location": None, "following": None},
-        "Charlie": {"location": None, "following": None}
-    }
-    
+    # Define the test conversation
     conversation = [
         ("Alice", "Hi, I'm looking for Pete's Stand."),
         ("Bob", "Me too! Can you help us both get there?"),
@@ -1036,10 +1038,31 @@ def test_multi_user_conversation(client, agent_id: str):
         ("Alice", "Can we all sit together when we get there?")
     ]
     
+    def update_user_state(name: str, location: str = None, following: str = None):
+        # Get current states
+        memory = client.get_in_context_memory(agent_id)
+        user_states_block = next(b for b in memory.blocks if b.label == "user_states")
+        states = json.loads(user_states_block.value)
+        
+        # Update state
+        if name not in states["users"]:
+            states["users"][name] = {"location": None, "following": None}
+        
+        if location:
+            states["users"][name]["location"] = location
+        if following is not None:  # Allow setting to None
+            states["users"][name]["following"] = following
+            
+        # Save back to memory
+        client.update_block(
+            block_id=user_states_block.id,
+            value=json.dumps(states)
+        )
+        return states["users"]
+    
+    # Process each message in the conversation
     for name, message in conversation:
         print(f"\n{name} says: {message}")
-        
-        # Remove metadata from send_message call
         response = client.send_message(
             agent_id=agent_id,
             message=message,
@@ -1047,19 +1070,24 @@ def test_multi_user_conversation(client, agent_id: str):
             name=name
         )
         
-        # Track tool usage per user
+        # Track tool usage and update memory
         for msg in response.messages:
             if isinstance(msg, ToolCallMessage):
                 tool = msg.tool_call
                 if tool.name == "navigate_to":
-                    user_states[name]["location"] = json.loads(tool.arguments)["destination"]
+                    states = update_user_state(
+                        name, 
+                        location=json.loads(tool.arguments)["destination"]
+                    )
                 elif tool.name == "perform_action" and "follow" in tool.arguments:
-                    user_states[name]["following"] = json.loads(tool.arguments)["target"]
+                    states = update_user_state(
+                        name,
+                        following=json.loads(tool.arguments)["target"]
+                    )
         
         print("\nResponse:")
         print_response(response)
-        print(f"\nUser States: {json.dumps(user_states, indent=2)}")
-        
+        print(f"\nUser States: {json.dumps(states, indent=2)}")
         time.sleep(1)
 
 async def handle_multi_user_requests(client, agent_id: str, requests: list):
