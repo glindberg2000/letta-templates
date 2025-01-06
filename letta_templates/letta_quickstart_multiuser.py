@@ -1284,6 +1284,73 @@ def test_social_awareness(client, agent_id: str):
         print(f"User States: {json.dumps(states, indent=2)}")
         time.sleep(1)
 
+def evaluate_response_with_gpt4(response_text: str, current_status: dict, message: str):
+    """Evaluate NPC response using GPT-4o-mini"""
+    try:
+        OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+        if not OPENAI_API_KEY:
+            print("\nNo OpenAI API key found, using basic evaluation")
+            return basic_evaluation(response_text, current_status)
+            
+        response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You evaluate NPC responses. Return only JSON."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""Evaluate this NPC response:
+Current location: {current_status['location']}
+Nearby locations: {', '.join(current_status['nearby_locations'])}
+User message: {message}
+NPC response: {response_text}
+
+Return ONLY a JSON object like this:
+{{
+    "location_aware": true/false,
+    "nearby_accurate": true/false,
+    "contextually_appropriate": true/false,
+    "explanation": "brief reason"
+}}"""
+                    }
+                ],
+                "temperature": 0.1
+            },
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            content = result['choices'][0]['message']['content'].strip()
+            return json.loads(content)
+        else:
+            print(f"\nGPT-4 API error: {response.status_code}")
+            return basic_evaluation(response_text, current_status)
+            
+    except Exception as e:
+        print(f"\nGPT-4 evaluation failed: {str(e)}")
+        return basic_evaluation(response_text, current_status)
+
+def basic_evaluation(response_text: str, current_status: dict):
+    """Basic fallback evaluation"""
+    response_lower = response_text.lower()
+    current_loc = current_status['location'].lower()
+    
+    return {
+        "location_aware": current_loc in response_lower,
+        "nearby_accurate": any(loc.lower() in response_lower for loc in current_status['nearby_locations']),
+        "contextually_appropriate": True,  # Basic assumption
+        "explanation": "Basic evaluation: Checked location and nearby mentions"
+    }
+
 def test_status_awareness(client, agent_id: str):
     """Test NPC's use of status information"""
     print("\nTesting status awareness...")
@@ -1377,7 +1444,7 @@ def test_status_awareness(client, agent_id: str):
                 )
                 
                 # After getting response, evaluate it
-                eval_result = evaluate_response_with_claude(
+                eval_result = evaluate_response_with_gpt4(
                     str(response),
                     scenario["status"],
                     message
@@ -1397,72 +1464,6 @@ def test_status_awareness(client, agent_id: str):
         except Exception as e:
             print(f"Failed to update status block: {str(e)}")
             continue
-
-def evaluate_response_with_claude(response_text: str, current_status: dict, message: str):
-    """Use Claude Haiku to evaluate NPC response quality"""
-    
-    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_EVAL_KEY")
-    if not ANTHROPIC_API_KEY:
-        print("Warning: No Claude API key for evaluation")
-        return None
-        
-    headers = {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json"
-    }
-    
-    evaluation_prompt = f"""
-    Evaluate this NPC response. Return ONLY a JSON object.
-    
-    CURRENT STATUS:
-    Location: {current_status['location']}
-    Nearby: {', '.join(current_status['nearby_locations'])}
-    
-    USER: "{message}"
-    NPC: "{response_text}"
-    
-    Return this exact JSON format with no additional text:
-    {{
-        "location_aware": true or false,
-        "nearby_accurate": true or false,
-        "contextually_appropriate": true or false,
-        "explanation": "brief explanation"
-    }}
-    """
-    
-    try:
-        response = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers=headers,
-            json={
-                "model": "claude-3-haiku-20240307",
-                "max_tokens": 1024,
-                "messages": [
-                    {"role": "system", "content": "You are a JSON validator. Return only valid JSON objects."},
-                    {"role": "user", "content": evaluation_prompt}
-                ]
-            },
-            timeout=10
-        )
-        
-        if response.status_code == 200:
-            result = response.json()
-            content = result['content'][0]['text'].strip()
-            # Remove any markdown formatting
-            content = content.replace('```json\n', '').replace('\n```', '').strip()
-            try:
-                return json.loads(content)
-            except json.JSONDecodeError as e:
-                print(f"Failed to parse Claude response: {content}")
-                return None
-        else:
-            print(f"Claude API error: {response.status_code}")
-            return None
-            
-    except Exception as e:
-        print(f"Evaluation failed: {str(e)}")
-        return None
 
 def main():
     args = parse_args()
