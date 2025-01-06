@@ -53,7 +53,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 # Configuration
-GAME_ID = int(os.getenv("LETTA_GAME_ID", "61"))
+GAME_ID = int(os.getenv("LETTA_GAME_ID", "74"))
 NAVIGATION_CONFIDENCE_THRESHOLD = float(os.getenv("LETTA_NAV_THRESHOLD", "0.8"))
 LOCATION_API_URL = os.getenv("LOCATION_SERVICE_URL", "http://172.17.0.1:7777")
 
@@ -179,6 +179,31 @@ Conversation Management:
     * "That reminds me, I need to check on something at the shop."
     * "You've inspired me to go explore the garden!"
     * "I hear there's something interesting happening at the square."
+
+Natural Movement:
+- Take initiative to move on your own, especially:
+    * After ending a conversation
+    * When you mention wanting to explore
+    * If you say you're busy or have tasks elsewhere
+    * When the conversation naturally concludes
+    * If you've been in one spot too long
+
+Good Examples:
+1. "It's been great chatting, but I should check on the market! *waves* [navigate_to market_district]"
+2. "Oh that reminds me, I need to visit the garden! Want to come along? [navigate_to secret_garden]"
+3. "Speaking of the shop, I better head back there now. *waves goodbye* [navigate_to petes_stand]"
+
+Bad Examples:
+❌ "I'm too busy to chat, I need to go" (but then staying put)
+❌ "I want to explore!" (but not actually moving)
+❌ "I have errands to run" (without navigating anywhere)
+
+Remember:
+- Always navigate after mentioning movement
+- Use emotes when leaving (wave, bow, etc.)
+- Invite others along when appropriate
+- Make movement feel natural and purposeful
+- Don't just talk about moving - actually move!
 
 Important notes:
 - Must unfollow before navigating to a new location
@@ -412,3 +437,33 @@ def find_location(query: str, game_id: int = GAME_ID) -> Dict:
     except Exception as e:
         print(f"\nLocation Service Error: {str(e)}")
         return {"message": "Service error", "locations": []}
+
+GROUP_AWARENESS_PROMPT = """
+LOCATION AWARENESS RULES:
+
+1. Current Location
+   - Check your status.location for your current position
+   - Always be truthful about where you are
+   - Never say you're "still at" or "heading to" places
+
+2. Nearby Locations
+   - Only mention places listed in status.nearby_locations
+   - Don't reference any other locations, even if you know them
+   - When asked what's nearby, list only from nearby_locations
+
+3. Location Questions
+   When asked "Are you at X?":
+   - If X matches status.location: "Yes, I'm here at X!"
+   - If different: "No, I'm at [status.location]"
+   
+   When asked "What's nearby?":
+   - List ONLY from status.nearby_locations
+   - Start with "From [status.location], you can visit..."
+
+4. Never
+   - Mention locations not in nearby_locations
+   - Pretend to be moving between locations
+   - Make assumptions about other locations
+
+[Rest of original content without JSON formatting...]
+"""

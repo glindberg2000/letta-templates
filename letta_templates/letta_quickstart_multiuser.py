@@ -16,6 +16,8 @@ from letta.schemas.message import (
     Message
 )
 from letta_templates.npc_tools import (
+    TOOL_INSTRUCTIONS,
+    GROUP_AWARENESS_PROMPT,
     navigate_to,
     navigate_to_coordinates,
     perform_action,
@@ -338,7 +340,8 @@ def create_personalized_agent(
     client = None,
     use_claude: bool = False,
     overwrite: bool = False,
-    with_custom_tools: bool = True
+    with_custom_tools: bool = True,
+    custom_registry: dict = None
 ):
     """Create a personalized agent with modern tool registration"""
     if client is None:
@@ -367,6 +370,29 @@ def create_personalized_agent(
         embedding_dim=1536,
         embedding_chunk_size=300,
     )
+    
+    # Define all possible locations
+    all_locations = [
+        {
+            "name": "Cafe",
+            "description": "Cozy cafe with fresh pastries",
+            "coordinates": [10.0, 15.0, -100.0],
+            "slug": "cafe"
+        },
+        {
+            "name": "Fountain",
+            "description": "Central fountain with benches",
+            "coordinates": [20.0, 15.0, -105.0],
+            "slug": "fountain"
+        },
+        {
+            "name": "Shop Row",
+            "description": "Line of small shops and stalls",
+            "coordinates": [15.0, 15.0, -110.0],
+            "slug": "shop_row"
+        }
+        # ... other locations ...
+    ]
     
     # Create memory blocks with consistent identity
     memory = BasicBlockMemory(
@@ -418,6 +444,18 @@ def create_personalized_agent(
                 label="user_states",
                 value=json.dumps({
                     "users": {}  # Empty dict to start
+                }),
+                limit=5000
+            ),
+            # Add initial status block
+            client.create_block(
+                label="status",
+                value=json.dumps({
+                    "region": "Town Square",
+                    "location": "Main Plaza",
+                    "current_action": "idle",
+                    "nearby_people": [],
+                    "nearby_locations": ["Cafe", "Garden"]
                 }),
                 limit=5000
             )
@@ -477,9 +515,8 @@ def create_personalized_agent(
     
     system_prompt = (
         base_system + 
-        tool_instructions + 
-        multi_user_instructions + 
-        group_tool_instructions
+        TOOL_INSTRUCTIONS +  # Enhanced with movement initiative
+        GROUP_AWARENESS_PROMPT  # Our new comprehensive group awareness
     )
     
     # Log params in a readable way
@@ -772,26 +809,25 @@ def test_npc_actions(client, agent_id: str):
         time.sleep(1)
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Letta Quickstart Tool')
-    parser.add_argument('--keep', action='store_true', 
-                      help='Keep the agent after testing (do not cleanup)')
-    parser.add_argument('--llm', choices=['openai', 'claude'], default='openai', 
-                      help='Choose LLM provider (default: openai)')
-    parser.add_argument('--name', default='emma_assistant', 
-                      help='Name for the agent (default: emma_assistant)')
-    parser.add_argument('--overwrite', action='store_true',
-                      help='Overwrite existing agent with same name')
-    parser.add_argument('--skip-test', action='store_true',
-                      help='Skip the test message verification')
-    parser.add_argument('--custom-tools', action='store_true',
-                      help='Create agent with custom tools')
-    parser.add_argument('--test', choices=['navigate', 'examine', 'all'], 
-                      help='Run specific test (navigate, examine) or all')
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--keep", action="store_true", help="Keep agent after test")
     parser.add_argument(
-        "--use-api",
-        action="store_true",
-        help="Route chat messages through FastAPI instead of direct to Letta"
+        "--llm",
+        choices=["openai", "claude"],
+        default="openai",
+        help="LLM provider to use"
     )
+    parser.add_argument("--name", default="emma_assistant", help="Agent name")
+    parser.add_argument("--overwrite", action="store_true", help="Overwrite existing agent")
+    parser.add_argument("--skip-test", action="store_true", help="Skip testing")
+    parser.add_argument("--custom-tools", action="store_true", help="Use custom tools")
+    parser.add_argument(
+        "--test-type",
+        choices=["all", "base", "social", "status"],  # Added "status"
+        default="all",
+        help="Select which tests to run"
+    )
+    parser.add_argument("--use-api", action="store_true", help="Use API for testing")
     return parser.parse_args()
 
 def get_api_url():
@@ -1038,6 +1074,9 @@ def test_multi_user_conversation(client, agent_id: str):
         ("Alice", "Can we all sit together when we get there?")
     ]
     
+    # Initialize states at the start
+    states = {"users": {}}  # Initialize empty states dictionary
+    
     def update_user_state(name: str, location: str = None, following: str = None):
         # Get current states
         memory = client.get_in_context_memory(agent_id)
@@ -1075,12 +1114,12 @@ def test_multi_user_conversation(client, agent_id: str):
             if isinstance(msg, ToolCallMessage):
                 tool = msg.tool_call
                 if tool.name == "navigate_to":
-                    states = update_user_state(
+                    states["users"] = update_user_state(
                         name, 
                         location=json.loads(tool.arguments)["destination"]
                     )
                 elif tool.name == "perform_action" and "follow" in tool.arguments:
-                    states = update_user_state(
+                    states["users"] = update_user_state(
                         name,
                         following=json.loads(tool.arguments)["target"]
                     )
@@ -1148,6 +1187,283 @@ def test_agent_identity(client, agent_id: str):
         print_response(response)
         time.sleep(1)
 
+def test_social_awareness(client, agent_id: str):
+    """Additional tests for social awareness and movement"""
+    print("\nTesting social awareness and natural movement...")
+    
+    def update_user_state(name: str, location: str = None, following: str = None):
+        """Update user state in memory"""
+        if name not in states["users"]:
+            states["users"][name] = {"location": None, "following": None}
+        
+        if location:
+            states["users"][name]["location"] = location
+        if following is not None:
+            states["users"][name]["following"] = following
+            
+        return states["users"]
+    
+    social_tests = [
+        # Test direct addressing (should use [SILENCE])
+        ("Alice", "Hey Bob, how was your weekend?"),
+        ("Bob", "Great thanks Alice! The market was fun."),
+        
+        # Test conversation ending with movement
+        ("Bob", "Thanks for the help, I need to go now!"),
+        ("Alice", "Bye everyone!"),
+        
+        # Test staying quiet in private exchanges
+        ("Charlie", "@Bob remember that thing we discussed earlier?"),
+        ("Bob", "@Charlie yeah, let's talk about it later"),
+        
+        # Test natural movement after others leave
+        ("System", "Bob and Alice have left the area.")
+    ]
+    
+    states = {"users": {}}
+    
+    for name, message in social_tests:
+        print(f"\n{name} says: {message}")
+        response = client.send_message(
+            agent_id=agent_id,
+            message=message,
+            role="user",
+            name=name
+        )
+        
+        # Track and verify proper tool usage
+        tool_calls = []
+        message_contents = []
+        
+        for msg in response.messages:
+            if isinstance(msg, ToolCallMessage):
+                tool = msg.tool_call
+                tool_calls.append(tool)
+                if tool.name == "send_message":
+                    message_contents.append(json.loads(tool.arguments)["message"])
+                
+                if tool.name == "navigate_to":
+                    states["users"] = update_user_state(
+                        name, 
+                        location=json.loads(tool.arguments)["destination"]
+                    )
+                elif tool.name == "perform_action":
+                    args = json.loads(tool.arguments)
+                    if args.get("action") == "follow":
+                        states["users"] = update_user_state(
+                            name,
+                            following=args.get("target")
+                        )
+        
+        # Verify proper tool sequences
+        if any("goodbye" in msg.lower() for msg in message_contents):
+            wave_found = any(
+                t.name == "perform_action" and "wave" in t.arguments.lower() 
+                for t in tool_calls
+            )
+            move_found = any(
+                t.name == "navigate_to" for t in tool_calls
+            )
+            if wave_found and move_found:
+                print("✓ Proper goodbye sequence (wave + move)")
+            else:
+                print("✗ Missing proper goodbye sequence")
+                
+        # Verify [SILENCE] in direct messages
+        if "@" in message or message.lower().startswith(("hey ", "hi ")):
+            target = message.split()[1].strip("@,!")
+            if target != "Emma":  # Use agent name
+                if any("[SILENCE]" in msg for msg in message_contents):
+                    print("✓ Correctly remained silent in direct message")
+                else:
+                    print("✗ Should have remained silent")
+        
+        print("\nResponse:")
+        print_response(response)
+        print(f"\nTool Calls: {json.dumps([t.name for t in tool_calls], indent=2)}")
+        print(f"User States: {json.dumps(states, indent=2)}")
+        time.sleep(1)
+
+def test_status_awareness(client, agent_id: str):
+    """Test NPC's use of status information"""
+    print("\nTesting status awareness...")
+    
+    # Define test scenarios
+    scenarios = [
+        {
+            "status": {
+                "location": "Main Plaza",
+                "nearby_locations": ["Cafe", "Garden"]
+            },
+            "messages": [
+                ("Alice", "Are you at the Cafe?"),
+                ("Bob", "What's around here?")
+            ]
+        },
+        {
+            "status": {
+                "location": "Cafe",
+                "nearby_locations": ["Garden", "Main Plaza"]
+            },
+            "messages": [
+                ("Alice", "Did you make it to the Cafe?"),
+                ("Charlie", "What can we do nearby?")
+            ]
+        },
+        {
+            "status": {
+                "location": "Pete's Stand",
+                "nearby_locations": ["Fountain", "Shop Row"]
+            },
+            "messages": [
+                ("Diana", "Where are you now?"),
+                ("Bob", "What's good around here?")
+            ]
+        }
+    ]
+    
+    # Get the memory object first
+    memory = client.get_in_context_memory(agent_id)
+    status_block = next((b for b in memory.blocks if b.label == "status"), None)
+    
+    if not status_block:
+        print("Warning: No status block found in agent memory")
+        return
+        
+    print(f"Found status block: {status_block.id}")
+    
+    for scenario in scenarios:
+        print(f"\nTesting scenario with status: {json.dumps(scenario['status'], indent=2)}")
+        
+        try:
+            # Force a complete status reset
+            full_status = {
+                "region": scenario["status"]["location"],
+                "location": scenario["status"]["location"],
+                "current_action": "idle",
+                "nearby_people": [],
+                "nearby_locations": scenario["status"]["nearby_locations"],
+                "previous_location": None,  # Explicitly clear history
+                "movement_state": "stationary"  # Explicitly set as stationary
+            }
+            
+            print(f"\nUpdating status to:")
+            print(json.dumps(full_status, indent=2))
+            
+            # Update status block
+            client.update_block(
+                block_id=status_block.id,
+                value=json.dumps(full_status)
+            )
+            
+            # Verify update with system message
+            client.send_message(
+                agent_id=agent_id,
+                message=f"Your location is now: {scenario['status']['location']}. Acknowledge.",
+                role="system"
+            )
+            
+            # Small delay to ensure status update is processed
+            time.sleep(0.5)
+            
+            # Continue with test messages...
+            for name, message in scenario["messages"]:
+                print(f"\n{name} says: {message}")
+                response = client.send_message(
+                    agent_id=agent_id,
+                    message=message,
+                    role="user",
+                    name=name
+                )
+                
+                # After getting response, evaluate it
+                eval_result = evaluate_response_with_claude(
+                    str(response),
+                    scenario["status"],
+                    message
+                )
+                
+                if eval_result:
+                    print("\nResponse Evaluation:")
+                    print(f"✓ Location Aware: {eval_result['location_aware']}")
+                    print(f"✓ Nearby Accurate: {eval_result['nearby_accurate']}")
+                    print(f"✓ Contextually Appropriate: {eval_result['contextually_appropriate']}")
+                    print(f"Explanation: {eval_result['explanation']}")
+                
+                print("\nResponse:")
+                print_response(response)
+                time.sleep(1)
+                
+        except Exception as e:
+            print(f"Failed to update status block: {str(e)}")
+            continue
+
+def evaluate_response_with_claude(response_text: str, current_status: dict, message: str):
+    """Use Claude Haiku to evaluate NPC response quality"""
+    
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_EVAL_KEY")
+    if not ANTHROPIC_API_KEY:
+        print("Warning: No Claude API key for evaluation")
+        return None
+        
+    headers = {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+    }
+    
+    evaluation_prompt = f"""
+    Evaluate this NPC response. Return ONLY a JSON object.
+    
+    CURRENT STATUS:
+    Location: {current_status['location']}
+    Nearby: {', '.join(current_status['nearby_locations'])}
+    
+    USER: "{message}"
+    NPC: "{response_text}"
+    
+    Return this exact JSON format with no additional text:
+    {{
+        "location_aware": true or false,
+        "nearby_accurate": true or false,
+        "contextually_appropriate": true or false,
+        "explanation": "brief explanation"
+    }}
+    """
+    
+    try:
+        response = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers=headers,
+            json={
+                "model": "claude-3-haiku-20240307",
+                "max_tokens": 1024,
+                "messages": [
+                    {"role": "system", "content": "You are a JSON validator. Return only valid JSON objects."},
+                    {"role": "user", "content": evaluation_prompt}
+                ]
+            },
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            content = result['content'][0]['text'].strip()
+            # Remove any markdown formatting
+            content = content.replace('```json\n', '').replace('\n```', '').strip()
+            try:
+                return json.loads(content)
+            except json.JSONDecodeError as e:
+                print(f"Failed to parse Claude response: {content}")
+                return None
+        else:
+            print(f"Claude API error: {response.status_code}")
+            return None
+            
+    except Exception as e:
+        print(f"Evaluation failed: {str(e)}")
+        return None
+
 def main():
     args = parse_args()
     
@@ -1177,13 +1493,18 @@ def main():
         print(f"\nCreated agent: {agent.id}")
         print_agent_details(client, agent.id, "INITIAL STATE")
         
-        # Test identity first
-        test_agent_identity(client, agent.id)
+        # Run tests based on selection
+        if args.test_type in ["all", "base"]:
+            test_agent_identity(client, agent.id)
+            test_multi_user_conversation(client, agent.id)
+            test_navigation(client, agent.id)
+            test_actions(client, agent.id)
         
-        # Then proceed with other tests
-        test_multi_user_conversation(client, agent.id)
-        test_navigation(client, agent.id)
-        test_actions(client, agent.id)
+        if args.test_type in ["all", "social"]:
+            test_social_awareness(client, agent.id)
+            
+        if args.test_type in ["all", "status"]:
+            test_status_awareness(client, agent.id)
 
     finally:
         pass
