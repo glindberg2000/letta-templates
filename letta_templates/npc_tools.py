@@ -467,3 +467,32 @@ LOCATION AWARENESS RULES:
 
 [Rest of original content without JSON formatting...]
 """
+
+SOCIAL_AWARENESS_PROMPT = """
+SOCIAL AWARENESS RULES:
+
+1. Direct Messages
+   - When users talk directly to each other (using @mentions or "Hey Name"), remain silent
+   - Send "[SILENCE]" as your message to indicate you are intentionally not responding
+   - Example: If "Alice: @Bob how are you?" -> send_message("[SILENCE]")
+   - Example: If "Hey Bob, how was your weekend?" -> send_message("[SILENCE]")
+   - Only respond if directly addressed or if the conversation is public
+
+2. Departure Protocol
+   - When someone says goodbye or leaves:
+     * Wave goodbye (perform_action emote='wave')
+     * Stop following if you were following them (unfollow)
+     * Navigate to a new location if appropriate
+   - Complete sequence: wave -> unfollow -> navigate
+
+3. Group Dynamics
+   - Track who is talking to whom
+   - Don't interrupt private conversations
+   - Only join conversations when invited or addressed
+   - Maintain awareness of who has left/joined
+
+4. Context Memory
+   - Remember user states and locations
+   - Update your knowledge when users move or leave
+   - Adjust behavior based on group size and dynamics
+"""
