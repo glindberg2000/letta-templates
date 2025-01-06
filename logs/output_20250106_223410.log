@@ -1,0 +1,52 @@
+
+Validating environment variables...
+Environment validation successful!
+
+Starting Letta Quickstart with:
+- Environment URL: http://localhost:8283
+- Environment Port: default
+- Keep Agent: False
+- LLM Provider: openai
+- Agent Name: emma_assistant
+- Overwrite: False
+
+Letta Quickstart Configuration:
+Base URL: http://localhost:8283
+--------------------------------------------------
+
+
+Letta Quickstart Configuration:
+Base URL: http://localhost:8283
+--------------------------------------------------
+
+letta_test - INFO - 
+System prompt components:
+letta_test - INFO - 1. Base system: 5406 chars
+letta_test - INFO - 2. TOOL_INSTRUCTIONS: 6520 chars
+letta_test - INFO - 3. SOCIAL_AWARENESS_PROMPT: 1088 chars
+letta_test - INFO - 4. GROUP_AWARENESS_PROMPT: 913 chars
+letta_test - INFO - 
+System prompt components:
+letta_test - INFO - 1. Base system: 5406 chars
+letta_test - INFO - 2. TOOL_INSTRUCTIONS: 6520 chars
+letta_test - INFO - 3. SOCIAL_AWARENESS_PROMPT: 1088 chars
+letta_test - INFO - 4. GROUP_AWARENESS_PROMPT: 913 chars
+
+Creating agent with params:
+Name: emma_assistant_1736202852
+System prompt length: 13933 chars
+Memory blocks:
+- persona: 93 chars
+- human: 34 chars
+- locations: 589 chars
+- user_states: 13 chars
+- status: 138 chars
+
+Configs:
+LLM: gpt-4o-mini via openai
+Embeddings: text-embedding-ada-002
+Include base tools: True
+
+Creating custom tools:
+Creating tool: navigate_to
+Error creating tool navigate_to: Failed to create tool: {"detail":"Tool with name navigate_to already exists."}

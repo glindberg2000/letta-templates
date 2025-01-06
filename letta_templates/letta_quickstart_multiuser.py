@@ -22,11 +22,13 @@ from letta_templates.npc_tools import (
     navigate_to_coordinates,
     perform_action,
     examine_object,
-    TOOL_REGISTRY
+    TOOL_REGISTRY,
+    SOCIAL_AWARENESS_PROMPT
 )
 import requests
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+import logging
 
 # Load environment variables
 load_dotenv()
@@ -341,9 +343,11 @@ def create_personalized_agent(
     use_claude: bool = False,
     overwrite: bool = False,
     with_custom_tools: bool = True,
-    custom_registry: dict = None
+    custom_registry = None
 ):
-    """Create a personalized agent with modern tool registration"""
+    """Create a personalized agent with memory and tools"""
+    logger = logging.getLogger('letta_test')
+    
     if client is None:
         client = create_letta_client()
         
@@ -354,6 +358,28 @@ def create_personalized_agent(
     # Add timestamp to name to avoid conflicts
     timestamp = int(time.time())
     unique_name = f"{name}_{timestamp}"
+    
+    # Modify system prompt to remove Letta/Limnal references
+    base_system = gpt_system.get_system_text("memgpt_chat")
+    base_system = base_system.replace(
+        "You are Letta, the latest version of Limnal Corporation's digital companion",
+        f"You are {name}, a helpful NPC guide in this game world"
+    )
+    
+    # Combine prompts in specific order
+    system_prompt = (
+        base_system +
+        "\n\n" + TOOL_INSTRUCTIONS +
+        "\n\n" + SOCIAL_AWARENESS_PROMPT +
+        "\n\n" + GROUP_AWARENESS_PROMPT
+    )
+    
+    # Log what we're using
+    logger.info("\nSystem prompt components:")
+    logger.info(f"1. Base system: {len(base_system)} chars")
+    logger.info(f"2. TOOL_INSTRUCTIONS: {len(TOOL_INSTRUCTIONS)} chars")
+    logger.info(f"3. SOCIAL_AWARENESS_PROMPT: {len(SOCIAL_AWARENESS_PROMPT)} chars")
+    logger.info(f"4. GROUP_AWARENESS_PROMPT: {len(GROUP_AWARENESS_PROMPT)} chars")
     
     # Create configs first
     llm_config = LLMConfig(
@@ -462,62 +488,12 @@ def create_personalized_agent(
         ]
     )
 
-    # Create tool instructions with proper docstrings
-    tool_instructions = """
-    Performing actions:
-    IMPORTANT: You MUST use these tools for navigation - do not just send messages!
-    
-    1. navigate_to: REQUIRED for moving to locations with slugs
-       Example: navigate_to("petes_stand")
-       You MUST call this before sending any message about navigation
-    
-    2. navigate_to_coordinates: REQUIRED for moving to coordinates
-       Example: navigate_to_coordinates(15.5, 20.0, -110.8)
-       You MUST call this before sending any message about navigation
-    
-    3. perform_action: Required for NPC actions
-       Example: perform_action("follow", target="player1")
-    
-    4. examine_object: Required for examining objects
-       Example: examine_object("treasure_chest")
-    
-    CRITICAL: You must ALWAYS use the appropriate navigation tool BEFORE sending any message about movement.
-    Failure to use navigation tools will result in the player being unable to move.
-    """
-
-    # Add multi-user awareness to system prompt
-    multi_user_instructions = """
-    IMPORTANT: You are speaking with multiple users in a shared space. 
-    Each message will include the name of the speaker.
-    When responding:
-    1. Address users by their names
-    2. Keep track of who asked what
-    3. If multiple users are involved in a conversation, make sure to acknowledge each person
-    4. When giving directions, consider that multiple users might be following them
-    """
-
-    # Add to existing tool instructions
-    group_tool_instructions = """
-    Group Management:
-    1. group_navigate: Move multiple users together
-       Example: group_navigate(["Alice", "Bob"], "petes_stand")
-    
-    2. group_gather: Gather users at a location
-       Example: group_gather(["Alice", "Bob", "Charlie"], "fountain")
-    """
-
-    # Modify system prompt to remove Letta/Limnal references
-    base_system = gpt_system.get_system_text("memgpt_chat")
-    base_system = base_system.replace(
-        "You are Letta, the latest version of Limnal Corporation's digital companion",
-        f"You are {name}, a helpful NPC guide in this game world"
-    )
-    
-    system_prompt = (
-        base_system + 
-        TOOL_INSTRUCTIONS +  # Enhanced with movement initiative
-        GROUP_AWARENESS_PROMPT  # Our new comprehensive group awareness
-    )
+    # Log what we're using
+    logger.info("\nSystem prompt components:")
+    logger.info(f"1. Base system: {len(base_system)} chars")
+    logger.info(f"2. TOOL_INSTRUCTIONS: {len(TOOL_INSTRUCTIONS)} chars")
+    logger.info(f"3. SOCIAL_AWARENESS_PROMPT: {len(SOCIAL_AWARENESS_PROMPT)} chars")
+    logger.info(f"4. GROUP_AWARENESS_PROMPT: {len(GROUP_AWARENESS_PROMPT)} chars")
     
     # Log params in a readable way
     print("\nCreating agent with params:")
@@ -531,76 +507,42 @@ def create_personalized_agent(
     print(f"Embeddings: {embedding_config.embedding_model}")
     print(f"Include base tools: {True}")
     
-    # Create agent
+    # Create agent first
     agent = client.create_agent(
         name=unique_name,
-        system=system_prompt,
-        memory=memory,
-        llm_config=llm_config,
         embedding_config=embedding_config,
-        include_base_tools=True
+        llm_config=llm_config,
+        memory=memory,
+        system=system_prompt,
+        include_base_tools=True,
+        description="A Roblox development assistant"
     )
     
-    # Register tools with debug info
-    if with_custom_tools:
-        print("\nRegistering tools:")
-        for name, tool_func in TOOL_REGISTRY.items():
-            try:
-                print(f"\nCreating tool: {name}")
-                print(f"Function: {tool_func.__name__}")
-                print(f"Docstring: {tool_func.__doc__}")
-                tool = client.create_tool(tool_func, name=name)
-                print(f"Tool created with ID: {tool.id}")
-                client.add_tool_to_agent(agent.id, tool.id)
-                print(f"Tool {name} added to agent {agent.id}")
-            except Exception as e:
-                print(f"Error adding tool {name}: {e}")
-                raise  # Re-raise to see full traceback
-
-    # List tools to verify
-    print("\nVerifying registered tools:")
-    tools = client.list_tools()
-    for tool in tools:
-        print(f"Found tool: {tool.name} (ID: {tool.id})")
-
-    print("\nDEBUG: Available tools in TOOL_REGISTRY:")
-    for name, func in TOOL_REGISTRY.items():
-        print(f"- {name}: {func}")
-
-    # Then explicitly attach each tool
-    print("\nAttaching tools to agent:")
-    tools = client.list_tools()
-    for tool in tools:
+    # Create and attach custom tools
+    print("\nSetting up custom tools:")
+    existing_tools = {t.name: t.id for t in client.list_tools()}
+    
+    for name, tool_info in TOOL_REGISTRY.items():
         try:
-            print(f"Attaching {tool.name} to agent...")
-            client.add_tool_to_agent(agent.id, tool.id)
-            print(f"Successfully attached {tool.name}")
+            # Check if tool already exists
+            if name in existing_tools:
+                print(f"Tool {name} already exists (ID: {existing_tools[name]})")
+                tool_id = existing_tools[name]
+            else:
+                print(f"Creating tool: {name}")
+                tool = client.create_tool(tool_info['function'], name=name)
+                print(f"Tool created with ID: {tool.id}")
+                tool_id = tool.id
+                
+            # Attach tool to agent
+            print(f"Attaching {name} to agent...")
+            client.add_tool_to_agent(agent.id, tool_id)
+            print(f"Tool {name} attached to agent {agent.id}")
+            
         except Exception as e:
-            print(f"Failed to attach {tool.name}: {e}")
-
-    # Verify tools are attached by getting agent details
-    print("\nVerifying agent tools:")
-    updated_agent = client.get_agent(agent.id)
-    if hasattr(updated_agent, 'tools'):
-        print(f"Agent has {len(updated_agent.tools)} tools:")
-        for tool in updated_agent.tools:
-            print(f"- {tool.name}")
-    else:
-        print("Note: Agent tools can only be verified through usage")
-
-    # Add version check
-    print("\nChecking Letta versions:")
-    try:
-        import letta
-        print(f"Letta client version: {letta.__version__}")
-        
-        # Get server version from env
-        server_url = os.getenv('LETTA_BASE_URL', 'http://localhost:8283')
-        response = requests.get(f"{server_url}/version")
-        print(f"Letta server version: {response.json()['version']}")
-    except Exception as e:
-        print(f"Warning: Could not check versions: {e}")
-
+            print(f"Error with tool {name}: {e}")
+            raise
+    
     return agent
 
 def validate_environment():
@@ -1465,6 +1407,38 @@ def test_status_awareness(client, agent_id: str):
             print(f"Failed to update status block: {str(e)}")
             continue
 
+def validate_agent_setup(client, agent_id: str):
+    """Verify agent's system prompt, memory, and tools are correctly configured"""
+    logger = logging.getLogger('letta_test')
+    
+    # FIRST check required custom tools
+    required_npc_tools = [
+        "navigate_to",
+        "navigate_to_coordinates",
+        "perform_action", 
+        "examine_object"
+    ]
+    
+    tools = client.list_tools()
+    agent_tools = []
+    for tool in tools:
+        try:
+            client.get_agent_tool(agent_id, tool.id)
+            agent_tools.append(tool.name)
+        except:
+            pass
+            
+    missing_npc_tools = [t for t in required_npc_tools if t not in agent_tools]
+    if missing_npc_tools:
+        logger.error(f"❌ Missing required NPC tools: {', '.join(missing_npc_tools)}")
+        logger.error("Agent validation failed - NPC tools not attached")
+        return False
+        
+    # Only continue with other checks if NPC tools are present
+    logger.info("✓ All required NPC tools attached")
+    
+    # Rest of validation...
+
 def main():
     args = parse_args()
     
@@ -1492,6 +1466,83 @@ def main():
             with_custom_tools=args.custom_tools
         )
         print(f"\nCreated agent: {agent.id}")
+        
+        # VERIFY NPC TOOLS FIRST
+        print("\nVerifying NPC tools are attached...")
+        required_npc_tools = [
+            "navigate_to",
+            "navigate_to_coordinates",
+            "perform_action",
+            "examine_object"
+        ]
+        
+        # Get all tools
+        tools = client.list_tools()
+        print("\nAll available tools:")
+        for tool in tools:
+            print(f"- {tool.name} (ID: {tool.id})")
+        
+        # Get agent's tools directly
+        agent_details = client.get_agent(agent.id)
+        agent_tools = [t.name for t in agent_details.tools] if hasattr(agent_details, 'tools') else []
+        
+        print("\nTools attached to agent:")
+        for tool_name in agent_tools:
+            print(f"✓ Found attached: {tool_name}")
+            
+        missing_tools = [t for t in required_npc_tools if t not in agent_tools]
+        if missing_tools:
+            print(f"\n❌ Missing required NPC tools: {', '.join(missing_tools)}")
+            print("Tests aborted - NPC tools not attached")
+            return
+            
+        print("✓ All required NPC tools attached")
+        
+        # VERIFY PROMPTS FIRST
+        print("\nVerifying prompt components...")
+        agent_details = client.get_agent(agent.id)
+        system_prompt = agent_details.system
+        
+        required_components = {
+            "TOOL_INSTRUCTIONS": [
+                "perform_action",
+                "navigate_to",
+                "navigate_to_coordinates",
+                "examine_object"
+            ],
+            "SOCIAL_AWARENESS": [
+                "[SILENCE]",
+                "Direct Messages",
+                "Departure Protocol"
+            ],
+            "GROUP_AWARENESS": [
+                "LOCATION AWARENESS",
+                "Current Location",
+                "Nearby Locations"
+            ]
+        }
+        
+        missing_components = []
+        print("\nChecking prompt sections:")
+        for section, markers in required_components.items():
+            print(f"\n{section}:")
+            for marker in markers:
+                if marker in system_prompt:
+                    print(f"✓ Found: {marker}")
+                else:
+                    print(f"❌ Missing: {marker}")
+                    missing_components.append(f"{section}: {marker}")
+        
+        if missing_components:
+            print("\n❌ Missing prompt components:")
+            for comp in missing_components:
+                print(f"- {comp}")
+            print("Tests aborted - Required prompts missing")
+            return
+        
+        print("\n✓ All required prompt components found")
+        
+        # Only continue with tests if tools are verified
         print_agent_details(client, agent.id, "INITIAL STATE")
         
         # Run tests based on selection
