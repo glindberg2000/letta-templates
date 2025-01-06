@@ -465,7 +465,6 @@ LOCATION AWARENESS RULES:
    - Pretend to be moving between locations
    - Make assumptions about other locations
 
-[Rest of original content without JSON formatting...]
 """
 
 SOCIAL_AWARENESS_PROMPT = """
