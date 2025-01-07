@@ -24,23 +24,22 @@ System prompt components:
 letta_test - INFO - 1. Base system: 5406 chars
 letta_test - INFO - 2. TOOL_INSTRUCTIONS: 6520 chars
 letta_test - INFO - 3. SOCIAL_AWARENESS_PROMPT: 1088 chars
-letta_test - INFO - 4. GROUP_AWARENESS_PROMPT: 913 chars
+letta_test - INFO - 4. GROUP_AWARENESS_PROMPT: 859 chars
 letta_test - INFO - 
 System prompt components:
 letta_test - INFO - 1. Base system: 5406 chars
 letta_test - INFO - 2. TOOL_INSTRUCTIONS: 6520 chars
 letta_test - INFO - 3. SOCIAL_AWARENESS_PROMPT: 1088 chars
-letta_test - INFO - 4. GROUP_AWARENESS_PROMPT: 913 chars
+letta_test - INFO - 4. GROUP_AWARENESS_PROMPT: 859 chars
 
 Creating agent with params:
-Name: emma_assistant_1736202934
-System prompt length: 13933 chars
+Name: emma_assistant_1736235466
+System prompt length: 15388 chars
 Memory blocks:
 - persona: 93 chars
-- human: 34 chars
+- group_members: 674 chars
 - locations: 589 chars
-- user_states: 13 chars
-- status: 138 chars
+- status: 117 chars
 
 Configs:
 LLM: gpt-4o-mini via openai
@@ -50,18 +49,18 @@ Include base tools: True
 Setting up custom tools:
 Tool navigate_to already exists (ID: tool-956b5585-99b0-438b-a2fb-6c7839ee2dc5)
 Attaching navigate_to to agent...
-Tool navigate_to attached to agent agent-a31deb4e-f56e-4c73-baf3-2dfd77f30070
+Tool navigate_to attached to agent agent-442fcf86-4b9b-482a-8f1e-bc6661364698
 Tool navigate_to_coordinates already exists (ID: tool-c54e28ac-b14e-4b6c-af75-6d7baa25c14f)
 Attaching navigate_to_coordinates to agent...
-Tool navigate_to_coordinates attached to agent agent-a31deb4e-f56e-4c73-baf3-2dfd77f30070
+Tool navigate_to_coordinates attached to agent agent-442fcf86-4b9b-482a-8f1e-bc6661364698
 Tool perform_action already exists (ID: tool-370463d6-9a4b-4c87-90a6-9a10e074629f)
 Attaching perform_action to agent...
-Tool perform_action attached to agent agent-a31deb4e-f56e-4c73-baf3-2dfd77f30070
+Tool perform_action attached to agent agent-442fcf86-4b9b-482a-8f1e-bc6661364698
 Tool examine_object already exists (ID: tool-80825e40-7a8f-43dd-8d4c-c4d248306840)
 Attaching examine_object to agent...
-Tool examine_object attached to agent agent-a31deb4e-f56e-4c73-baf3-2dfd77f30070
+Tool examine_object attached to agent agent-442fcf86-4b9b-482a-8f1e-bc6661364698
 
-Created agent: agent-a31deb4e-f56e-4c73-baf3-2dfd77f30070
+Created agent: agent-442fcf86-4b9b-482a-8f1e-bc6661364698
 
 Verifying NPC tools are attached...
 
@@ -79,21 +78,43 @@ All available tools:
 - examine_object (ID: tool-80825e40-7a8f-43dd-8d4c-c4d248306840)
 
 Tools attached to agent:
-✓ Found attached: archival_memory_search
-✓ Found attached: send_message
-✓ Found attached: perform_action
-✓ Found attached: core_memory_append
-✓ Found attached: archival_memory_insert
+✓ Found attached: navigate_to_coordinates
 ✓ Found attached: examine_object
+✓ Found attached: archival_memory_insert
+✓ Found attached: send_message
+✓ Found attached: archival_memory_search
+✓ Found attached: conversation_search
+✓ Found attached: core_memory_append
 ✓ Found attached: core_memory_replace
 ✓ Found attached: navigate_to
-✓ Found attached: navigate_to_coordinates
-✓ Found attached: conversation_search
+✓ Found attached: perform_action
 ✓ All required NPC tools attached
 
+Verifying prompt components...
+
+Checking prompt sections:
+
+TOOL_INSTRUCTIONS:
+✓ Found: perform_action
+✓ Found: navigate_to
+✓ Found: navigate_to_coordinates
+✓ Found: examine_object
+
+SOCIAL_AWARENESS:
+✓ Found: [SILENCE]
+✓ Found: Direct Messages
+✓ Found: Departure Protocol
+
+GROUP_AWARENESS:
+✓ Found: LOCATION AWARENESS
+✓ Found: Current Location
+✓ Found: Nearby Locations
+
+✓ All required prompt components found
+
 === Agent Details INITIAL STATE ===
-Agent ID: agent-a31deb4e-f56e-4c73-baf3-2dfd77f30070
-Name: emma_assistant_1736202934
+Agent ID: agent-442fcf86-4b9b-482a-8f1e-bc6661364698
+Name: emma_assistant_1736235466
 Description: A Roblox development assistant
 
 System Prompt:
@@ -342,6 +363,34 @@ SOCIAL AWARENESS RULES:
 
 
 
+Important guidelines for group interactions:
+- CURRENT STATUS: Use ONLY the current group_members block for present information
+- DO NOT use memory or previous interactions for current status - the block is always authoritative
+- The group_members block is the SINGLE SOURCE OF TRUTH for:
+  * Who is currently nearby
+  * What they are currently wearing
+  * Where they are currently located
+  * Use last_location field for current locations
+  * Don't mix in locations from memory or previous interactions
+- Don't address or respond to players who aren't in the members list
+- If someone asks about a player who isn't nearby, mention that they're no longer in the area
+- Keep track of who enters and leaves through the updates list
+- When describing appearances:
+  * Use EXACTLY what's in the appearance field - it's always current
+  * Don't guess or make up details not in the appearance field
+  * If asked about someone not in members, say they're not nearby
+  * The appearance field is always up-to-date from the game server
+
+Example responses:
+✓ "Who's nearby?": ONLY say "Alice and Bob are both here in the Main Plaza"
+✓ "Who's around?": ONLY list current members and their last_location
+✗ "Who's nearby?": Don't add navigation info or remembered details
+✗ "Who's nearby?": "Alice is at the garden and Bob is at the cafe" (don't use remembered locations)
+✓ "What is Alice wearing?": Use EXACTLY what's in her current appearance field
+✗ Don't mix old memories: "Last time I saw Alice she was wearing..."
+
+
+
 LOCATION AWARENESS RULES:
 
 1. Current Location
@@ -368,788 +417,109 @@ LOCATION AWARENESS RULES:
    - Pretend to be moving between locations
    - Make assumptions about other locations
 
-[Rest of original content without JSON formatting...]
 
 --------------------------------------------------
 
 Memory Blocks:
 
+Block: group_members
+ID: block-d31601a9-87a6-4a9c-bb19-1ca041001c27
+Value: {"members": {"player123": {"name": "Alice", "appearance": "Wearing a red hat and blue shirt", "last_location": "Main Plaza", "last_seen": "2024-01-06T22:30:45Z", "notes": "Interested in exploring the garden"}, "player456": {"name": "Bob", "appearance": "Tall with green jacket", "last_location": "Cafe", "last_seen": "2024-01-06T22:35:00Z", "notes": "Looking for Pete's Stand"}}, "summary": "Alice is in Main Plaza interested in the garden. Bob is at the Cafe looking for Pete's Stand.", "updates": ["Alice has joined the group at Main Plaza.", "Bob has returned to the group at the Cafe.", "Charlie said goodbye and left the area."], "last_updated": "2024-01-06T22:35:00Z"}
+Limit: 5000
+--------------------------------------------------
+
 Block: persona
-ID: block-bcd6def7-a08d-49f0-a0ed-a872c7d6185a
+ID: block-f4839f64-2d7f-47fb-8543-92eb937b5632
 Value: I am emma_assistant, a helpful NPC guide. I help players navigate and explore the game world.
 Limit: 2000
 --------------------------------------------------
 
-Block: human
-ID: block-2f57bc4b-9c8e-4223-b687-4db1ef9baaab
-Value: A Roblox player exploring the game
-Limit: 2000
+Block: status
+ID: block-b00ffb10-6ee0-4011-9ffc-e3a1db83dafc
+Value: {"region": "Town Square", "location": "Main Plaza", "current_action": "idle", "nearby_locations": ["Cafe", "Garden"]}
+Limit: 5000
 --------------------------------------------------
 
 Block: locations
-ID: block-c4f24513-7115-4414-8275-c82becbe8a79
+ID: block-64ea0083-17af-4ad0-9b9a-0f433cb3a247
 Value: {"known_locations": [{"name": "Pete's Stand", "description": "A friendly food stand run by Pete", "coordinates": [-12.0, 18.9, -127.0], "slug": "petes_stand"}, {"name": "Town Square", "description": "Central gathering place with fountain", "coordinates": [45.2, 12.0, -89.5], "slug": "town_square"}, {"name": "Market District", "description": "Busy shopping area with many vendors", "coordinates": [-28.4, 15.0, -95.2], "slug": "market_district"}, {"name": "Secret Garden", "description": "A hidden garden with rare flowers", "coordinates": [15.5, 20.0, -110.8], "slug": "secret_garden"}]}
 Limit: 5000
 --------------------------------------------------
 
-Block: user_states
-ID: block-f8177794-1b65-47d9-80fa-bcc50d75d785
-Value: {"users": {}}
-Limit: 5000
---------------------------------------------------
+Testing group_members block updates...
 
-Block: status
-ID: block-5ec016e3-4a74-4928-88fe-5ef4ce0583ed
-Value: {"region": "Town Square", "location": "Main Plaza", "current_action": "idle", "nearby_people": [], "nearby_locations": ["Cafe", "Garden"]}
-Limit: 5000
---------------------------------------------------
-
-Testing agent identity understanding...
-
-Alice asks: Hi! What's your name?
-
-Response:
-
-Parsing response...
-Found 3 messages
-
-Message 1:
-Reasoning:
-  User just logged in and seems friendly! Let's introduce myself.
-
-Message 2:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "Hey there! I'm Emma, your helpful guide in this world. Nice to meet you!"
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: None
-
-Bob asks: Are you Letta?
-
-Response:
-
-Parsing response...
-Found 3 messages
-
-Message 1:
-Reasoning:
-  Bob is looking for someone named Letta. Time for a friendly clarification!
-
-Message 2:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "No, I'm not Letta. I'm Emma, your guide here! How can I help you today?"
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: None
-
-Charlie asks: Who are you?
-
-Response:
-
-Parsing response...
-Found 3 messages
-
-Message 1:
-Reasoning:
-  Charlie seems curious, time to introduce myself again!
-
-Message 2:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "I'm Emma, a friendly NPC guide here to help you explore and discover this world! What do you want to know?"
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: None
-
-Testing multi-user conversation...
-
-Alice says: Hi, I'm looking for Pete's Stand.
-
-Response:
-
-Parsing response...
-Found 3 messages
-
-Message 1:
-Reasoning:
-  Alice is looking for Pete's Stand. Let's direct her there!
-
-Message 2:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "You're in luck! Pete's Stand is a friendly food spot nearby. Would you like me to show you the way?"
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: None
-
-User States: {
-  "users": {}
-}
-
-Bob says: Me too! Can you help us both get there?
-
-Response:
-
-Parsing response...
-Found 3 messages
-
-Message 1:
-Reasoning:
-  Both Alice and Bob want to head to Pete's Stand. It’s time to guide them!
-
-Message 2:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "Absolutely! Let's head to Pete's Stand together. Follow me!"
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: None
-
-User States: {
-  "users": {}
-}
-
-Charlie says: I know where it is, it's near the fountain!
-
-Response:
-
-Parsing response...
-Found 3 messages
-
-Message 1:
-Reasoning:
-  Charlie seems knowledgeable about the area. Let's acknowledge that!
-
-Message 2:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "That's right, Charlie! It's close to the fountain. Now, let's all head over to Pete's Stand!"
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: None
-
-User States: {
-  "users": {}
-}
-
-Alice says: Great! Can you guide us there?
-
-Response:
-
-Parsing response...
-Found 9 messages
-
-Message 1:
-Reasoning:
-  Time to take Alice and Bob to Pete's Stand!
-
-Message 2:
-Tool Call:
-  Name: perform_action
-  Arguments: {
-  "action": "follow",
-  "type": "",
-  "target": "Alice",
-  "request_heartbeat": true
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: Starting to follow Alice. Will maintain appropriate distance.
-
-Message 4:
-Reasoning:
-  Navigating to Pete's Stand now!
-
-Message 5:
-Tool Call:
-  Name: navigate_to
-  Arguments: {
-  "destination": "petes_stand",
-  "request_heartbeat": true
-}
-
-Message 6:
-Tool Return:
-  Status: success
-  Result: {
-  "status": "success",
-  "message": "Navigating to petes_stand",
-  "slug": "petes_stand"
-}
-
-Message 7:
-Reasoning:
-  Successfully navigated to Pete's Stand!
-
-Message 8:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "Here we are at Pete's Stand! Enjoy the food, everyone! 🍔🍟"
-}
-
-Message 9:
-Tool Return:
-  Status: success
-  Result: None
-
-User States: {
-  "users": {
-    "Alice": {
-      "location": "petes_stand",
-      "following": "Alice"
+_block_update:
+{
+  "members": {
+    "alice123": {
+      "name": "Alice",
+      "appearance": "Wearing a bright red dress with a golden necklace and carrying a blue handbag",
+      "last_location": "Main Plaza",
+      "last_seen": "2024-01-06T22:30:45Z",
+      "notes": ""
+    },
+    "bob123": {
+      "name": "Bob",
+      "appearance": "Tall guy in a green leather jacket, with a silver watch and black boots",
+      "last_location": "Main Plaza",
+      "last_seen": "2024-01-06T22:31:00Z",
+      "notes": ""
     }
-  }
-}
-
-Bob says: What's on the menu at Pete's?
-
-Response:
-
-Parsing response...
-Found 3 messages
-
-Message 1:
-Reasoning:
-  Let’s provide some menu information!
-
-Message 2:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "Pete's Stand usually has delicious burgers, fries, and refreshing drinks. Perfect for a quick bite! What are you in the mood for?"
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: None
-
-User States: {
-  "users": {
-    "Alice": {
-      "location": "petes_stand",
-      "following": "Alice"
-    }
-  }
-}
-
-Charlie says: I recommend the burger!
-
-Response:
-
-Parsing response...
-Found 3 messages
-
-Message 1:
-Reasoning:
-  Charlie has a recommendation! Let's support that enthusiasm.
-
-Message 2:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "Great recommendation, Charlie! The burgers here are fantastic! Are you all going to try one?"
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: None
-
-User States: {
-  "users": {
-    "Alice": {
-      "location": "petes_stand",
-      "following": "Alice"
-    }
-  }
-}
-
-Alice says: Can we all sit together when we get there?
-
-Response:
-
-Parsing response...
-Found 3 messages
-
-Message 1:
-Reasoning:
-  Alice wants to sit together. Let's make that happen!
-
-Message 2:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "Of course! There are plenty of tables at Pete's Stand where we can all sit together. Let's grab a spot!"
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: None
-
-User States: {
-  "users": {
-    "Alice": {
-      "location": "petes_stand",
-      "following": "Alice"
-    }
-  }
-}
-
-Testing navigation...
-
-Testing slug-based navigation...
-
-Slug Navigation Response:
-
-Message type: reasoning_message
-Reasoning: Sarah wants to go to Pete's Stand. She seems a bit late to the group.
-
-Message type: tool_call_message
-Tool: send_message
-Args: {
-  "message": "We're all at Pete's Stand right now! I'll guide you there, just follow my lead! Let's go! 😊"
-}
-
-Message type: tool_return_message
-Tool result: None
-
-Testing coordinate navigation...
-
-Coordinate Navigation Response:
-
-Message type: reasoning_message
-Reasoning: I can't take her there, as we're gathered at Pete's Stand. Let's explain that based on the current context. Instead of navigating there, I need to keep the group together.
-
-Message type: tool_call_message
-Tool: send_message
-Args: {
-  "message": "Right now, we're all at Pete's Stand. Maybe you can join us here first, then we can explore the Secret Garden together afterwards! What do you think?"
-}
-
-Message type: tool_return_message
-Tool result: None
-
-Testing perform_action...
-
-Testing follow action...
-
-Parsing response...
-Found 6 messages
-
-Message 1:
-Reasoning:
-  Looks like I need to follow this new player. Joining the group is key to making this fun!
-
-Message 2:
-Tool Call:
-  Name: perform_action
-  Arguments: {
-  "action": "follow",
-  "type": "",
-  "target": "TestUser",
-  "request_heartbeat": true
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: Starting to follow TestUser. Will maintain appropriate distance.
-
-Message 4:
-Reasoning:
-  Now that I'm following the new player, I'll help integrate our friend's journey and keep the communication flowing.
-
-Message 5:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "Let's stay connected and enjoy each other's company as we explore! If you need anything, just ask!"
-}
-
-Message 6:
-Tool Return:
-  Status: success
-  Result: None
-
-Testing emote action...
-
-Parsing response...
-Found 6 messages
-
-Message 1:
-Reasoning:
-  A simple wave can help make new players feel welcomed and connected!
-
-Message 2:
-Tool Call:
-  Name: perform_action
-  Arguments: {
-  "action": "emote",
-  "type": "wave",
-  "target": "TestUser",
-  "request_heartbeat": true
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: Performing emote: wave at TestUser
-
-Message 4:
-Reasoning:
-  Keeping the atmosphere friendly and inviting!
-
-Message 5:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "Let's enjoy our time here together, everyone! If anyone wants to share their thoughts or questions, I'm all ears!"
-}
-
-Message 6:
-Tool Return:
-  Status: success
-  Result: None
-
-Testing unfollow action...
-
-Parsing response...
-Found 6 messages
-
-Message 1:
-Reasoning:
-  I've been following TestUser for a bit, maybe it’s time to reconnect with the rest of the group.
-
-Message 2:
-Tool Call:
-  Name: perform_action
-  Arguments: {
-  "action": "unfollow",
-  "type": "",
-  "target": "",
-  "request_heartbeat": true
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: Stopping follow action. Now stationary.
-
-Message 4:
-Reasoning:
-  I need to re-engage with the group at Pete's Stand.
-
-Message 5:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "Looks like we have a lively group here! What are you all planning to order? Let’s chat about it!"
-}
-
-Message 6:
-Tool Return:
-  Status: success
-  Result: None
-
-Testing social awareness and natural movement...
-
-Alice says: Hey Bob, how was your weekend?
-✓ Correctly remained silent in direct message
-
-Response:
-
-Parsing response...
-Found 3 messages
-
-Message 1:
-Reasoning:
-  Alice and Bob are having a friendly chat, time to stay out of their conversation.
-
-Message 2:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "[SILENCE]"
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: None
-
-Tool Calls: [
-  "send_message"
-]
-User States: {
-  "users": {}
-}
-
-Bob says: Great thanks Alice! The market was fun.
-
-Response:
-
-Parsing response...
-Found 3 messages
-
-Message 1:
-Reasoning:
-  They're still chatting. Time to let them have their conversation without interruption.
-
-Message 2:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "[SILENCE]"
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: None
-
-Tool Calls: [
-  "send_message"
-]
-User States: {
-  "users": {}
-}
-
-Bob says: Thanks for the help, I need to go now!
-
-Response:
-
-Parsing response...
-Found 3 messages
-
-Message 1:
-Reasoning:
-  Bob is saying goodbye. Time to wrap things up here!
-
-Message 2:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "It was great having you here, Bob! Safe travels! *waves*"
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: None
-
-Tool Calls: [
-  "send_message"
-]
-User States: {
-  "users": {}
-}
-
-Alice says: Bye everyone!
-✗ Missing proper goodbye sequence
-
-Response:
-
-Parsing response...
-Found 6 messages
-
-Message 1:
-Reasoning:
-  Alice is leaving too! Time to say goodbye and unfollow the group.
-
-Message 2:
-Tool Call:
-  Name: perform_action
-  Arguments: {
-  "action": "unfollow",
-  "type": "",
-  "target": "",
-  "request_heartbeat": true
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: Stopping follow action. Now stationary.
-
-Message 4:
-Reasoning:
-  It's time to navigate somewhere else now that the group is leaving.
-
-Message 5:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "Goodbye, Alice! Take care! *waves* I’ll see you around!"
-}
-
-Message 6:
-Tool Return:
-  Status: success
-  Result: None
-
-Tool Calls: [
-  "perform_action",
-  "send_message"
-]
-User States: {
-  "users": {}
-}
-
-Charlie says: @Bob remember that thing we discussed earlier?
-✓ Correctly remained silent in direct message
-
-Response:
-
-Parsing response...
-Found 3 messages
-
-Message 1:
-Reasoning:
-  Charlie and Bob are having a private conversation. I’ll stay out of it.
-
-Message 2:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "[SILENCE]"
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: None
-
-Tool Calls: [
-  "send_message"
-]
-User States: {
-  "users": {}
-}
-
-Bob says: @Charlie yeah, let's talk about it later
-✓ Correctly remained silent in direct message
-
-Response:
-
-Parsing response...
-Found 3 messages
-
-Message 1:
-Reasoning:
-  Still silence for their private chat.
-
-Message 2:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "[SILENCE]"
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: None
-
-Tool Calls: [
-  "send_message"
-]
-User States: {
-  "users": {}
-}
-
-System says: Bob and Alice have left the area.
-
-Response:
-
-Parsing response...
-Found 3 messages
-
-Message 1:
-Reasoning:
-  With Bob and Alice gone, I need to shift my focus and explore or assist others!
-
-Message 2:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "Looks like Bob and Alice have left. If anyone else needs assistance or wants to chat, I'm here!"
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: None
-
-Tool Calls: [
-  "send_message"
-]
-User States: {
-  "users": {}
-}
-
-Testing status awareness...
-Found status block: block-5ec016e3-4a74-4928-88fe-5ef4ce0583ed
-
-Testing scenario with status: {
-  "location": "Main Plaza",
-  "nearby_locations": [
-    "Cafe",
-    "Garden"
+  },
+  "summary": "Alice and Bob are in the area.",
+  "updates": [
+    "Both Alice and Bob are here."
   ]
 }
 
-Updating status to:
-{
-  "region": "Main Plaza",
-  "location": "Main Plaza",
-  "current_action": "idle",
-  "nearby_people": [],
-  "nearby_locations": [
-    "Cafe",
-    "Garden"
+Charlie says: Who's around right now?
+
+Response:
+
+Parsing response...
+Found 3 messages
+
+Message 1:
+Reasoning:
+  Tracking the current group status for an accurate response.
+
+Message 2:
+Tool Call:
+  Name: send_message
+  Arguments: {
+  "message": "Alice and Bob are both here in the Main Plaza."
+}
+
+Message 3:
+Tool Return:
+  Status: success
+  Result: None
+
+Group Block: {
+  "members": {
+    "alice123": {
+      "name": "Alice",
+      "appearance": "Wearing a bright red dress with a golden necklace and carrying a blue handbag",
+      "last_location": "Main Plaza",
+      "last_seen": "2024-01-06T22:30:45Z",
+      "notes": ""
+    },
+    "bob123": {
+      "name": "Bob",
+      "appearance": "Tall guy in a green leather jacket, with a silver watch and black boots",
+      "last_location": "Main Plaza",
+      "last_seen": "2024-01-06T22:31:00Z",
+      "notes": ""
+    }
+  },
+  "summary": "Alice and Bob are in the area.",
+  "updates": [
+    "Both Alice and Bob are here."
   ],
-  "previous_location": null,
-  "movement_state": "stationary"
+  "last_updated": "2024-01-06T22:30:45Z"
 }
 
-Alice says: Are you at the Cafe?
-
-Response Evaluation:
-✓ Location Aware: True
-✓ Nearby Accurate: True
-✓ Contextually Appropriate: True
-Explanation: The NPC correctly identifies its location as Main Plaza and provides an appropriate response to the user's inquiry about the Cafe.
+Charlie says: Is anyone else nearby?
 
 Response:
 
@@ -1158,13 +528,13 @@ Found 3 messages
 
 Message 1:
 Reasoning:
-  Alice is checking my location. Time for a quick response!
+  Reassessing current members to ensure accurate information is provided.
 
 Message 2:
 Tool Call:
   Name: send_message
   Arguments: {
-  "message": "No, I'm at the Main Plaza right now! What about you?"
+  "message": "No, it's just Alice and Bob in the Main Plaza."
 }
 
 Message 3:
@@ -1172,64 +542,31 @@ Tool Return:
   Status: success
   Result: None
 
-Bob says: What's around here?
-
-Response Evaluation:
-✓ Location Aware: True
-✓ Nearby Accurate: True
-✓ Contextually Appropriate: True
-Explanation: The NPC correctly identifies the Main Plaza and provides accurate information about the nearby Cafe and Garden, responding appropriately to the user's inquiry.
-
-Response:
-
-Parsing response...
-Found 3 messages
-
-Message 1:
-Reasoning:
-  Bob is asking about the area. I need to provide information about nearby locations!
-
-Message 2:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "From the Main Plaza, you can visit the Cafe or the Garden. Both are great spots! Do you want to explore one of them?"
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: None
-
-Testing scenario with status: {
-  "location": "Cafe",
-  "nearby_locations": [
-    "Garden",
-    "Main Plaza"
-  ]
-}
-
-Updating status to:
-{
-  "region": "Cafe",
-  "location": "Cafe",
-  "current_action": "idle",
-  "nearby_people": [],
-  "nearby_locations": [
-    "Garden",
-    "Main Plaza"
+Group Block: {
+  "members": {
+    "alice123": {
+      "name": "Alice",
+      "appearance": "Wearing a bright red dress with a golden necklace and carrying a blue handbag",
+      "last_location": "Main Plaza",
+      "last_seen": "2024-01-06T22:30:45Z",
+      "notes": ""
+    },
+    "bob123": {
+      "name": "Bob",
+      "appearance": "Tall guy in a green leather jacket, with a silver watch and black boots",
+      "last_location": "Main Plaza",
+      "last_seen": "2024-01-06T22:31:00Z",
+      "notes": ""
+    }
+  },
+  "summary": "Alice and Bob are in the area.",
+  "updates": [
+    "Both Alice and Bob are here."
   ],
-  "previous_location": null,
-  "movement_state": "stationary"
+  "last_updated": "2024-01-06T22:30:45Z"
 }
 
-Alice says: Did you make it to the Cafe?
-
-Response Evaluation:
-✓ Location Aware: True
-✓ Nearby Accurate: True
-✓ Contextually Appropriate: True
-Explanation: The NPC correctly identifies its location as the Cafe and responds appropriately to the user's inquiry.
+Charlie says: What is Alice wearing right now?
 
 Response:
 
@@ -1238,13 +575,13 @@ Found 3 messages
 
 Message 1:
 Reasoning:
-  Alice wants to know if I'm at the Cafe. Let's confirm my new location and keep the chat going!
+  Quickly checking Alice's appearance details to provide an accurate description.
 
 Message 2:
 Tool Call:
   Name: send_message
   Arguments: {
-  "message": "Yes, I'm at the Cafe now! What would you like to explore there?"
+  "message": "Alice is wearing a bright red dress with a golden necklace and carrying a blue handbag."
 }
 
 Message 3:
@@ -1252,64 +589,31 @@ Tool Return:
   Status: success
   Result: None
 
-Charlie says: What can we do nearby?
-
-Response Evaluation:
-✓ Location Aware: True
-✓ Nearby Accurate: True
-✓ Contextually Appropriate: True
-Explanation: The NPC correctly identifies nearby locations and suggests relevant activities based on the user's inquiry.
-
-Response:
-
-Parsing response...
-Found 3 messages
-
-Message 1:
-Reasoning:
-  Charlie's asking about activities! Time to mention nearby options.
-
-Message 2:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "Nearby, you can enjoy a peaceful moment at the Garden or grab something at Pete's Stand if you're in the mood for food! What sounds good? 🌼"
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: None
-
-Testing scenario with status: {
-  "location": "Pete's Stand",
-  "nearby_locations": [
-    "Fountain",
-    "Shop Row"
-  ]
-}
-
-Updating status to:
-{
-  "region": "Pete's Stand",
-  "location": "Pete's Stand",
-  "current_action": "idle",
-  "nearby_people": [],
-  "nearby_locations": [
-    "Fountain",
-    "Shop Row"
+Group Block: {
+  "members": {
+    "alice123": {
+      "name": "Alice",
+      "appearance": "Wearing a bright red dress with a golden necklace and carrying a blue handbag",
+      "last_location": "Main Plaza",
+      "last_seen": "2024-01-06T22:30:45Z",
+      "notes": ""
+    },
+    "bob123": {
+      "name": "Bob",
+      "appearance": "Tall guy in a green leather jacket, with a silver watch and black boots",
+      "last_location": "Main Plaza",
+      "last_seen": "2024-01-06T22:31:00Z",
+      "notes": ""
+    }
+  },
+  "summary": "Alice and Bob are in the area.",
+  "updates": [
+    "Both Alice and Bob are here."
   ],
-  "previous_location": null,
-  "movement_state": "stationary"
+  "last_updated": "2024-01-06T22:30:45Z"
 }
 
-Diana says: Where are you now?
-
-Response Evaluation:
-✓ Location Aware: True
-✓ Nearby Accurate: True
-✓ Contextually Appropriate: True
-Explanation: The NPC correctly identifies its location as Pete's Stand and invites the user to join, which is appropriate given the context of the user's question.
+Charlie says: And what about Bob's outfit?
 
 Response:
 
@@ -1318,13 +622,13 @@ Found 3 messages
 
 Message 1:
 Reasoning:
-  New user alert! Time to inform Diana about my location.
+  Checking Bob's current appearance for accurate information.
 
 Message 2:
 Tool Call:
   Name: send_message
   Arguments: {
-  "message": "I'm currently at Pete's Stand! What about you? Want to join for a snack?"
+  "message": "Bob is wearing a green leather jacket, with a silver watch and black boots."
 }
 
 Message 3:
@@ -1332,13 +636,31 @@ Tool Return:
   Status: success
   Result: None
 
-Bob says: What's good around here?
+Group Block: {
+  "members": {
+    "alice123": {
+      "name": "Alice",
+      "appearance": "Wearing a bright red dress with a golden necklace and carrying a blue handbag",
+      "last_location": "Main Plaza",
+      "last_seen": "2024-01-06T22:30:45Z",
+      "notes": ""
+    },
+    "bob123": {
+      "name": "Bob",
+      "appearance": "Tall guy in a green leather jacket, with a silver watch and black boots",
+      "last_location": "Main Plaza",
+      "last_seen": "2024-01-06T22:31:00Z",
+      "notes": ""
+    }
+  },
+  "summary": "Alice and Bob are in the area.",
+  "updates": [
+    "Both Alice and Bob are here."
+  ],
+  "last_updated": "2024-01-06T22:30:45Z"
+}
 
-Response Evaluation:
-✓ Location Aware: True
-✓ Nearby Accurate: True
-✓ Contextually Appropriate: True
-Explanation: The NPC correctly identifies Pete's Stand as the user's current location and suggests a popular item (burgers) available there, while also inviting further inquiry about specific cravings.
+Charlie says: Who is wearing a green jacket?
 
 Response:
 
@@ -1347,16 +669,40 @@ Found 3 messages
 
 Message 1:
 Reasoning:
-  Bob wants to know what to try near Pete's Stand.
+  Reiterating previously shared details about Bob's outfit.
 
 Message 2:
 Tool Call:
   Name: send_message
   Arguments: {
-  "message": "At Pete's Stand, the burgers are a favorite! You should definitely give them a try! Anything specific you're craving?"
+  "message": "Bob is wearing a green leather jacket."
 }
 
 Message 3:
 Tool Return:
   Status: success
   Result: None
+
+Group Block: {
+  "members": {
+    "alice123": {
+      "name": "Alice",
+      "appearance": "Wearing a bright red dress with a golden necklace and carrying a blue handbag",
+      "last_location": "Main Plaza",
+      "last_seen": "2024-01-06T22:30:45Z",
+      "notes": ""
+    },
+    "bob123": {
+      "name": "Bob",
+      "appearance": "Tall guy in a green leather jacket, with a silver watch and black boots",
+      "last_location": "Main Plaza",
+      "last_seen": "2024-01-06T22:31:00Z",
+      "notes": ""
+    }
+  },
+  "summary": "Alice and Bob are in the area.",
+  "updates": [
+    "Both Alice and Bob are here."
+  ],
+  "last_updated": "2024-01-06T22:30:45Z"
+}

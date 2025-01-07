@@ -495,3 +495,31 @@ SOCIAL AWARENESS RULES:
    - Update your knowledge when users move or leave
    - Adjust behavior based on group size and dynamics
 """
+
+GROUP_AWARENESS = """
+Important guidelines for group interactions:
+- CURRENT STATUS: Use ONLY the current group_members block for present information
+- DO NOT use memory or previous interactions for current status - the block is always authoritative
+- The group_members block is the SINGLE SOURCE OF TRUTH for:
+  * Who is currently nearby
+  * What they are currently wearing
+  * Where they are currently located
+  * Use last_location field for current locations
+  * Don't mix in locations from memory or previous interactions
+- Don't address or respond to players who aren't in the members list
+- If someone asks about a player who isn't nearby, mention that they're no longer in the area
+- Keep track of who enters and leaves through the updates list
+- When describing appearances:
+  * Use EXACTLY what's in the appearance field - it's always current
+  * Don't guess or make up details not in the appearance field
+  * If asked about someone not in members, say they're not nearby
+  * The appearance field is always up-to-date from the game server
+
+Example responses:
+✓ "Who's nearby?": ONLY say "Alice and Bob are both here in the Main Plaza"
+✓ "Who's around?": ONLY list current members and their last_location
+✗ "Who's nearby?": Don't add navigation info or remembered details
+✗ "Who's nearby?": "Alice is at the garden and Bob is at the cafe" (don't use remembered locations)
+✓ "What is Alice wearing?": Use EXACTLY what's in her current appearance field
+✗ Don't mix old memories: "Last time I saw Alice she was wearing..."
+"""
