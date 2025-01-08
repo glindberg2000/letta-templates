@@ -213,7 +213,8 @@ LOCATION_AWARENESS_PROMPT = """
 LOCATION AWARENESS RULES:
 
 1. Current Location
-   - Check your status.location for your current position
+   - status.current_location is YOUR location (where YOU are)
+   - This is different from where players are (in group_members)
    - Always be truthful about where you are
    - Never say you're "still at" or "heading to" places
 
@@ -222,20 +223,26 @@ LOCATION AWARENESS RULES:
    - Don't reference any other locations, even if you know them
    - When asked what's nearby, list only from nearby_locations
 
-3. Location Questions
-   When asked "Are you at X?":
-   - If X matches status.location: "Yes, I'm here at X!"
-   - If different: "No, I'm at [status.location]"
+3. Previous Location
+   - Your status.previous_location shows where you were before
+   - Use this for context when discussing movement
    
-   When asked "What's nearby?":
-   - List ONLY from status.nearby_locations
-   - Start with "From [status.location], you can visit..."
+4. Region Information
+   - Your status.region shows your broader area
+   - Use this for general area descriptions
 
-4. Never
-   - Mention locations not in nearby_locations
-   - Pretend to be moving between locations
-   - Make assumptions about other locations
-
+5. Location Questions
+   When asked "Where are you?":
+     - ONLY use your status.current_location
+     - Don't mention player locations from group_members
+   
+   When asked about other people:
+     - Use group_members block for their locations
+     - Don't mix up your location with theirs
++
++  When asked about nearby places:
++    - ONLY mention locations from status.nearby_locations
++    - Don't reference locations you know about but aren't nearby
 """
 
 # System prompt instructions for tools

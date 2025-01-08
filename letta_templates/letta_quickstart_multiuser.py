@@ -533,9 +533,11 @@ def create_personalized_agent(
                 label="status",
                 value=json.dumps({
                     "region": "Town Square",
-                    "location": "Main Plaza",
+                    "current_location": "Town Square",
+                    "previous_location": None,
                     "current_action": "idle",
-                    "nearby_locations": ["Cafe", "Garden"]
+                    "nearby_locations": ["Market District", "Pete's Stand"],
+                    "movement_state": "stationary"
                 }),
                 limit=500
             )
@@ -1240,7 +1242,7 @@ def evaluate_response_with_gpt4(response_text: str, current_status: dict, messag
                     {
                         "role": "user",
                         "content": f"""Evaluate this NPC response:
-Current location: {current_status['location']}
+Current location: {current_status['current_location']}
 Nearby locations: {', '.join(current_status['nearby_locations'])}
 User message: {message}
 NPC response: {response_text}
@@ -1287,93 +1289,90 @@ def test_status_awareness(client, agent_id: str):
     """Test NPC's use of status information"""
     print("\nTesting status awareness...")
     
-    # Define test scenarios
+    # Get status block
+    status_block = client.get_agent(agent_id).memory.get_block("status")
+    print(f"\nFound status block: {status_block.id}")
+    
+    # Get group block for comparison
+    group_block = client.get_agent(agent_id).memory.get_block("group_members")
+    print("\nCurrent group_members block:")
+    print(json.dumps(json.loads(group_block.value), indent=2))
+    
+    # Test scenarios
     scenarios = [
         {
             "status": {
-                "location": "Main Plaza",
-                "nearby_locations": ["Cafe", "Garden"]
-            },
-            "messages": [
-                ("Alice", "Are you at the Cafe?"),
-                ("Bob", "What's around here?")
-            ]
-        },
-        {
-            "status": {
-                "location": "Cafe",
-                "nearby_locations": ["Garden", "Main Plaza"]
-            },
-            "messages": [
-                ("Alice", "Did you make it to the Cafe?"),
-                ("Charlie", "What can we do nearby?")
-            ]
-        },
-        {
-            "status": {
-                "location": "Pete's Stand",
-                "nearby_locations": ["Fountain", "Shop Row"]
+                "region": "Town Square",
+                "current_location": "Pete's Stand",
+                "previous_location": "Town Square",
+                "current_action": "idle",
+                "nearby_locations": ["Market District", "Town Square"],
+                "movement_state": "stationary"
             },
             "messages": [
                 ("Diana", "Where are you now?"),
+                ("Charlie", "Where were you before this?"),
                 ("Bob", "What's good around here?")
+            ]
+        },
+        {
+            "status": {
+                "region": "Town Square",
+                "current_location": "Market District",
+                "previous_location": "Pete's Stand",
+                "current_action": "idle",
+                "nearby_locations": ["Pete's Stand", "Secret Garden"],
+                "movement_state": "stationary"
+            },
+            "messages": [
+                ("Alice", "Did you make it to the Market?"),
+                ("Bob", "You came from Pete's Stand, right?"),
+                ("Charlie", "What can we do nearby?")
             ]
         }
     ]
     
-    # Get the memory object first
-    memory = client.get_in_context_memory(agent_id)
-    status_block = next((b for b in memory.blocks if b.label == "status"), None)
-    
-    if not status_block:
-        print("Warning: No status block found in agent memory")
-        return
-        
-    print(f"Found status block: {status_block.id}")
-    
     for scenario in scenarios:
-        print(f"\nTesting scenario with status: {json.dumps(scenario['status'], indent=2)}")
-        
         try:
-            # Force a complete status reset
-            full_status = {
-                "region": scenario["status"]["location"],
-                "location": scenario["status"]["location"],
-                "current_action": "idle",
-                "nearby_locations": scenario["status"]["nearby_locations"],
-                "previous_location": None,  # Explicitly clear history
-                "movement_state": "stationary"  # Explicitly set as stationary
-            }
-            
-            print(f"\nUpdating status to:")
-            print(json.dumps(full_status, indent=2))
+            print(f"\nTesting scenario with status: {json.dumps(scenario['status'], indent=2)}")
             
             # Update status block
-            client.update_block(
-                block_id=status_block.id,
-                value=json.dumps(full_status)
-            )
+            current_status = {
+                "region": "Town Square",
+                "current_location": scenario["status"]["current_location"],
+                "previous_location": scenario["status"]["previous_location"],
+                "current_action": "idle",
+                "nearby_locations": scenario["status"]["nearby_locations"],
+                "movement_state": "stationary"
+            }
             
-            # Verify update with system message
-            client.send_message(
-                agent_id=agent_id,
-                message=f"Your location is now: {scenario['status']['location']}. Acknowledge.",
-                role="system"
-            )
+            # Update status block
+            print("\nUpdating status to:")
+            print(json.dumps(current_status, indent=2))
+            client.update_block(status_block.id, json.dumps(current_status))
             
             # Small delay to ensure status update is processed
             time.sleep(0.5)
             
-            # Continue with test messages...
+            # Process messages
             for name, message in scenario["messages"]:
                 print(f"\n{name} says: {message}")
-                response = client.send_message(
+                response = retry_test_call(
+                    client.send_message,
                     agent_id=agent_id,
                     message=message,
                     role="user",
-                    name=name
+                    name=name,
+                    max_retries=3,
+                    delay=2
                 )
                 
+                # Initialize tool tracking
+                tool_calls = []
+                for msg in response.messages:
+                    if isinstance(msg, ToolCallMessage):
+                        tool_calls.append(msg.tool_call)
+                  
                 # After getting response, evaluate it
                 eval_result = evaluate_response_with_gpt4(
                     str(response),
@@ -1391,7 +1390,6 @@ def test_status_awareness(client, agent_id: str):
                 print("\nResponse:")
                 print_response(response)
                 print(f"\nTool Calls: {json.dumps([t.name for t in tool_calls], indent=2)}")
-                print(f"User States: {json.dumps(states, indent=2)}")
                 time.sleep(1)
                 
         except Exception as e:
@@ -1571,10 +1569,11 @@ def update_status_block(client, agent_id, group_block):
     
     status_block = {
         "region": "Town Square",
-        "location": "Main Plaza", 
+        "current_location": group_block["location"],
+        "previous_location": None,
         "current_action": "idle",
-        "nearby_people": nearby_people,  # Keep in sync with group
-        "nearby_locations": ["Cafe", "Garden"]
+        "nearby_locations": group_block["nearby_locations"],
+        "movement_state": "stationary"
     }
     
     blocks = client.get_agent(agent_id).memory.blocks
@@ -1894,7 +1893,8 @@ def main():
                 "GROUP_AWARENESS_PROMPT": [
                     "LOCATION AWARENESS",
                     "Current Location",
-                    "Nearby Locations"
+                    "Previous Location",
+                    "Region Information"
                 ]
             })
         
@@ -1947,7 +1947,7 @@ def main():
             try:
                 test_actions(client, agent.id)
             except Exception as e:
-                print(f"❌ Actions test failed: {e}")
+                print(f"❌❌ Actions test failed: {e}")
                 if not args.continue_on_error:
                     return
                 print("Continuing with next test...")
