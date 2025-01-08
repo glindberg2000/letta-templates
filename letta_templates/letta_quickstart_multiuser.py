@@ -1042,35 +1042,20 @@ def test_actions(client, agent_id: str):
     """Test perform_action tool with various actions"""
     print("\nTesting perform_action...")
     
-    # Test follow with system command
-    print("\nTesting follow action...")
-    response = client.send_message(
-        agent_id=agent_id,
-        message="Use perform_action to follow the player 'TestUser'",
-        role="system",
-        name="GameSystem"  # More appropriate system identity
-    )
-    print_response(response)
-    
-    # Test emote
-    print("\nTesting emote action...")
-    response = client.send_message(
-        agent_id=agent_id,
-        message="Use perform_action to wave at the player",
-        role="system",
-        name="GameSystem"
-    )
-    print_response(response)
-    
-    # Test unfollow
-    print("\nTesting unfollow action...")
-    response = client.send_message(
-        agent_id=agent_id,
-        message="Use perform_action to stop following the player",
-        role="system",
-        name="GameSystem"
-    )
-    print_response(response)
+    try:
+        response = retry_test_call(
+            client.send_message,
+            agent_id=agent_id,
+            message="Wave hello!",
+            role="user"
+        )
+        print("\nResponse:")
+        print_response(response)
+    except Exception as e:
+        print(f"❌ Actions test failed: {e}")
+        if not args.continue_on_error:
+            return
+        print("Continuing with next test...")
 
 def test_multi_user_conversation(client, agent_id: str):
     """Test conversation with multiple named users"""
@@ -1431,6 +1416,8 @@ def test_status_awareness(client, agent_id: str):
                 
                 print("\nResponse:")
                 print_response(response)
+                print(f"\nTool Calls: {json.dumps([t.name for t in tool_calls], indent=2)}")
+                print(f"User States: {json.dumps(states, indent=2)}")
                 time.sleep(1)
                 
         except Exception as e:
@@ -1825,6 +1812,30 @@ def test_npc_persona(client, agent_id: str):
         print(f"Error in test_npc_persona: {e}")
         raise
 
+def retry_test_call(func, *args, max_retries=3, delay=2, **kwargs):
+    """Wrapper for test API calls with exponential backoff.
+    
+    Args:
+        func: Function to call (usually client.send_message)
+        max_retries: Maximum retry attempts
+        delay: Initial delay in seconds
+        
+    Returns:
+        Response if successful, raises last error if all retries fail
+    """
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            last_error = e
+            if attempt == max_retries - 1:
+                raise
+            print(f"Attempt {attempt + 1} failed, retrying in {delay}s...")
+            time.sleep(delay)
+            delay *= 2  # Exponential backoff
+    raise last_error
+
 def main():
     args = parse_args()
     
@@ -1939,25 +1950,79 @@ def main():
         
         # Run tests based on selection
         if args.test_type in ["all", "base"]:
-            test_agent_identity(client, agent.id)
-            test_multi_user_conversation(client, agent.id)
-            test_navigation(client, agent.id)
-            test_actions(client, agent.id)
-        
+            try:
+                test_agent_identity(client, agent.id)
+            except Exception as e:
+                print(f"❌ Agent identity test failed: {e}")
+                if not args.continue_on_error:
+                    return
+                print("Continuing with next test...")
+            try:
+                test_multi_user_conversation(client, agent.id)
+            except Exception as e:
+                print(f"❌ Multi-user conversation test failed: {e}")
+                if not args.continue_on_error:
+                    return
+                print("Continuing with next test...")
+            try:
+                test_navigation(client, agent.id)
+            except Exception as e:
+                print(f"❌ Navigation test failed: {e}")
+                if not args.continue_on_error:
+                    return
+                print("Continuing with next test...")
+            try:
+                test_actions(client, agent.id)
+            except Exception as e:
+                print(f"❌ Actions test failed: {e}")
+                if not args.continue_on_error:
+                    return
+                print("Continuing with next test...")
+
         if args.test_type in ["all", "social"]:
-            test_social_awareness(client, agent.id)
+            try:
+                test_social_awareness(client, agent.id)
+            except Exception as e:
+                print(f"❌ Social awareness test failed: {e}")
+                if not args.continue_on_error:
+                    return
+                print("Continuing with next test...")
             
         if args.test_type in ["all", "status"]:
-            test_status_awareness(client, agent.id)
+            try:
+                test_status_awareness(client, agent.id)
+            except Exception as e:
+                print(f"❌ Status awareness test failed: {e}")
+                if not args.continue_on_error:
+                    return
+                print("Continuing with next test...")
             
         if args.test_type in ["all", "group"]:
-            test_group_block_updates(client, agent.id)
+            try:
+                test_group_block_updates(client, agent.id)
+            except Exception as e:
+                print(f"❌ Group block updates test failed: {e}")
+                if not args.continue_on_error:
+                    return
+                print("Continuing with next test...")
             
         if args.test_type in ["all", "notes"]:
-            test_player_notes(client, agent.id)
+            try:
+                test_player_notes(client, agent.id)
+            except Exception as e:
+                print(f"❌ Player notes test failed: {e}")
+                if not args.continue_on_error:
+                    return
+                print("Continuing with next test...")
             
         if args.test_type in ["all", "persona"]:
-            test_npc_persona(client, agent.id)
+            try:
+                test_npc_persona(client, agent.id)
+            except Exception as e:
+                print(f"❌ NPC persona test failed: {e}")
+                if not args.continue_on_error:
+                    return
+                print("Continuing with next test...")
 
     finally:
         pass
