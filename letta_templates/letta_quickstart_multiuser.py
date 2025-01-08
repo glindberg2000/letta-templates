@@ -6,7 +6,7 @@ from letta.prompts import gpt_system
 import json
 import time
 import argparse
-from typing import Optional
+from typing import Optional, Any
 import sys
 from letta.schemas.tool import ToolUpdate
 from letta.schemas.message import (
@@ -24,15 +24,38 @@ from letta_templates.npc_tools import (
     examine_object,
     TOOL_REGISTRY,
     SOCIAL_AWARENESS_PROMPT,
-    GROUP_AWARENESS
+    GROUP_AWARENESS,
+    BASE_PROMPT,
+    test_echo
 )
 import requests
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import logging
+import inspect
+from textwrap import dedent
 
 # Load environment variables
 load_dotenv()
+
+BASE_TOOLS = {
+    "send_message",
+    "conversation_search",
+    "archival_memory_insert",
+    "archival_memory_search",
+    "core_memory_append",
+    "core_memory_replace"
+}
+
+# Define our custom tools that we manage
+CUSTOM_TOOLS = {
+    #"group_memory_append": group_memory_append,
+    #"group_memory_replace": group_memory_replace,
+    "navigate_to": navigate_to,
+    "navigate_to_coordinates": navigate_to_coordinates,
+    "perform_action": perform_action,
+    "examine_object": examine_object
+}
 
 def print_agent_details(client, agent_id, stage=""):
     """
@@ -122,10 +145,10 @@ def create_roblox_agent(client, name: str, persona: str = None):
             embedding_chunk_size=300,
         ),
         llm_config=LLMConfig(
-            model="gpt-4o-mini",
+            model="gpt-3.5-turbo",
             model_endpoint_type="openai",
             model_endpoint="https://api.openai.com/v1",
-            context_window=128000,
+            context_window=4000,
         ),
         memory=ChatMemory(
             persona="A helpful NPC guide",
@@ -360,12 +383,8 @@ def create_personalized_agent(
     timestamp = int(time.time())
     unique_name = f"{name}_{timestamp}"
     
-    # Modify system prompt to remove Letta/Limnal references
-    base_system = gpt_system.get_system_text("memgpt_chat")
-    base_system = base_system.replace(
-        "You are Letta, the latest version of Limnal Corporation's digital companion",
-        f"You are {name}, a helpful NPC guide in this game world"
-    )
+    # Format base prompt with assistant name
+    base_system = BASE_PROMPT.format(assistant_name=name)
     
     # Combine prompts in specific order
     system_prompt = (
@@ -441,7 +460,7 @@ def create_personalized_agent(
                             "last_seen": "2024-01-06T22:30:45Z",
                             "notes": "Interested in exploring the garden"
                         },
-                        "player456": {
+                        "bob123": {  # Match the ID we use in test
                             "name": "Bob",
                             "appearance": "Tall with green jacket",
                             "last_location": "Cafe",
@@ -452,8 +471,7 @@ def create_personalized_agent(
                     "summary": "Alice is in Main Plaza interested in the garden. Bob is at the Cafe looking for Pete's Stand.",
                     "updates": [
                         "Alice has joined the group at Main Plaza.",
-                        "Bob has returned to the group at the Cafe.",
-                        "Charlie said goodbye and left the area."
+                        "Bob has returned to the group at the Cafe."
                     ],
                     "last_updated": "2024-01-06T22:35:00Z"
                 }),
@@ -521,7 +539,7 @@ def create_personalized_agent(
     print("\nConfigs:")
     print(f"LLM: {llm_config.model} via {llm_config.model_endpoint_type}")
     print(f"Embeddings: {embedding_config.embedding_model}")
-    print(f"Include base tools: {True}")
+    print(f"Include base tools: {False}")
     
     # Create agent first
     agent = client.create_agent(
@@ -530,14 +548,29 @@ def create_personalized_agent(
         llm_config=llm_config,
         memory=memory,
         system=system_prompt,
-        include_base_tools=True,
+        include_base_tools=False,  # We'll add tools manually
         description="A Roblox development assistant"
     )
     
-    # Create and attach custom tools
-    print("\nSetting up custom tools:")
+    # Add selected base tools first
+    base_tools = [
+        "send_message",
+        "conversation_search",
+        "archival_memory_search",  # Read from memory
+        "archival_memory_insert"   # Write to memory
+    ]
+    
+    # Get existing tools
     existing_tools = {t.name: t.id for t in client.list_tools()}
     
+    # Add base tools
+    for tool_name in base_tools:
+        if tool_name in existing_tools:
+            print(f"Adding base tool: {tool_name}")
+            client.add_tool_to_agent(agent.id, existing_tools[tool_name])
+    
+    # Create and attach custom tools
+    print("\nSetting up custom tools:")
     for name, tool_info in TOOL_REGISTRY.items():
         try:
             # Check if tool already exists
@@ -781,7 +814,7 @@ def parse_args():
     parser.add_argument("--custom-tools", action="store_true", help="Use custom tools")
     parser.add_argument(
         "--test-type",
-        choices=["all", "base", "social", "status", "group"],
+        choices=['all', 'base', 'social', 'status', 'group', 'notes'],
         default="all",
         help="Select which tests to run (all, base, social, status, or group)"
     )
@@ -1179,68 +1212,6 @@ def test_social_awareness(client, agent_id: str):
     ]
     
     states = {"users": {}}
-    
-    for name, message in social_tests:
-        print(f"\n{name} says: {message}")
-        response = client.send_message(
-            agent_id=agent_id,
-            message=message,
-            role="user",
-            name=name
-        )
-        
-        # Track and verify proper tool usage
-        tool_calls = []
-        message_contents = []
-        
-        for msg in response.messages:
-            if isinstance(msg, ToolCallMessage):
-                tool = msg.tool_call
-                tool_calls.append(tool)
-                if tool.name == "send_message":
-                    message_contents.append(json.loads(tool.arguments)["message"])
-                
-                if tool.name == "navigate_to":
-                    states["users"] = update_user_state(
-                        name, 
-                        location=json.loads(tool.arguments)["destination"]
-                    )
-                elif tool.name == "perform_action":
-                    args = json.loads(tool.arguments)
-                    if args.get("action") == "follow":
-                        states["users"] = update_user_state(
-                            name,
-                            following=args.get("target")
-                        )
-        
-        # Verify proper tool sequences
-        if any("goodbye" in msg.lower() for msg in message_contents):
-            wave_found = any(
-                t.name == "perform_action" and "wave" in t.arguments.lower() 
-                for t in tool_calls
-            )
-            move_found = any(
-                t.name == "navigate_to" for t in tool_calls
-            )
-            if wave_found and move_found:
-                print("✓ Proper goodbye sequence (wave + move)")
-            else:
-                print("✗ Missing proper goodbye sequence")
-                
-        # Verify [SILENCE] in direct messages
-        if "@" in message or message.lower().startswith(("hey ", "hi ")):
-            target = message.split()[1].strip("@,!")
-            if target != "Emma":  # Use agent name
-                if any("[SILENCE]" in msg for msg in message_contents):
-                    print("✓ Correctly remained silent in direct message")
-                else:
-                    print("✗ Should have remained silent")
-        
-        print("\nResponse:")
-        print_response(response)
-        print(f"\nTool Calls: {json.dumps([t.name for t in tool_calls], indent=2)}")
-        print(f"User States: {json.dumps(states, indent=2)}")
-        time.sleep(1)
 
 def evaluate_response_with_gpt4(response_text: str, current_status: dict, message: str):
     """Evaluate NPC response using GPT-4o-mini"""
@@ -1605,6 +1576,114 @@ def update_status_block(client, agent_id, group_block):
     status_block_id = [b.id for b in blocks if b.label == "status"][0]
     client.update_block(status_block_id, json.dumps(status_block))
 
+def create_or_update_tool(client, tool_name: str, tool_func, verbose: bool = True) -> Any:
+    """Create a new tool or update if it exists.
+    
+    Args:
+        client: Letta client instance
+        tool_name: Name of the tool
+        tool_func: Function to create/update tool with
+        verbose: Whether to print status messages
+    
+    Returns:
+        Tool object from create/update operation
+    
+    Raises:
+        ValueError: If attempting to modify a base tool
+    """
+    # Protect base tools
+    if tool_name in BASE_TOOLS:
+        raise ValueError(f"Cannot modify base tool: {tool_name}")
+
+    try:
+        # List all tools
+        existing_tools = {t.name: t.id for t in client.list_tools()}
+        
+        if tool_name in existing_tools:
+            if verbose:
+                print(f"\nDeleting old tool: {tool_name}")
+                print(f"Tool ID: {existing_tools[tool_name]}")
+            client.delete_tool(existing_tools[tool_name])
+            
+            # Create new tool
+            if verbose:
+                print(f"Creating new tool: {tool_name}")
+            tool = client.create_tool(tool_func, name=tool_name)
+            
+            return tool
+        else:
+            # Create new tool
+            if verbose:
+                print(f"Creating new tool: {tool_name}")
+            tool = client.create_tool(tool_func, name=tool_name)
+            
+            return tool
+        
+    except Exception as e:
+        print(f"Error in create_or_update_tool for {tool_name}: {str(e)}")
+        raise
+
+def test_echo(message: str) -> str:
+    """A simple test tool that echoes back the input with a timestamp.
+    
+    Args:
+        message: The message to echo
+    
+    Returns:
+        The same message with timestamp
+    """
+    timestamp = time.strftime('%H:%M:%S')
+    return f"[TEST_ECHO_V3 @ {timestamp}] {message} (echo...Echo...ECHO!)"
+
+def test_player_notes(client, agent_id: str):
+    print("\nTesting player notes functionality...")
+    
+    try:
+        # Print initial state
+        print("\nInitial group state:")
+        initial_block = json.loads(client.get_agent(agent_id).memory.get_block("group_members").value)
+        print(json.dumps(initial_block, indent=2))
+        
+        # Test scenarios for notes
+        scenarios = [
+            # Bob shares his nickname
+            ("Bob", "You can call me Bobby, by the way!"),
+            ("Charlie", "What does Bob prefer to be called?"),
+            
+            # Bob shares his hobby
+            ("Bob", "I love surfing, especially at sunset!"),
+            ("Charlie", "What does Bob like to do?"),
+            
+            # Bob shares multiple details
+            ("Bob", "I'm a chef at Pete's and I make the best burgers in town!"),
+            ("Charlie", "What do we know about Bob?")
+        ]
+        
+        for speaker, message in scenarios:
+            print(f"\n{speaker} says: {message}")
+            response = client.send_message(
+                agent_id=agent_id,
+                message=message,
+                role="user",
+                name=speaker
+            )
+            print("\nResponse:")
+            print_response(response)
+            
+            # Get updated notes after each interaction
+            updated_block = json.loads(client.get_agent(agent_id).memory.get_block("group_members").value)
+            print("\nCurrent notes for Bob:", updated_block["members"]["bob123"]["notes"])
+            time.sleep(1)
+            
+        # Print final state of entire block
+        print("\nFinal group_members block state:")
+        final_block = json.loads(client.get_agent(agent_id).memory.get_block("group_members").value)
+        print(json.dumps(final_block, indent=2))
+            
+    except Exception as e:
+        print(f"Error in test_player_notes: {e}")
+        raise
+
 def main():
     args = parse_args()
     
@@ -1726,6 +1805,9 @@ def main():
             
         if args.test_type in ["all", "group"]:
             test_group_block_updates(client, agent.id)
+            
+        if args.test_type in ["all", "notes"]:
+            test_player_notes(client, agent.id)
 
     finally:
         pass

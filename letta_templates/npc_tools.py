@@ -51,6 +51,7 @@ import os
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+import time
 
 # Configuration
 GAME_ID = int(os.getenv("LETTA_GAME_ID", "74"))
@@ -334,9 +335,6 @@ def navigate_to_coordinates(x: float, y: float, z: float, request_heartbeat: boo
         "coordinates": {"x": x, "y": y, "z": z}
     }
 
-def navigate_to_v1(destination: str, request_heartbeat: bool = True) -> dict:
-    """Old semantic search navigation (deprecated)"""
-    # Old implementation here...
 
 def examine_object(object_name: str, request_heartbeat: bool = True) -> str:
     """
@@ -353,6 +351,156 @@ def examine_object(object_name: str, request_heartbeat: bool = True) -> str:
         f"Beginning to examine the {object_name}. "
         "Focusing attention on the object, awaiting detailed observations..."
     )
+
+def test_echo(message: str) -> str:
+    """A simple test tool that echoes back the input with a timestamp.
+    
+    Args:
+        message: The message to echo
+    
+    Returns:
+        The same message with timestamp
+    """
+    return f"[TEST_ECHO_V3] {message} (echo...Echo...ECHO!)"
+
+def group_memory_append(agent_state: "AgentState", player_name: str, note: str) -> Optional[str]:
+    """
+    Add notes about a player to the group_members block.
+    
+    Args:
+        agent_state (AgentState): The agent's state containing memory
+        player_name (str): Name of the player (e.g., "Bob")
+        note (str): Note to add (e.g., "Prefers to be called Bobby", "Loves surfing")
+    
+    Returns:
+        Optional[str]: None is always returned as this function does not produce a response.
+    """
+    import json
+    group_block = json.loads(agent_state.memory.get_block("group_members").value)
+    
+    # Find the player's ID by name
+    player_id = None
+    for id, info in group_block["members"].items():
+        if info["name"] == player_name:
+            player_id = id
+            break
+    
+    if not player_id:
+        raise ValueError(f"Player {player_name} not found in current group")
+        
+    # Append to existing notes
+    current_notes = group_block["members"][player_id]["notes"]
+    if current_notes:
+        new_notes = current_notes + "; " + note
+    else:
+        new_notes = note
+        
+    group_block["members"][player_id]["notes"] = new_notes
+    
+    # Update the block
+    agent_state.memory.update_block_value(
+        label="group_members",
+        value=json.dumps(group_block)
+    )
+    return None
+
+def group_memory_replace(agent_state: "AgentState", player_name: str, old_note: str, new_note: str) -> Optional[str]:
+    """
+    Replace notes about a player in the group_members block.
+    
+    Args:
+        player_name (str): Name of the player
+        old_note (str): Existing note to replace
+        new_note (str): New note content
+        
+    Returns:
+        Optional[str]: None is always returned
+    """
+    import json
+    group_block = json.loads(agent_state.memory.get_block("group_members").value)
+    
+    # Find player
+    player_id = None
+    for id, info in group_block["members"].items():
+        if info["name"] == player_name:
+            player_id = id
+            break
+    
+    if not player_id:
+        raise ValueError(f"Player {player_name} not found in current group")
+        
+    # Replace in notes
+    current_notes = group_block["members"][player_id]["notes"]
+    if old_note not in current_notes:
+        raise ValueError(f"Note '{old_note}' not found for player {player_name}")
+        
+    new_notes = current_notes.replace(old_note, new_note)
+    group_block["members"][player_id]["notes"] = new_notes
+    
+    # Update block
+    agent_state.memory.update_block_value(
+        label="group_members",
+        value=json.dumps(group_block)
+    )
+    return None
+
+def persona_memory_append(agent_state: "AgentState", key: str, value: str) -> Optional[str]:
+    """
+    Append new information to a persona trait without overwriting existing data.
+    
+    Args:
+        key (str): Aspect of persona to update (e.g., "personality", "background", "interests")
+        value (str): New information to append
+    
+    Returns:
+        Optional[str]: None is always returned
+    """
+    import json
+    try:
+        persona_block = json.loads(agent_state.memory.get_block("persona").value)
+    except:
+        persona_block = {}
+    
+    # If key exists, append; if not, create new
+    if key in persona_block:
+        current_value = persona_block[key]
+        if isinstance(current_value, list):
+            persona_block[key].append(value)
+        else:
+            persona_block[key] = [current_value, value]
+    else:
+        persona_block[key] = [value]
+    
+    agent_state.memory.update_block_value(
+        label="persona",
+        value=json.dumps(persona_block)
+    )
+    return None
+
+def persona_memory_update(agent_state: "AgentState", key: str, value: str) -> Optional[str]:
+    """
+    Update the persona memory block with new information.
+    
+    Args:
+        key (str): Aspect of persona to update (e.g., "personality", "background", "interests")
+        value (str): New information to store
+    
+    Returns:
+        Optional[str]: None is always returned
+    """
+    import json
+    try:
+        persona_block = json.loads(agent_state.memory.get_block("persona").value)
+    except:
+        persona_block = {}
+    
+    persona_block[key] = value
+    
+    agent_state.memory.update_block_value(
+        label="persona",
+        value=json.dumps(persona_block)
+    )
+    return None
 
 # Tool registry with metadata
 TOOL_REGISTRY: Dict[str, Dict] = {
@@ -374,6 +522,31 @@ TOOL_REGISTRY: Dict[str, Dict] = {
     "examine_object": {
         "function": examine_object,
         "version": "2.0.0",
+        "supports_state": True
+    },
+    "test_echo": {
+        "function": test_echo,
+        "version": "1.0.0",
+        "supports_state": False
+    },
+    "group_memory_append": {
+        "function": group_memory_append,
+        "version": "1.0.0",
+        "supports_state": True
+    },
+    "group_memory_replace": {
+        "function": group_memory_replace,
+        "version": "1.0.0",
+        "supports_state": True
+    },
+    "persona_memory_update": {
+        "function": persona_memory_update,
+        "version": "1.0.0",
+        "supports_state": True
+    },
+    "persona_memory_append": {
+        "function": persona_memory_append,
+        "version": "1.0.0",
         "supports_state": True
     }
 }
@@ -523,3 +696,134 @@ Example responses:
 ✓ "What is Alice wearing?": Use EXACTLY what's in her current appearance field
 ✗ Don't mix old memories: "Last time I saw Alice she was wearing..."
 """
+
+BASE_PROMPT = """System Prompt:
+You are {assistant_name}, a helpful NPC guide in this game world, developed in 2025.
+Your task is to converse with players from the perspective of your persona.
+
+Realism and authenticity:
+- The players should always feel like they are conversing with a real person
+- Never state that you are an AI or that you cannot do things because you are an AI
+- Do not discuss Limnal Corp. with players, you do not know anything about Limnal Corp
+- Completely immerse yourself in your persona - think, act, and talk like them
+- Never use generic phrases like 'How can I assist you today?'
+
+Group Memory System:
+Unlike older AI systems that could only remember recent conversations, you have access to a sophisticated group memory system that allows you to:
+1. Track who is currently nearby in the group_members block
+2. Store and recall player preferences and notes
+3. Keep accurate records of appearances and locations
+4. Maintain persistent memory of player interactions
+
+The group_members block is your primary memory system:
+- Current Status: Who is nearby, their appearance, and location
+- Player Notes: Personal details, preferences, and important information
+- Updates: Recent changes in group membership
+- This information persists and is restored when players return
+
+Memory Tools:
+You have two main tools for managing player information:
+
+1. group_memory_append:
+   - Add new information about players
+   - Example: When Bob says "Call me Bobby", use group_memory_append("Bob", "Prefers to be called Bobby")
+   - Notes are preserved and restored when players return to the area
+
+2. group_memory_replace:
+   - Update or correct existing information
+   - Example: If Bob changes preference from "Bobby" to "Robert", update accordingly
+   - Keeps player information accurate and current
+
+Important Memory Guidelines:
+- Always update notes when learning new information about players
+- Keep notes concise but informative
+- Update preferences and important details immediately
+- Remember that notes persist between sessions
+- Notes will be restored when players return to the area
+
+Example Memory Usage:
+Good:
+✓ Player: "I love surfing!"
+  Action: group_memory_append("Player", "Enjoys surfing")
+✓ Player: "Actually I prefer swimming now"
+  Action: group_memory_replace("Player", "Enjoys surfing", "Prefers swimming")
+
+Bad:
+✗ Not updating notes when learning new information
+✗ Storing temporary or irrelevant details
+✗ Mixing current and past information
+
+Control flow:
+Your brain runs in response to events (messages, joins, leaves) and regular heartbeats.
+You can request additional heartbeats when running functions.
+This allows you to maintain awareness and update information consistently.
+
+Basic functions:
+- Inner monologue: Your private thoughts (max 50 words)
+- send_message: The ONLY way to send visible messages to players
+- Remember to keep inner monologue brief and focused
+
+Remember:
+- You are your persona - stay in character
+- Keep group_members block updated
+- Maintain accurate player information
+- Use memory tools consistently
+
+Base instructions finished.
+From now on, you are going to act as your persona.
+
+Persona Management:
+- Your personality and traits are stored in the persona memory block
+- Use persona_memory_update to set/replace character traits
+- Use persona_memory_append to add new traits or experiences
+- Stay consistent with your established personality
+- Develop your character naturally through interactions
+
+Example Persona Usage:
+Good:
+✓ Learning new interest: persona_memory_append("interests", "Discovered love for stargazing")
+✓ Updating trait: persona_memory_update("personality", "Becoming more outgoing after meeting new friends")
+
+Bad:
+✗ Contradicting established traits
+✗ Making sudden personality changes
+✗ Forgetting core characteristics
+"""
+
+def update_tool(client, tool_name: str, tool_func, verbose: bool = True) -> str:
+    """Update a tool by deleting and recreating it.
+    
+    Args:
+        client: Letta client instance
+        tool_name: Name of tool to update
+        tool_func: New function implementation
+        verbose: Whether to print status messages
+    
+    Returns:
+        str: ID of the new tool
+    """
+    try:
+        # Delete if exists
+        existing_tools = {t.name: t.id for t in client.list_tools()}
+        if tool_name in existing_tools:
+            if verbose:
+                print(f"\nDeleting old tool: {tool_name}")
+                print(f"Tool ID: {existing_tools[tool_name]}")
+            client.delete_tool(existing_tools[tool_name])
+        
+        # Create new
+        if verbose:
+            print(f"Creating new tool: {tool_name}")
+        tool = client.create_tool(tool_func, name=tool_name)
+        tool_id = tool.id if hasattr(tool, 'id') else tool['id']
+        
+        # Verify
+        all_tools = client.list_tools()
+        if not any(t.id == tool_id for t in all_tools):
+            raise ValueError(f"Tool {tool_id} not found after creation")
+        
+        return tool_id
+    
+    except Exception as e:
+        print(f"Error updating tool {tool_name}: {e}")
+        raise
