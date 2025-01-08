@@ -479,6 +479,13 @@ def create_personalized_agent(
                             "last_location": "Cafe",
                             "last_seen": "2024-01-06T22:35:00Z",
                             "notes": "Looking for Pete's Stand"
+                        },
+                        "charlie123": {
+                            "name": "Charlie",
+                            "appearance": "Wearing a blue cap",
+                            "last_location": "Main Plaza",
+                            "last_seen": "2024-01-06T22:35:00Z",
+                            "notes": "New to the area"
                         }
                     },
                     "summary": "Alice is in Main Plaza interested in the garden. Bob is at the Cafe looking for Pete's Stand.",
