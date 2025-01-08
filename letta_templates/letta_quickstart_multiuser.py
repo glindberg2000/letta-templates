@@ -1065,31 +1065,6 @@ def test_multi_user_conversation(client, agent_id: str):
         ("Alice", "Can we all sit together when we get there?")
     ]
     
-    # Initialize states at the start
-    states = {"users": {}}  # Initialize empty states dictionary
-    
-    def update_user_state(name: str, location: str = None, following: str = None):
-        # Get current states
-        memory = client.get_in_context_memory(agent_id)
-        user_states_block = next(b for b in memory.blocks if b.label == "user_states")
-        states = json.loads(user_states_block.value)
-        
-        # Update state
-        if name not in states["users"]:
-            states["users"][name] = {"location": None, "following": None}
-        
-        if location:
-            states["users"][name]["location"] = location
-        if following is not None:  # Allow setting to None
-            states["users"][name]["following"] = following
-            
-        # Save back to memory
-        client.update_block(
-            block_id=user_states_block.id,
-            value=json.dumps(states)
-        )
-        return states["users"]
-    
     # Process each message in the conversation
     for name, message in conversation:
         print(f"\n{name} says: {message}")
@@ -1100,24 +1075,8 @@ def test_multi_user_conversation(client, agent_id: str):
             name=name
         )
         
-        # Track tool usage and update memory
-        for msg in response.messages:
-            if isinstance(msg, ToolCallMessage):
-                tool = msg.tool_call
-                if tool.name == "navigate_to":
-                    states["users"] = update_user_state(
-                        name, 
-                        location=json.loads(tool.arguments)["destination"]
-                    )
-                elif tool.name == "perform_action" and "follow" in tool.arguments:
-                    states["users"] = update_user_state(
-                        name,
-                        following=json.loads(tool.arguments)["target"]
-                    )
-        
         print("\nResponse:")
         print_response(response)
-        print(f"\nUser States: {json.dumps(states, indent=2)}")
         time.sleep(1)
 
 async def handle_multi_user_requests(client, agent_id: str, requests: list):
@@ -1212,6 +1171,68 @@ def test_social_awareness(client, agent_id: str):
     ]
     
     states = {"users": {}}
+
+    for name, message in social_tests:
+        print(f"\n{name} says: {message}")
+        response = client.send_message(
+            agent_id=agent_id,
+            message=message,
+            role="user",
+            name=name
+        )
+        
+        # Track and verify proper tool usage
+        tool_calls = []
+        message_contents = []
+        
+        for msg in response.messages:
+            if isinstance(msg, ToolCallMessage):
+                tool = msg.tool_call
+                tool_calls.append(tool)
+                if tool.name == "send_message":
+                    message_contents.append(json.loads(tool.arguments)["message"])
+                
+                if tool.name == "navigate_to":
+                    states["users"] = update_user_state(
+                        name, 
+                        location=json.loads(tool.arguments)["destination"]
+                    )
+                elif tool.name == "perform_action":
+                    args = json.loads(tool.arguments)
+                    if args.get("action") == "follow":
+                        states["users"] = update_user_state(
+                            name,
+                            following=args.get("target")
+                        )
+        
+        # Verify proper tool sequences
+        if any("goodbye" in msg.lower() for msg in message_contents):
+            wave_found = any(
+                t.name == "perform_action" and "wave" in t.arguments.lower() 
+                for t in tool_calls
+            )
+            move_found = any(
+                t.name == "navigate_to" for t in tool_calls
+            )
+            if wave_found and move_found:
+                print("✓ Proper goodbye sequence (wave + move)")
+            else:
+                print("✗ Missing proper goodbye sequence")
+                
+        # Verify [SILENCE] in direct messages
+        if "@" in message or message.lower().startswith(("hey ", "hi ")):
+            target = message.split()[1].strip("@,!")
+            if target != "Emma":  # Use agent name
+                if any("[SILENCE]" in msg for msg in message_contents):
+                    print("✓ Correctly remained silent in direct message")
+                else:
+                    print("✗ Should have remained silent")
+        
+        print("\nResponse:")
+        print_response(response)
+        print(f"\nTool Calls: {json.dumps([t.name for t in tool_calls], indent=2)}")
+        print(f"User States: {json.dumps(states, indent=2)}")
+        time.sleep(1)
 
 def evaluate_response_with_gpt4(response_text: str, current_status: dict, message: str):
     """Evaluate NPC response using GPT-4o-mini"""
