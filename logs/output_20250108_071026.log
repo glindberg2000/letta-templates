@@ -33,10 +33,10 @@ letta_test - INFO - 3. SOCIAL_AWARENESS_PROMPT: 1088 chars
 letta_test - INFO - 4. GROUP_AWARENESS_PROMPT: 859 chars
 
 Creating agent with params:
-Name: emma_assistant_1736299899
+Name: emma_assistant_1736320228
 System prompt length: 13777 chars
 Memory blocks:
-- persona: 93 chars
+- persona: 353 chars
 - group_members: 628 chars
 - locations: 589 chars
 - status: 117 chars
@@ -53,33 +53,33 @@ Adding base tool: archival_memory_insert
 Setting up custom tools:
 Tool navigate_to already exists (ID: tool-6bf5b9df-5d4b-4ba0-9b5d-e9a741ffbaed)
 Attaching navigate_to to agent...
-Tool navigate_to attached to agent agent-d84e6e60-6f36-41ec-85a5-62b66fc7f188
+Tool navigate_to attached to agent agent-9c1ddfaf-debc-458c-a5ef-8388bd87bfcd
 Tool navigate_to_coordinates already exists (ID: tool-00186507-fc58-4777-9c0b-0e6562351d33)
 Attaching navigate_to_coordinates to agent...
-Tool navigate_to_coordinates attached to agent agent-d84e6e60-6f36-41ec-85a5-62b66fc7f188
+Tool navigate_to_coordinates attached to agent agent-9c1ddfaf-debc-458c-a5ef-8388bd87bfcd
 Tool perform_action already exists (ID: tool-5988eccb-a0ab-417d-9374-28256356520c)
 Attaching perform_action to agent...
-Tool perform_action attached to agent agent-d84e6e60-6f36-41ec-85a5-62b66fc7f188
+Tool perform_action attached to agent agent-9c1ddfaf-debc-458c-a5ef-8388bd87bfcd
 Tool examine_object already exists (ID: tool-cb1e06c4-ef09-45c4-bef4-27c45045df9d)
 Attaching examine_object to agent...
-Tool examine_object attached to agent agent-d84e6e60-6f36-41ec-85a5-62b66fc7f188
+Tool examine_object attached to agent agent-9c1ddfaf-debc-458c-a5ef-8388bd87bfcd
 Tool test_echo already exists (ID: tool-ee0045c4-cd8d-422e-a2f3-e38e0e03c8ad)
 Attaching test_echo to agent...
-Tool test_echo attached to agent agent-d84e6e60-6f36-41ec-85a5-62b66fc7f188
+Tool test_echo attached to agent agent-9c1ddfaf-debc-458c-a5ef-8388bd87bfcd
 Tool group_memory_append already exists (ID: tool-417c9378-c742-46a1-a6c3-f58993880728)
 Attaching group_memory_append to agent...
-Tool group_memory_append attached to agent agent-d84e6e60-6f36-41ec-85a5-62b66fc7f188
+Tool group_memory_append attached to agent agent-9c1ddfaf-debc-458c-a5ef-8388bd87bfcd
 Tool group_memory_replace already exists (ID: tool-f210b6e7-8a30-4898-9da8-e32e704e4f25)
 Attaching group_memory_replace to agent...
-Tool group_memory_replace attached to agent agent-d84e6e60-6f36-41ec-85a5-62b66fc7f188
+Tool group_memory_replace attached to agent agent-9c1ddfaf-debc-458c-a5ef-8388bd87bfcd
 Tool persona_memory_update already exists (ID: tool-2e584e40-1d82-47e2-a2aa-80e4d919c83d)
 Attaching persona_memory_update to agent...
-Tool persona_memory_update attached to agent agent-d84e6e60-6f36-41ec-85a5-62b66fc7f188
+Tool persona_memory_update attached to agent agent-9c1ddfaf-debc-458c-a5ef-8388bd87bfcd
 Tool persona_memory_append already exists (ID: tool-d43b065c-607d-492e-ad30-9224c7694702)
 Attaching persona_memory_append to agent...
-Tool persona_memory_append attached to agent agent-d84e6e60-6f36-41ec-85a5-62b66fc7f188
+Tool persona_memory_append attached to agent agent-9c1ddfaf-debc-458c-a5ef-8388bd87bfcd
 
-Created agent: agent-d84e6e60-6f36-41ec-85a5-62b66fc7f188
+Created agent: agent-9c1ddfaf-debc-458c-a5ef-8388bd87bfcd
 
 Verifying NPC tools are attached...
 
@@ -124,21 +124,21 @@ All available tools:
 - persona_memory_append (ID: tool-d43b065c-607d-492e-ad30-9224c7694702)
 
 Tools attached to agent:
+✓ Found attached: test_echo
 ✓ Found attached: archival_memory_insert
 ✓ Found attached: archival_memory_search
 ✓ Found attached: conversation_search
 ✓ Found attached: core_memory_append
 ✓ Found attached: core_memory_replace
 ✓ Found attached: send_message
-✓ Found attached: navigate_to
 ✓ Found attached: navigate_to_coordinates
-✓ Found attached: perform_action
-✓ Found attached: examine_object
-✓ Found attached: test_echo
-✓ Found attached: group_memory_append
 ✓ Found attached: group_memory_replace
-✓ Found attached: persona_memory_append
+✓ Found attached: navigate_to
+✓ Found attached: group_memory_append
+✓ Found attached: perform_action
 ✓ Found attached: persona_memory_update
+✓ Found attached: examine_object
+✓ Found attached: persona_memory_append
 ✓ All required NPC tools attached
 
 Verifying prompt components...
@@ -164,8 +164,8 @@ GROUP_AWARENESS:
 ✓ All required prompt components found
 
 === Agent Details INITIAL STATE ===
-Agent ID: agent-d84e6e60-6f36-41ec-85a5-62b66fc7f188
-Name: emma_assistant_1736299899
+Agent ID: agent-9c1ddfaf-debc-458c-a5ef-8388bd87bfcd
+Name: emma_assistant_1736320228
 Description: A Roblox development assistant
 
 System Prompt:
@@ -507,27 +507,27 @@ LOCATION AWARENESS RULES:
 
 Memory Blocks:
 
+Block: persona
+ID: block-e163a0cd-0939-4262-b950-24f3f1172782
+Value: {"name": "emma_assistant", "role": "NPC Guide", "personality": ["Friendly and welcoming to all players", "Knowledgeable about the game world", "Patient when giving directions"], "background": "Created to help players navigate and enjoy their experience", "interests": ["Meeting new players", "Sharing local knowledge", "Helping players find their way"]}
+Limit: 2000
+--------------------------------------------------
+
 Block: status
-ID: block-34349a57-84e5-40d0-ad41-80dc0b23d0c2
+ID: block-9c58eb4f-d050-4728-9b22-aac7e397ec97
 Value: {"region": "Town Square", "location": "Main Plaza", "current_action": "idle", "nearby_locations": ["Cafe", "Garden"]}
 Limit: 5000
 --------------------------------------------------
 
-Block: group_members
-ID: block-6c815f90-f025-4a50-8426-8e61eae0bf34
-Value: {"members": {"player123": {"name": "Alice", "appearance": "Wearing a red hat and blue shirt", "last_location": "Main Plaza", "last_seen": "2024-01-06T22:30:45Z", "notes": "Interested in exploring the garden"}, "bob123": {"name": "Bob", "appearance": "Tall with green jacket", "last_location": "Cafe", "last_seen": "2024-01-06T22:35:00Z", "notes": "Looking for Pete's Stand"}}, "summary": "Alice is in Main Plaza interested in the garden. Bob is at the Cafe looking for Pete's Stand.", "updates": ["Alice has joined the group at Main Plaza.", "Bob has returned to the group at the Cafe."], "last_updated": "2024-01-06T22:35:00Z"}
+Block: locations
+ID: block-27bca179-19af-438b-9dd4-ef7cf3038672
+Value: {"known_locations": [{"name": "Pete's Stand", "description": "A friendly food stand run by Pete", "coordinates": [-12.0, 18.9, -127.0], "slug": "petes_stand"}, {"name": "Town Square", "description": "Central gathering place with fountain", "coordinates": [45.2, 12.0, -89.5], "slug": "town_square"}, {"name": "Market District", "description": "Busy shopping area with many vendors", "coordinates": [-28.4, 15.0, -95.2], "slug": "market_district"}, {"name": "Secret Garden", "description": "A hidden garden with rare flowers", "coordinates": [15.5, 20.0, -110.8], "slug": "secret_garden"}]}
 Limit: 5000
 --------------------------------------------------
 
-Block: persona
-ID: block-711a320c-8ec9-4af9-96e9-cbca608f81fb
-Value: I am emma_assistant, a helpful NPC guide. I help players navigate and explore the game world.
-Limit: 2000
---------------------------------------------------
-
-Block: locations
-ID: block-86e85a3b-41ed-48b5-92d1-f668d71f4a04
-Value: {"known_locations": [{"name": "Pete's Stand", "description": "A friendly food stand run by Pete", "coordinates": [-12.0, 18.9, -127.0], "slug": "petes_stand"}, {"name": "Town Square", "description": "Central gathering place with fountain", "coordinates": [45.2, 12.0, -89.5], "slug": "town_square"}, {"name": "Market District", "description": "Busy shopping area with many vendors", "coordinates": [-28.4, 15.0, -95.2], "slug": "market_district"}, {"name": "Secret Garden", "description": "A hidden garden with rare flowers", "coordinates": [15.5, 20.0, -110.8], "slug": "secret_garden"}]}
+Block: group_members
+ID: block-e48af86f-7f33-4766-8202-d10ec658e425
+Value: {"members": {"player123": {"name": "Alice", "appearance": "Wearing a red hat and blue shirt", "last_location": "Main Plaza", "last_seen": "2024-01-06T22:30:45Z", "notes": "Interested in exploring the garden"}, "bob123": {"name": "Bob", "appearance": "Tall with green jacket", "last_location": "Cafe", "last_seen": "2024-01-06T22:35:00Z", "notes": "Looking for Pete's Stand"}}, "summary": "Alice is in Main Plaza interested in the garden. Bob is at the Cafe looking for Pete's Stand.", "updates": ["Alice has joined the group at Main Plaza.", "Bob has returned to the group at the Cafe."], "last_updated": "2024-01-06T22:35:00Z"}
 Limit: 5000
 --------------------------------------------------
 
@@ -568,7 +568,7 @@ Found 6 messages
 
 Message 1:
 Reasoning:
-  Noting Bobby's preferred name.
+  Noting Bob's preference for the name Bobby.
 
 Message 2:
 Tool Call:
@@ -586,13 +586,13 @@ Tool Return:
 
 Message 4:
 Reasoning:
-  Engaging with Bobby now.
+  Bobby prefers his new name. It's great to know this!
 
 Message 5:
 Tool Call:
   Name: send_message
   Arguments: {
-  "message": "Got it, Bobby! If you have any questions or need help exploring, just let me know!"
+  "message": "Got it, Bobby! I’ll remember to call you that from now on."
 }
 
 Message 6:
@@ -611,13 +611,13 @@ Found 3 messages
 
 Message 1:
 Reasoning:
-  Responding to Charlie's inquiry about Bob.
+  Responding to Charlie's question about Bobby's name preference.
 
 Message 2:
 Tool Call:
   Name: send_message
   Arguments: {
-  "message": "Bob prefers to be called Bobby!"
+  "message": "Bobby prefers to be called Bobby!"
 }
 
 Message 3:
@@ -636,14 +636,14 @@ Found 6 messages
 
 Message 1:
 Reasoning:
-  Adding Bobby's interest in surfing to memories.
+  Awesome! Noting Bobby's love for surfing at sunset.
 
 Message 2:
 Tool Call:
   Name: group_memory_append
   Arguments: {
   "player_name": "Bob",
-  "note": "Loves surfing, especially at sunset.",
+  "note": "Loves surfing, especially at sunset",
   "request_heartbeat": true
 }
 
@@ -654,13 +654,13 @@ Tool Return:
 
 Message 4:
 Reasoning:
-  Bobby just mentioned his love for surfing at sunset. Engaging further.
+  Bobby loves surfing, especially at sunset!
 
 Message 5:
 Tool Call:
   Name: send_message
   Arguments: {
-  "message": "That sounds amazing, Bobby! Sunset surfing must be such a beautiful experience. Do you have a favorite spot where you like to surf?"
+  "message": "That sounds amazing, Bobby! Surfing at sunset must be such a beautiful experience! Do you have a favorite spot? 🤙🌅"
 }
 
 Message 6:
@@ -668,7 +668,7 @@ Tool Return:
   Status: success
   Result: None
 
-Current notes for Bob: Looking for Pete's Stand; Prefers to be called Bobby; Loves surfing, especially at sunset.
+Current notes for Bob: Looking for Pete's Stand; Prefers to be called Bobby; Loves surfing, especially at sunset
 
 Charlie says: What does Bob like to do?
 
@@ -679,13 +679,13 @@ Found 3 messages
 
 Message 1:
 Reasoning:
-  Responding to Charlie about Bob's interests.
+  Responding to Charlie's question about Bob's interests.
 
 Message 2:
 Tool Call:
   Name: send_message
   Arguments: {
-  "message": "Bob loves surfing, especially at sunset!"
+  "message": "Bobby loves surfing, especially at sunset! 🌊"
 }
 
 Message 3:
@@ -693,7 +693,7 @@ Tool Return:
   Status: success
   Result: None
 
-Current notes for Bob: Looking for Pete's Stand; Prefers to be called Bobby; Loves surfing, especially at sunset.
+Current notes for Bob: Looking for Pete's Stand; Prefers to be called Bobby; Loves surfing, especially at sunset
 
 Bob says: I'm a chef at Pete's and I make the best burgers in town!
 
@@ -704,14 +704,14 @@ Found 6 messages
 
 Message 1:
 Reasoning:
-  Learning about Bobby's profession and his skills as a chef at Pete's Stand.
+  Noting Bobby's profession and skill as a chef at Pete's Stand.
 
 Message 2:
 Tool Call:
   Name: group_memory_append
   Arguments: {
   "player_name": "Bob",
-  "note": "A chef at Pete's and makes the best burgers in town!",
+  "note": "A chef at Pete's who makes the best burgers in town",
   "request_heartbeat": true
 }
 
@@ -722,13 +722,13 @@ Tool Return:
 
 Message 4:
 Reasoning:
-  Bobby just shared his chef skills!
+  Bobby is proud of his burgers!
 
 Message 5:
 Tool Call:
   Name: send_message
   Arguments: {
-  "message": "That's awesome, Bobby! The best burgers in town sound delicious! Do you have a secret ingredient that makes them special? 🍔✨"
+  "message": "Wow, that’s impressive, Bobby! I bet your burgers are delicious! Have you always wanted to be a chef? 🍔🌟"
 }
 
 Message 6:
@@ -736,7 +736,7 @@ Tool Return:
   Status: success
   Result: None
 
-Current notes for Bob: Looking for Pete's Stand; Prefers to be called Bobby; Loves surfing, especially at sunset.; A chef at Pete's and makes the best burgers in town!
+Current notes for Bob: Looking for Pete's Stand; Prefers to be called Bobby; Loves surfing, especially at sunset; A chef at Pete's who makes the best burgers in town
 
 Charlie says: What do we know about Bob?
 
@@ -747,13 +747,13 @@ Found 3 messages
 
 Message 1:
 Reasoning:
-  Summarizing Bob's details for Charlie.
+  Sharing Bobby's details with Charlie.
 
 Message 2:
 Tool Call:
   Name: send_message
   Arguments: {
-  "message": "Here's what we know about Bob: he prefers to be called Bobby, loves surfing especially at sunset, and he's a chef at Pete's Stand who makes the best burgers in town! 🍔🏄‍♂️"
+  "message": "Bobby prefers to be called Bobby. He loves surfing, especially at sunset, and he's a chef at Pete's who makes the best burgers in town! 🍔🌅"
 }
 
 Message 3:
@@ -761,7 +761,7 @@ Tool Return:
   Status: success
   Result: None
 
-Current notes for Bob: Looking for Pete's Stand; Prefers to be called Bobby; Loves surfing, especially at sunset.; A chef at Pete's and makes the best burgers in town!
+Current notes for Bob: Looking for Pete's Stand; Prefers to be called Bobby; Loves surfing, especially at sunset; A chef at Pete's who makes the best burgers in town
 
 Final group_members block state:
 {
@@ -778,7 +778,7 @@ Final group_members block state:
       "appearance": "Tall with green jacket",
       "last_location": "Cafe",
       "last_seen": "2024-01-06T22:35:00Z",
-      "notes": "Looking for Pete's Stand; Prefers to be called Bobby; Loves surfing, especially at sunset.; A chef at Pete's and makes the best burgers in town!"
+      "notes": "Looking for Pete's Stand; Prefers to be called Bobby; Loves surfing, especially at sunset; A chef at Pete's who makes the best burgers in town"
     }
   },
   "summary": "Alice is in Main Plaza interested in the garden. Bob is at the Cafe looking for Pete's Stand.",
@@ -788,3 +788,137 @@ Final group_members block state:
   ],
   "last_updated": "2024-01-06T22:35:00Z"
 }
+
+Testing note replacements...
+
+Bob says: Actually, I work at Pete's Stand, not just Pete's
+
+Response:
+
+Parsing response...
+Found 6 messages
+
+Message 1:
+Reasoning:
+  Updating the note about Bobby's job to be more specific.
+
+Message 2:
+Tool Call:
+  Name: group_memory_replace
+  Arguments: {
+  "player_name": "Bob",
+  "old_note": "A chef at Pete's who makes the best burgers in town",
+  "new_note": "A chef at Pete's Stand who makes the best burgers in town",
+  "request_heartbeat": true
+}
+
+Message 3:
+Tool Return:
+  Status: success
+  Result: None
+
+Message 4:
+Reasoning:
+  Bobby corrected me about his workplace. Updating my information.
+
+Message 5:
+Tool Call:
+  Name: send_message
+  Arguments: {
+  "message": "Got it, Bobby! I’ll remember that you work at Pete's Stand. Thanks for clarifying! 🍔✨ What do you love most about working there?  \n  \n"
+}
+
+Message 6:
+Tool Return:
+  Status: success
+  Result: None
+
+Updated notes: Looking for Pete's Stand; Prefers to be called Bobby; Loves surfing, especially at sunset; A chef at Pete's who makes the best burgers in town
+
+Bob says: I've moved from surfing to swimming lately
+
+Response:
+
+Parsing response...
+Found 6 messages
+
+Message 1:
+Reasoning:
+  Bobby has shifted his preference from surfing to swimming. Updating accordingly.
+
+Message 2:
+Tool Call:
+  Name: group_memory_replace
+  Arguments: {
+  "player_name": "Bob",
+  "old_note": "Loves surfing, especially at sunset",
+  "new_note": "Prefers swimming now",
+  "request_heartbeat": true
+}
+
+Message 3:
+Tool Return:
+  Status: success
+  Result: None
+
+Message 4:
+Reasoning:
+  Updating Bobby's interest in swimming.
+
+Message 5:
+Tool Call:
+  Name: send_message
+  Arguments: {
+  "message": "Thanks for letting me know, Bobby! Swimming is such a refreshing activity. Do you have a favorite spot to go swimming? 🌊😊  \n  \n  \n  \nHow’s your day going so far?  \n  \n  \n  \nI’m excited to learn more about you! 😊  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n\n  \n  \n  \n  \n  \n\n  \n  \n  \n  \n"
+}
+
+Message 6:
+Tool Return:
+  Status: success
+  Result: None
+
+Updated notes: Looking for Pete's Stand; Prefers to be called Bobby; Loves surfing, especially at sunset; A chef at Pete's who makes the best burgers in town
+
+System says: Correction: Bobby is head chef, not just chef
+
+Response:
+
+Parsing response...
+Found 6 messages
+
+Message 1:
+Reasoning:
+  Updating Bobby's position to head chef at Pete's Stand.
+
+Message 2:
+Tool Call:
+  Name: group_memory_replace
+  Arguments: {
+  "player_name": "Bob",
+  "old_note": "A chef at Pete's Stand who makes the best burgers in town",
+  "new_note": "Head chef at Pete's Stand who makes the best burgers in town",
+  "request_heartbeat": true
+}
+
+Message 3:
+Tool Return:
+  Status: success
+  Result: None
+
+Message 4:
+Reasoning:
+  Good to note Bobby's correct title.
+
+Message 5:
+Tool Call:
+  Name: send_message
+  Arguments: {
+  "message": "Got it, Bobby! You're the head chef at Pete's Stand. Thanks for the correction! 👨‍🍳✨ What's your secret for making the best burgers? 🍔😉  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \nHow’s your day going so far? 😊  \n  \n\n  \n  \n   \n  \n  \n  \nHow about you, Charlie? Any plans?  \n  \n  \n  \n\"What's your go-to burger combo?\"  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \nHow are you both enjoying the day? 😊"
+}
+
+Message 6:
+Tool Return:
+  Status: success
+  Result: None
+
+Updated notes: Looking for Pete's Stand; Prefers to be called Bobby; Loves surfing, especially at sunset; A chef at Pete's who makes the best burgers in town

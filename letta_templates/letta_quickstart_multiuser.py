@@ -16,16 +16,17 @@ from letta.schemas.message import (
     Message
 )
 from letta_templates.npc_tools import (
-    TOOL_INSTRUCTIONS,
+    TOOL_REGISTRY,
+    BASE_PROMPT,
+    SOCIAL_AWARENESS_PROMPT,
     GROUP_AWARENESS_PROMPT,
+    LOCATION_AWARENESS_PROMPT,
+    TOOL_INSTRUCTIONS,
     navigate_to,
     navigate_to_coordinates,
     perform_action,
     examine_object,
-    TOOL_REGISTRY,
-    SOCIAL_AWARENESS_PROMPT,
-    GROUP_AWARENESS,
-    BASE_PROMPT,
+
     test_echo
 )
 import requests
@@ -45,16 +46,6 @@ BASE_TOOLS = {
     "archival_memory_search",
     "core_memory_append",
     "core_memory_replace"
-}
-
-# Define our custom tools that we manage
-CUSTOM_TOOLS = {
-    #"group_memory_append": group_memory_append,
-    #"group_memory_replace": group_memory_replace,
-    "navigate_to": navigate_to,
-    "navigate_to_coordinates": navigate_to_coordinates,
-    "perform_action": perform_action,
-    "examine_object": examine_object
 }
 
 def print_agent_details(client, agent_id, stage=""):
@@ -367,7 +358,8 @@ def create_personalized_agent(
     use_claude: bool = False,
     overwrite: bool = False,
     with_custom_tools: bool = True,
-    custom_registry = None
+    custom_registry = None,
+    minimal_prompt: bool = False
 ):
     """Create a personalized agent with memory and tools"""
     logger = logging.getLogger('letta_test')
@@ -386,21 +378,28 @@ def create_personalized_agent(
     # Format base prompt with assistant name
     base_system = BASE_PROMPT.format(assistant_name=name)
     
-    # Combine prompts in specific order
-    system_prompt = (
-        base_system +
-        "\n\n" + TOOL_INSTRUCTIONS +
-        "\n\n" + SOCIAL_AWARENESS_PROMPT +
-        "\n\n" + GROUP_AWARENESS +
-        "\n\n" + GROUP_AWARENESS_PROMPT
-    )
+    # Use minimal prompt for testing if requested
+    if minimal_prompt:
+        system_prompt = (
+            base_system +
+            "\n\n" + TOOL_INSTRUCTIONS  # Keep essential tool instructions
+        )
+    else:
+        system_prompt = (
+            base_system +
+            "\n\n" + TOOL_INSTRUCTIONS +
+            "\n\n" + SOCIAL_AWARENESS_PROMPT +
+            "\n\n" + GROUP_AWARENESS_PROMPT +
+            "\n\n" + LOCATION_AWARENESS_PROMPT
+        )
     
     # Log what we're using
     logger.info("\nSystem prompt components:")
     logger.info(f"1. Base system: {len(base_system)} chars")
     logger.info(f"2. TOOL_INSTRUCTIONS: {len(TOOL_INSTRUCTIONS)} chars")
-    logger.info(f"3. SOCIAL_AWARENESS_PROMPT: {len(SOCIAL_AWARENESS_PROMPT)} chars")
-    logger.info(f"4. GROUP_AWARENESS_PROMPT: {len(GROUP_AWARENESS_PROMPT)} chars")
+    if not minimal_prompt:
+        logger.info(f"3. SOCIAL_AWARENESS_PROMPT: {len(SOCIAL_AWARENESS_PROMPT)} chars")
+        logger.info(f"4. LOCATION_AWARENESS_PROMPT: {len(LOCATION_AWARENESS_PROMPT)} chars")
     
     # Create configs first
     llm_config = LLMConfig(
@@ -461,7 +460,7 @@ def create_personalized_agent(
                         "Helping players find their way"
                     ]
                 }),
-                limit=2000
+                limit=1000
             ),
             client.create_block(
                 label="group_members",
@@ -489,7 +488,7 @@ def create_personalized_agent(
                     ],
                     "last_updated": "2024-01-06T22:35:00Z"
                 }),
-                limit=5000
+                limit=2000
             ),
             client.create_block(
                 label="locations",
@@ -521,7 +520,7 @@ def create_personalized_agent(
                         }
                     ]
                 }),
-                limit=5000
+                limit=1500
             ),
             client.create_block(
                 label="status",
@@ -531,7 +530,7 @@ def create_personalized_agent(
                     "current_action": "idle",
                     "nearby_locations": ["Cafe", "Garden"]
                 }),
-                limit=5000
+                limit=500
             )
         ]
     )
@@ -540,8 +539,9 @@ def create_personalized_agent(
     logger.info("\nSystem prompt components:")
     logger.info(f"1. Base system: {len(base_system)} chars")
     logger.info(f"2. TOOL_INSTRUCTIONS: {len(TOOL_INSTRUCTIONS)} chars")
-    logger.info(f"3. SOCIAL_AWARENESS_PROMPT: {len(SOCIAL_AWARENESS_PROMPT)} chars")
-    logger.info(f"4. GROUP_AWARENESS_PROMPT: {len(GROUP_AWARENESS_PROMPT)} chars")
+    if not minimal_prompt:
+        logger.info(f"3. SOCIAL_AWARENESS_PROMPT: {len(SOCIAL_AWARENESS_PROMPT)} chars")
+        logger.info(f"4. LOCATION_AWARENESS_PROMPT: {len(LOCATION_AWARENESS_PROMPT)} chars")
     
     # Log params in a readable way
     print("\nCreating agent with params:")
@@ -827,6 +827,7 @@ def parse_args():
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing agent")
     parser.add_argument("--skip-test", action="store_true", help="Skip testing")
     parser.add_argument("--custom-tools", action="store_true", help="Use custom tools")
+    parser.add_argument("--minimal-prompt", action="store_true", help="Use minimal prompt for testing")
     parser.add_argument(
         "--test-type",
         choices=['all', 'base', 'social', 'status', 'group', 'notes', 'persona'],
@@ -1841,7 +1842,8 @@ def main():
             name=args.name,
             use_claude=(args.llm == 'claude'),
             overwrite=args.overwrite,
-            with_custom_tools=args.custom_tools
+            with_custom_tools=args.custom_tools,
+            minimal_prompt=args.minimal_prompt
         )
         print(f"\nCreated agent: {agent.id}")
         
@@ -1882,24 +1884,28 @@ def main():
         agent_details = client.get_agent(agent.id)
         system_prompt = agent_details.system
         
+        # Only check essential components in minimal mode
         required_components = {
             "TOOL_INSTRUCTIONS": [
                 "perform_action",
                 "navigate_to",
                 "navigate_to_coordinates",
                 "examine_object"
-            ],
-            "SOCIAL_AWARENESS": [
-                "[SILENCE]",
-                "Direct Messages",
-                "Departure Protocol"
-            ],
-            "GROUP_AWARENESS": [
-                "LOCATION AWARENESS",
-                "Current Location",
-                "Nearby Locations"
             ]
         }
+        if not args.minimal_prompt:
+            required_components.update({
+                "SOCIAL_AWARENESS": [
+                    "[SILENCE]",
+                    "Direct Messages",
+                    "Departure Protocol"
+                ],
+                "GROUP_AWARENESS_PROMPT": [
+                    "LOCATION AWARENESS",
+                    "Current Location",
+                    "Nearby Locations"
+                ]
+            })
         
         missing_components = []
         print("\nChecking prompt sections:")

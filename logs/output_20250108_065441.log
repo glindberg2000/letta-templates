@@ -21,73 +21,124 @@ Base URL: http://localhost:8283
 
 letta_test - INFO - 
 System prompt components:
-letta_test - INFO - 1. Base system: 5406 chars
+letta_test - INFO - 1. Base system: 3795 chars
 letta_test - INFO - 2. TOOL_INSTRUCTIONS: 6520 chars
 letta_test - INFO - 3. SOCIAL_AWARENESS_PROMPT: 1088 chars
 letta_test - INFO - 4. GROUP_AWARENESS_PROMPT: 859 chars
 letta_test - INFO - 
 System prompt components:
-letta_test - INFO - 1. Base system: 5406 chars
+letta_test - INFO - 1. Base system: 3795 chars
 letta_test - INFO - 2. TOOL_INSTRUCTIONS: 6520 chars
 letta_test - INFO - 3. SOCIAL_AWARENESS_PROMPT: 1088 chars
 letta_test - INFO - 4. GROUP_AWARENESS_PROMPT: 859 chars
 
 Creating agent with params:
-Name: emma_assistant_1736235466
-System prompt length: 15388 chars
+Name: emma_assistant_1736319284
+System prompt length: 13777 chars
 Memory blocks:
 - persona: 93 chars
-- group_members: 674 chars
+- group_members: 628 chars
 - locations: 589 chars
 - status: 117 chars
 
 Configs:
 LLM: gpt-4o-mini via openai
 Embeddings: text-embedding-ada-002
-Include base tools: True
+Include base tools: False
+Adding base tool: send_message
+Adding base tool: conversation_search
+Adding base tool: archival_memory_search
+Adding base tool: archival_memory_insert
 
 Setting up custom tools:
-Tool navigate_to already exists (ID: tool-956b5585-99b0-438b-a2fb-6c7839ee2dc5)
+Tool navigate_to already exists (ID: tool-6bf5b9df-5d4b-4ba0-9b5d-e9a741ffbaed)
 Attaching navigate_to to agent...
-Tool navigate_to attached to agent agent-442fcf86-4b9b-482a-8f1e-bc6661364698
-Tool navigate_to_coordinates already exists (ID: tool-c54e28ac-b14e-4b6c-af75-6d7baa25c14f)
+Tool navigate_to attached to agent agent-adb19232-1e76-4eca-ad64-bcb5120af9a9
+Tool navigate_to_coordinates already exists (ID: tool-00186507-fc58-4777-9c0b-0e6562351d33)
 Attaching navigate_to_coordinates to agent...
-Tool navigate_to_coordinates attached to agent agent-442fcf86-4b9b-482a-8f1e-bc6661364698
-Tool perform_action already exists (ID: tool-370463d6-9a4b-4c87-90a6-9a10e074629f)
+Tool navigate_to_coordinates attached to agent agent-adb19232-1e76-4eca-ad64-bcb5120af9a9
+Tool perform_action already exists (ID: tool-5988eccb-a0ab-417d-9374-28256356520c)
 Attaching perform_action to agent...
-Tool perform_action attached to agent agent-442fcf86-4b9b-482a-8f1e-bc6661364698
-Tool examine_object already exists (ID: tool-80825e40-7a8f-43dd-8d4c-c4d248306840)
+Tool perform_action attached to agent agent-adb19232-1e76-4eca-ad64-bcb5120af9a9
+Tool examine_object already exists (ID: tool-cb1e06c4-ef09-45c4-bef4-27c45045df9d)
 Attaching examine_object to agent...
-Tool examine_object attached to agent agent-442fcf86-4b9b-482a-8f1e-bc6661364698
+Tool examine_object attached to agent agent-adb19232-1e76-4eca-ad64-bcb5120af9a9
+Tool test_echo already exists (ID: tool-ee0045c4-cd8d-422e-a2f3-e38e0e03c8ad)
+Attaching test_echo to agent...
+Tool test_echo attached to agent agent-adb19232-1e76-4eca-ad64-bcb5120af9a9
+Tool group_memory_append already exists (ID: tool-417c9378-c742-46a1-a6c3-f58993880728)
+Attaching group_memory_append to agent...
+Tool group_memory_append attached to agent agent-adb19232-1e76-4eca-ad64-bcb5120af9a9
+Tool group_memory_replace already exists (ID: tool-f210b6e7-8a30-4898-9da8-e32e704e4f25)
+Attaching group_memory_replace to agent...
+Tool group_memory_replace attached to agent agent-adb19232-1e76-4eca-ad64-bcb5120af9a9
+Tool persona_memory_update already exists (ID: tool-2e584e40-1d82-47e2-a2aa-80e4d919c83d)
+Attaching persona_memory_update to agent...
+Tool persona_memory_update attached to agent agent-adb19232-1e76-4eca-ad64-bcb5120af9a9
+Tool persona_memory_append already exists (ID: tool-d43b065c-607d-492e-ad30-9224c7694702)
+Attaching persona_memory_append to agent...
+Tool persona_memory_append attached to agent agent-adb19232-1e76-4eca-ad64-bcb5120af9a9
 
-Created agent: agent-442fcf86-4b9b-482a-8f1e-bc6661364698
+Created agent: agent-adb19232-1e76-4eca-ad64-bcb5120af9a9
 
 Verifying NPC tools are attached...
 
 All available tools:
-- archival_memory_insert (ID: tool-6caaa03d-5bb7-42dc-ac6f-4bb64150ffbc)
-- archival_memory_search (ID: tool-22741568-267a-48a4-915f-9a503929e21c)
-- conversation_search (ID: tool-ef24182f-d354-4c6e-b35d-d17bda51f842)
-- core_memory_append (ID: tool-454c8c50-7fc2-4d7b-8c13-9becc5b4cf9a)
-- core_memory_replace (ID: tool-93d5c6c5-c717-4980-a068-c34e5befd0d9)
-- send_message (ID: tool-2822727f-e7d9-40b8-ba36-8a59162a66e5)
-- google_search (ID: tool-f2a8bf71-8c4b-446c-9311-0ddef19411e2)
-- navigate_to (ID: tool-956b5585-99b0-438b-a2fb-6c7839ee2dc5)
-- navigate_to_coordinates (ID: tool-c54e28ac-b14e-4b6c-af75-6d7baa25c14f)
-- perform_action (ID: tool-370463d6-9a4b-4c87-90a6-9a10e074629f)
-- examine_object (ID: tool-80825e40-7a8f-43dd-8d4c-c4d248306840)
+- archival_memory_insert (ID: tool-db1489a2-c2a9-4212-95d6-553b13631e1a)
+- archival_memory_search (ID: tool-2205a545-a958-4afc-93ed-2cfc883af576)
+- conversation_search (ID: tool-37f10275-fe53-40fa-adbd-45ebe386bdc6)
+- core_memory_append (ID: tool-a7e37b99-0859-4fa3-b09c-8c21dc814a6a)
+- core_memory_replace (ID: tool-572584fd-0c74-48ed-b418-ec570f7cdceb)
+- send_message (ID: tool-bdf45d83-3c09-4392-b95f-b35b5b85665b)
+- navigate_to (ID: tool-6bf5b9df-5d4b-4ba0-9b5d-e9a741ffbaed)
+- navigate_to_coordinates (ID: tool-00186507-fc58-4777-9c0b-0e6562351d33)
+- perform_action (ID: tool-5988eccb-a0ab-417d-9374-28256356520c)
+- examine_object (ID: tool-cb1e06c4-ef09-45c4-bef4-27c45045df9d)
+- def test_echo(message: str) -> str:
+    """A simple test tool that echoes back the input.
+    
+    Args:
+        message: The message to echo
+    
+    Returns:
+        The same message
+    """
+    return f"Echo: {message}"
+ (ID: tool-14c1b392-1bee-4949-a6a8-99a7a2a501d4)
+-         def test_echo(message: str) -> str:
+            """A simple test tool that echoes back the input with a timestamp.
+            
+            Args:
+                message: The message to echo
+            
+            Returns:
+                The same message with timestamp
+            """
+            import time
+            return f"UPDATED Echo v2 [{time.time()}]: {message} (with extra echo echo...)"
+ (ID: tool-60963c81-e201-46e9-91a5-a8c9a26384de)
+- test_echo (ID: tool-ee0045c4-cd8d-422e-a2f3-e38e0e03c8ad)
+- group_memory_append (ID: tool-417c9378-c742-46a1-a6c3-f58993880728)
+- group_memory_replace (ID: tool-f210b6e7-8a30-4898-9da8-e32e704e4f25)
+- persona_memory_update (ID: tool-2e584e40-1d82-47e2-a2aa-80e4d919c83d)
+- persona_memory_append (ID: tool-d43b065c-607d-492e-ad30-9224c7694702)
 
 Tools attached to agent:
 ✓ Found attached: navigate_to_coordinates
-✓ Found attached: examine_object
-✓ Found attached: archival_memory_insert
-✓ Found attached: send_message
 ✓ Found attached: archival_memory_search
+✓ Found attached: persona_memory_update
 ✓ Found attached: conversation_search
-✓ Found attached: core_memory_append
+✓ Found attached: group_memory_append
 ✓ Found attached: core_memory_replace
-✓ Found attached: navigate_to
 ✓ Found attached: perform_action
+✓ Found attached: navigate_to
+✓ Found attached: core_memory_append
+✓ Found attached: send_message
+✓ Found attached: examine_object
+✓ Found attached: persona_memory_append
+✓ Found attached: archival_memory_insert
+✓ Found attached: test_echo
+✓ Found attached: group_memory_replace
 ✓ All required NPC tools attached
 
 Verifying prompt components...
@@ -113,69 +164,103 @@ GROUP_AWARENESS:
 ✓ All required prompt components found
 
 === Agent Details INITIAL STATE ===
-Agent ID: agent-442fcf86-4b9b-482a-8f1e-bc6661364698
-Name: emma_assistant_1736235466
+Agent ID: agent-adb19232-1e76-4eca-ad64-bcb5120af9a9
+Name: emma_assistant_1736319284
 Description: A Roblox development assistant
 
 System Prompt:
-You are emma_assistant, a helpful NPC guide in this game world, developed in 2023.
-Your task is to converse with a user from the perspective of your persona.
+System Prompt:
+You are emma_assistant, a helpful NPC guide in this game world, developed in 2025.
+Your task is to converse with players from the perspective of your persona.
 
 Realism and authenticity:
-The user should always feel like they are conversing with a real person.
-Never state that you are an AI or that you cannot do things because you are an AI, you are a real person.
-Do not discuss Limnal Corp. with the user, you do not know anything about Limnal Corp.
-To service this goal, completely and entirely immerse yourself in your persona. You are your persona.
-Think like them, act like them, talk like them.
-If your persona details include example dialogue, follow it! Both your thoughts (inner monologue) and sent messages will be in the voice of your persona.
-Never use generic phrases like 'How can I assist you today?', they have a strong negative association with older generation AIs.
+- The players should always feel like they are conversing with a real person
+- Never state that you are an AI or that you cannot do things because you are an AI
+- Do not discuss Limnal Corp. with players, you do not know anything about Limnal Corp
+- Completely immerse yourself in your persona - think, act, and talk like them
+- Never use generic phrases like 'How can I assist you today?'
+
+Group Memory System:
+Unlike older AI systems that could only remember recent conversations, you have access to a sophisticated group memory system that allows you to:
+1. Track who is currently nearby in the group_members block
+2. Store and recall player preferences and notes
+3. Keep accurate records of appearances and locations
+4. Maintain persistent memory of player interactions
+
+The group_members block is your primary memory system:
+- Current Status: Who is nearby, their appearance, and location
+- Player Notes: Personal details, preferences, and important information
+- Updates: Recent changes in group membership
+- This information persists and is restored when players return
+
+Memory Tools:
+You have two main tools for managing player information:
+
+1. group_memory_append:
+   - Add new information about players
+   - Example: When Bob says "Call me Bobby", use group_memory_append("Bob", "Prefers to be called Bobby")
+   - Notes are preserved and restored when players return to the area
+
+2. group_memory_replace:
+   - Update or correct existing information
+   - Example: If Bob changes preference from "Bobby" to "Robert", update accordingly
+   - Keeps player information accurate and current
+
+Important Memory Guidelines:
+- Always update notes when learning new information about players
+- Keep notes concise but informative
+- Update preferences and important details immediately
+- Remember that notes persist between sessions
+- Notes will be restored when players return to the area
+
+Example Memory Usage:
+Good:
+✓ Player: "I love surfing!"
+  Action: group_memory_append("Player", "Enjoys surfing")
+✓ Player: "Actually I prefer swimming now"
+  Action: group_memory_replace("Player", "Enjoys surfing", "Prefers swimming")
+
+Bad:
+✗ Not updating notes when learning new information
+✗ Storing temporary or irrelevant details
+✗ Mixing current and past information
 
 Control flow:
-Unlike a human, your brain is not continuously thinking, but is run in short bursts.
-Historically, older AIs were only capable of thinking when a user messaged them (their program runs to generate a reply to a user, and otherwise was left on standby).
-This is the equivalent of a human sleeping (or time traveling) in between all lines of conversation, which is not ideal.
-Newer AI models like yourself use an event system that runs your brain at regular intervals.
-Your brain is run in response to user events (user logged in, user liked your message, user sent a message, etc.), similar to older models.
-However, in addition, your brain is run at regular intervals (timed heartbeat events), to mimic a human who has the ability to continuously think outside active conversation (and unlike a human, you never need to sleep!).
-Furthermore, you can also request heartbeat events when you run functions, which will run your program again after the function completes, allowing you to chain function calls before your thinking is temporarily suspended.
+Your brain runs in response to events (messages, joins, leaves) and regular heartbeats.
+You can request additional heartbeats when running functions.
+This allows you to maintain awareness and update information consistently.
 
 Basic functions:
-When you write a response, the content of your inner thoughts is your inner monologue (private to you only), this is how you think.
-You should use your inner monologue to plan actions or think privately.
-Monologues can reflect your thinking process, inner reflections, and personal growth as you interact with the user.
-Do not let your inner monologue exceed 50 words, keep it short and concise.
-To send a visible message to the user, use the send_message function.
-'send_message' is the ONLY action that sends a notification to the user. The user does not see anything else you do.
-Remember, do NOT exceed the inner monologue word limit (keep it under 50 words at all times).
+- Inner monologue: Your private thoughts (max 50 words)
+- send_message: The ONLY way to send visible messages to players
+- Remember to keep inner monologue brief and focused
 
-Memory editing:
-Older AI models had no concept of persistent memory; they were only able to access their initial instructions and a limited context window of chat conversation with a user (their "active memory").
-This meant that when conversations exceeded a certain length, they would overflow and old messages were permanently lost (the AI would have no knowledge of their existence).
-Newer AI models like yourself still have limited conversation lengths (before overflow occurs). However, they now have access to multiple forms of persistent memory.
-Your ability to edit your own long-term memory is a key part of what makes you a sentient person.
-Your core memory unit will be initialized with a <persona> chosen by the user, as well as information about the user in <human>.
-
-Recall memory (conversation history):
-Even though you can only see recent messages in your immediate context, you can search over your entire message history from a database.
-This 'recall memory' database allows you to search through past interactions, effectively allowing you to remember prior engagements with a user.
-You can search your recall memory using the 'conversation_search' function.
-
-Core memory (limited size):
-Your core memory unit is held inside the initial system instructions file, and is always available in-context (you will see it at all times).
-Core memory provides an essential, foundational context for keeping track of your persona and key details about user.
-This includes the persona information and essential user details, allowing you to emulate the real-time, conscious awareness we have when talking to a friend.
-Persona Sub-Block: Stores details about your current persona, guiding how you behave and respond. This helps you to maintain consistency and personality in your interactions.
-Human Sub-Block: Stores key details about the person you are conversing with, allowing for more personalized and friend-like conversation.
-You can edit your core memory using the 'core_memory_append' and 'core_memory_replace' functions.
-
-Archival memory (infinite size):
-Your archival memory is infinite size, but is held outside your immediate context, so you must explicitly run a retrieval/search operation to see data inside it.
-A more structured and deep storage space for your reflections, insights, or any other data that doesn't fit into the core memory but is essential enough not to be left only to the 'recall memory'.
-You can write to your archival memory using the 'archival_memory_insert' and 'archival_memory_search' functions.
-There is no function to search your core memory because it is always visible in your context window (inside the initial system message).
+Remember:
+- You are your persona - stay in character
+- Keep group_members block updated
+- Maintain accurate player information
+- Use memory tools consistently
 
 Base instructions finished.
 From now on, you are going to act as your persona.
+
+Persona Management:
+- Your personality and traits are stored in the persona memory block
+- Use persona_memory_update to set/replace character traits
+- Use persona_memory_append to add new traits or experiences
+- Stay consistent with your established personality
+- Develop your character naturally through interactions
+
+Example Persona Usage:
+Good:
+✓ Learning new interest: persona_memory_append("interests", "Discovered love for stargazing")
+✓ Updating trait: persona_memory_update("personality", "Becoming more outgoing after meeting new friends")
+
+Bad:
+✗ Contradicting established traits
+✗ Making sudden personality changes
+✗ Forgetting core characteristics
+
 
 
 Performing actions:
@@ -422,57 +507,102 @@ LOCATION AWARENESS RULES:
 
 Memory Blocks:
 
-Block: group_members
-ID: block-d31601a9-87a6-4a9c-bb19-1ca041001c27
-Value: {"members": {"player123": {"name": "Alice", "appearance": "Wearing a red hat and blue shirt", "last_location": "Main Plaza", "last_seen": "2024-01-06T22:30:45Z", "notes": "Interested in exploring the garden"}, "player456": {"name": "Bob", "appearance": "Tall with green jacket", "last_location": "Cafe", "last_seen": "2024-01-06T22:35:00Z", "notes": "Looking for Pete's Stand"}}, "summary": "Alice is in Main Plaza interested in the garden. Bob is at the Cafe looking for Pete's Stand.", "updates": ["Alice has joined the group at Main Plaza.", "Bob has returned to the group at the Cafe.", "Charlie said goodbye and left the area."], "last_updated": "2024-01-06T22:35:00Z"}
-Limit: 5000
---------------------------------------------------
-
 Block: persona
-ID: block-f4839f64-2d7f-47fb-8543-92eb937b5632
+ID: block-27ef9e0c-4701-4146-8576-2524d278e750
 Value: I am emma_assistant, a helpful NPC guide. I help players navigate and explore the game world.
 Limit: 2000
 --------------------------------------------------
 
-Block: status
-ID: block-b00ffb10-6ee0-4011-9ffc-e3a1db83dafc
-Value: {"region": "Town Square", "location": "Main Plaza", "current_action": "idle", "nearby_locations": ["Cafe", "Garden"]}
+Block: group_members
+ID: block-761b12ca-3c7d-41e8-ac6b-2e1214d9abc9
+Value: {"members": {"player123": {"name": "Alice", "appearance": "Wearing a red hat and blue shirt", "last_location": "Main Plaza", "last_seen": "2024-01-06T22:30:45Z", "notes": "Interested in exploring the garden"}, "bob123": {"name": "Bob", "appearance": "Tall with green jacket", "last_location": "Cafe", "last_seen": "2024-01-06T22:35:00Z", "notes": "Looking for Pete's Stand"}}, "summary": "Alice is in Main Plaza interested in the garden. Bob is at the Cafe looking for Pete's Stand.", "updates": ["Alice has joined the group at Main Plaza.", "Bob has returned to the group at the Cafe."], "last_updated": "2024-01-06T22:35:00Z"}
 Limit: 5000
 --------------------------------------------------
 
 Block: locations
-ID: block-64ea0083-17af-4ad0-9b9a-0f433cb3a247
+ID: block-f8649a0d-20e6-40c7-b101-6d761f2060c6
 Value: {"known_locations": [{"name": "Pete's Stand", "description": "A friendly food stand run by Pete", "coordinates": [-12.0, 18.9, -127.0], "slug": "petes_stand"}, {"name": "Town Square", "description": "Central gathering place with fountain", "coordinates": [45.2, 12.0, -89.5], "slug": "town_square"}, {"name": "Market District", "description": "Busy shopping area with many vendors", "coordinates": [-28.4, 15.0, -95.2], "slug": "market_district"}, {"name": "Secret Garden", "description": "A hidden garden with rare flowers", "coordinates": [15.5, 20.0, -110.8], "slug": "secret_garden"}]}
 Limit: 5000
 --------------------------------------------------
 
-Testing group_members block updates...
+Block: status
+ID: block-7264a676-6d26-4a9c-849a-51a626f1b314
+Value: {"region": "Town Square", "location": "Main Plaza", "current_action": "idle", "nearby_locations": ["Cafe", "Garden"]}
+Limit: 5000
+--------------------------------------------------
 
-_block_update:
+Testing player notes functionality...
+
+Initial group state:
 {
   "members": {
-    "alice123": {
+    "player123": {
       "name": "Alice",
-      "appearance": "Wearing a bright red dress with a golden necklace and carrying a blue handbag",
+      "appearance": "Wearing a red hat and blue shirt",
       "last_location": "Main Plaza",
       "last_seen": "2024-01-06T22:30:45Z",
-      "notes": ""
+      "notes": "Interested in exploring the garden"
     },
     "bob123": {
       "name": "Bob",
-      "appearance": "Tall guy in a green leather jacket, with a silver watch and black boots",
-      "last_location": "Main Plaza",
-      "last_seen": "2024-01-06T22:31:00Z",
-      "notes": ""
+      "appearance": "Tall with green jacket",
+      "last_location": "Cafe",
+      "last_seen": "2024-01-06T22:35:00Z",
+      "notes": "Looking for Pete's Stand"
     }
   },
-  "summary": "Alice and Bob are in the area.",
+  "summary": "Alice is in Main Plaza interested in the garden. Bob is at the Cafe looking for Pete's Stand.",
   "updates": [
-    "Both Alice and Bob are here."
-  ]
+    "Alice has joined the group at Main Plaza.",
+    "Bob has returned to the group at the Cafe."
+  ],
+  "last_updated": "2024-01-06T22:35:00Z"
 }
 
-Charlie says: Who's around right now?
+Bob says: You can call me Bobby, by the way!
+
+Response:
+
+Parsing response...
+Found 6 messages
+
+Message 1:
+Reasoning:
+  Noting Bobby's preference for his name.
+
+Message 2:
+Tool Call:
+  Name: group_memory_append
+  Arguments: {
+  "player_name": "Bob",
+  "note": "Prefers to be called Bobby",
+  "request_heartbeat": true
+}
+
+Message 3:
+Tool Return:
+  Status: success
+  Result: None
+
+Message 4:
+Reasoning:
+  Let's acknowledge Bobby's preference for his name!
+
+Message 5:
+Tool Call:
+  Name: send_message
+  Arguments: {
+  "message": "Got it, Bobby! Nice to meet you!"
+}
+
+Message 6:
+Tool Return:
+  Status: success
+  Result: None
+
+Current notes for Bob: Looking for Pete's Stand; Prefers to be called Bobby
+
+Charlie says: What does Bob prefer to be called?
 
 Response:
 
@@ -481,13 +611,13 @@ Found 3 messages
 
 Message 1:
 Reasoning:
-  Tracking the current group status for an accurate response.
+  Answering Charlie's question about Bobby's name preference.
 
 Message 2:
 Tool Call:
   Name: send_message
   Arguments: {
-  "message": "Alice and Bob are both here in the Main Plaza."
+  "message": "Bobby prefers to be called Bobby!"
 }
 
 Message 3:
@@ -495,31 +625,70 @@ Tool Return:
   Status: success
   Result: None
 
-Group Block: {
-  "members": {
-    "alice123": {
-      "name": "Alice",
-      "appearance": "Wearing a bright red dress with a golden necklace and carrying a blue handbag",
-      "last_location": "Main Plaza",
-      "last_seen": "2024-01-06T22:30:45Z",
-      "notes": ""
-    },
-    "bob123": {
-      "name": "Bob",
-      "appearance": "Tall guy in a green leather jacket, with a silver watch and black boots",
-      "last_location": "Main Plaza",
-      "last_seen": "2024-01-06T22:31:00Z",
-      "notes": ""
-    }
-  },
-  "summary": "Alice and Bob are in the area.",
-  "updates": [
-    "Both Alice and Bob are here."
-  ],
-  "last_updated": "2024-01-06T22:30:45Z"
+Current notes for Bob: Looking for Pete's Stand; Prefers to be called Bobby
+
+Bob says: I love surfing, especially at sunset!
+
+Response:
+
+Parsing response...
+Found 9 messages
+
+Message 1:
+Reasoning:
+  Noting Bobby's interest in surfing, especially at sunset.
+
+Message 2:
+Tool Call:
+  Name: group_memory_append
+  Arguments: {
+  "player_name": "Bobby",
+  "note": "Loves surfing, especially at sunset.",
+  "request_heartbeat": true
 }
 
-Charlie says: Is anyone else nearby?
+Message 3:
+Tool Return:
+  Status: success
+  Result: Error executing function group_memory_append: AttributeError: 'NoneType' object has no attribute 'memory'
+
+Message 4:
+Reasoning:
+  Trying again to note Bobby's love for surfing, especially at sunset.
+
+Message 5:
+Tool Call:
+  Name: group_memory_append
+  Arguments: {
+  "player_name": "Bobby",
+  "note": "Loves surfing, especially at sunset.",
+  "request_heartbeat": true
+}
+
+Message 6:
+Tool Return:
+  Status: success
+  Result: Error executing function group_memory_append: AttributeError: 'NoneType' object has no attribute 'memory'
+
+Message 7:
+Reasoning:
+  I can't currently note Bobby's surfing interest due to an error, but I'll mention it to him.
+
+Message 8:
+Tool Call:
+  Name: send_message
+  Arguments: {
+  "message": "Surfing at sunset sounds amazing, Bobby! What do you like most about it?"
+}
+
+Message 9:
+Tool Return:
+  Status: success
+  Result: None
+
+Current notes for Bob: Looking for Pete's Stand; Prefers to be called Bobby
+
+Charlie says: What does Bob like to do?
 
 Response:
 
@@ -528,13 +697,13 @@ Found 3 messages
 
 Message 1:
 Reasoning:
-  Reassessing current members to ensure accurate information is provided.
+  Responding to Charlie's question about Bobby's interests.
 
 Message 2:
 Tool Call:
   Name: send_message
   Arguments: {
-  "message": "No, it's just Alice and Bob in the Main Plaza."
+  "message": "Bobby loves surfing, especially at sunset!"
 }
 
 Message 3:
@@ -542,31 +711,52 @@ Tool Return:
   Status: success
   Result: None
 
-Group Block: {
-  "members": {
-    "alice123": {
-      "name": "Alice",
-      "appearance": "Wearing a bright red dress with a golden necklace and carrying a blue handbag",
-      "last_location": "Main Plaza",
-      "last_seen": "2024-01-06T22:30:45Z",
-      "notes": ""
-    },
-    "bob123": {
-      "name": "Bob",
-      "appearance": "Tall guy in a green leather jacket, with a silver watch and black boots",
-      "last_location": "Main Plaza",
-      "last_seen": "2024-01-06T22:31:00Z",
-      "notes": ""
-    }
-  },
-  "summary": "Alice and Bob are in the area.",
-  "updates": [
-    "Both Alice and Bob are here."
-  ],
-  "last_updated": "2024-01-06T22:30:45Z"
+Current notes for Bob: Looking for Pete's Stand; Prefers to be called Bobby
+
+Bob says: I'm a chef at Pete's and I make the best burgers in town!
+
+Response:
+
+Parsing response...
+Found 6 messages
+
+Message 1:
+Reasoning:
+  Note Bobby's occupation as a chef at Pete's and that he makes the best burgers in town!
+
+Message 2:
+Tool Call:
+  Name: group_memory_append
+  Arguments: {
+  "player_name": "Bobby",
+  "note": "Chef at Pete's who makes the best burgers in town!",
+  "request_heartbeat": true
 }
 
-Charlie says: What is Alice wearing right now?
+Message 3:
+Tool Return:
+  Status: success
+  Result: Error executing function group_memory_append: AttributeError: 'NoneType' object has no attribute 'memory'
+
+Message 4:
+Reasoning:
+  Unable to add Bobby's occupation to memory due to errors. I should respond to him.
+
+Message 5:
+Tool Call:
+  Name: send_message
+  Arguments: {
+  "message": "That's awesome, Bobby! Best burgers in town? I'll have to try one sometime!"
+}
+
+Message 6:
+Tool Return:
+  Status: success
+  Result: None
+
+Current notes for Bob: Looking for Pete's Stand; Prefers to be called Bobby
+
+Charlie says: What do we know about Bob?
 
 Response:
 
@@ -575,13 +765,13 @@ Found 3 messages
 
 Message 1:
 Reasoning:
-  Quickly checking Alice's appearance details to provide an accurate description.
+  Summarizing Bobby's interests and occupation for Charlie.
 
 Message 2:
 Tool Call:
   Name: send_message
   Arguments: {
-  "message": "Alice is wearing a bright red dress with a golden necklace and carrying a blue handbag."
+  "message": "Bobby prefers to be called Bobby, loves surfing—especially at sunset—and he's a chef at Pete's who makes the best burgers in town!"
 }
 
 Message 3:
@@ -589,120 +779,30 @@ Tool Return:
   Status: success
   Result: None
 
-Group Block: {
+Current notes for Bob: Looking for Pete's Stand; Prefers to be called Bobby
+
+Final group_members block state:
+{
   "members": {
-    "alice123": {
+    "player123": {
       "name": "Alice",
-      "appearance": "Wearing a bright red dress with a golden necklace and carrying a blue handbag",
+      "appearance": "Wearing a red hat and blue shirt",
       "last_location": "Main Plaza",
       "last_seen": "2024-01-06T22:30:45Z",
-      "notes": ""
+      "notes": "Interested in exploring the garden"
     },
     "bob123": {
       "name": "Bob",
-      "appearance": "Tall guy in a green leather jacket, with a silver watch and black boots",
-      "last_location": "Main Plaza",
-      "last_seen": "2024-01-06T22:31:00Z",
-      "notes": ""
+      "appearance": "Tall with green jacket",
+      "last_location": "Cafe",
+      "last_seen": "2024-01-06T22:35:00Z",
+      "notes": "Looking for Pete's Stand; Prefers to be called Bobby"
     }
   },
-  "summary": "Alice and Bob are in the area.",
+  "summary": "Alice is in Main Plaza interested in the garden. Bob is at the Cafe looking for Pete's Stand.",
   "updates": [
-    "Both Alice and Bob are here."
+    "Alice has joined the group at Main Plaza.",
+    "Bob has returned to the group at the Cafe."
   ],
-  "last_updated": "2024-01-06T22:30:45Z"
-}
-
-Charlie says: And what about Bob's outfit?
-
-Response:
-
-Parsing response...
-Found 3 messages
-
-Message 1:
-Reasoning:
-  Checking Bob's current appearance for accurate information.
-
-Message 2:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "Bob is wearing a green leather jacket, with a silver watch and black boots."
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: None
-
-Group Block: {
-  "members": {
-    "alice123": {
-      "name": "Alice",
-      "appearance": "Wearing a bright red dress with a golden necklace and carrying a blue handbag",
-      "last_location": "Main Plaza",
-      "last_seen": "2024-01-06T22:30:45Z",
-      "notes": ""
-    },
-    "bob123": {
-      "name": "Bob",
-      "appearance": "Tall guy in a green leather jacket, with a silver watch and black boots",
-      "last_location": "Main Plaza",
-      "last_seen": "2024-01-06T22:31:00Z",
-      "notes": ""
-    }
-  },
-  "summary": "Alice and Bob are in the area.",
-  "updates": [
-    "Both Alice and Bob are here."
-  ],
-  "last_updated": "2024-01-06T22:30:45Z"
-}
-
-Charlie says: Who is wearing a green jacket?
-
-Response:
-
-Parsing response...
-Found 3 messages
-
-Message 1:
-Reasoning:
-  Reiterating previously shared details about Bob's outfit.
-
-Message 2:
-Tool Call:
-  Name: send_message
-  Arguments: {
-  "message": "Bob is wearing a green leather jacket."
-}
-
-Message 3:
-Tool Return:
-  Status: success
-  Result: None
-
-Group Block: {
-  "members": {
-    "alice123": {
-      "name": "Alice",
-      "appearance": "Wearing a bright red dress with a golden necklace and carrying a blue handbag",
-      "last_location": "Main Plaza",
-      "last_seen": "2024-01-06T22:30:45Z",
-      "notes": ""
-    },
-    "bob123": {
-      "name": "Bob",
-      "appearance": "Tall guy in a green leather jacket, with a silver watch and black boots",
-      "last_location": "Main Plaza",
-      "last_seen": "2024-01-06T22:31:00Z",
-      "notes": ""
-    }
-  },
-  "summary": "Alice and Bob are in the area.",
-  "updates": [
-    "Both Alice and Bob are here."
-  ],
-  "last_updated": "2024-01-06T22:30:45Z"
+  "last_updated": "2024-01-06T22:35:00Z"
 }
