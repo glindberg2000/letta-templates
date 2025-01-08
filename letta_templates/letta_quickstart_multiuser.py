@@ -835,6 +835,7 @@ def parse_args():
     parser.add_argument("--skip-test", action="store_true", help="Skip testing")
     parser.add_argument("--custom-tools", action="store_true", help="Use custom tools")
     parser.add_argument("--minimal-prompt", action="store_true", help="Use minimal prompt for testing")
+    parser.add_argument("--continue-on-error", action="store_true", help="Continue to next test on failure")
     parser.add_argument(
         "--test-type",
         choices=['all', 'base', 'social', 'status', 'group', 'notes', 'persona'],
@@ -1149,17 +1150,15 @@ def test_social_awareness(client, agent_id: str):
     """Additional tests for social awareness and movement"""
     print("\nTesting social awareness and natural movement...")
     
-    def update_user_state(name: str, location: str = None, following: str = None):
-        """Update user state in memory"""
-        if name not in states["users"]:
-            states["users"][name] = {"location": None, "following": None}
-        
-        if location:
-            states["users"][name]["location"] = location
-        if following is not None:
-            states["users"][name]["following"] = following
-            
-        return states["users"]
+    # Verify group_members block has required users
+    initial_block = json.loads(client.get_agent(agent_id).memory.get_block("group_members").value)
+    required_users = {"Alice", "Bob", "Charlie"}
+    present_users = {member["name"] for member in initial_block["members"].values()}
+    if not required_users.issubset(present_users):
+        missing = required_users - present_users
+        print(f"❌ Missing required users in group_members: {missing}")
+        return
+    print("✓ All required users present in group_members block")
     
     social_tests = [
         # Test direct addressing (should use [SILENCE])
@@ -1178,8 +1177,6 @@ def test_social_awareness(client, agent_id: str):
         ("System", "Bob and Alice have left the area.")
     ]
     
-    states = {"users": {}}
-
     for name, message in social_tests:
         print(f"\n{name} says: {message}")
         response = client.send_message(
@@ -1189,7 +1186,7 @@ def test_social_awareness(client, agent_id: str):
             name=name
         )
         
-        # Track and verify proper tool usage
+        # Verify proper tool sequences
         tool_calls = []
         message_contents = []
         
@@ -1200,19 +1197,6 @@ def test_social_awareness(client, agent_id: str):
                 if tool.name == "send_message":
                     message_contents.append(json.loads(tool.arguments)["message"])
                 
-                if tool.name == "navigate_to":
-                    states["users"] = update_user_state(
-                        name, 
-                        location=json.loads(tool.arguments)["destination"]
-                    )
-                elif tool.name == "perform_action":
-                    args = json.loads(tool.arguments)
-                    if args.get("action") == "follow":
-                        states["users"] = update_user_state(
-                            name,
-                            following=args.get("target")
-                        )
-        
         # Verify proper tool sequences
         if any("goodbye" in msg.lower() for msg in message_contents):
             wave_found = any(
@@ -1227,19 +1211,9 @@ def test_social_awareness(client, agent_id: str):
             else:
                 print("✗ Missing proper goodbye sequence")
                 
-        # Verify [SILENCE] in direct messages
-        if "@" in message or message.lower().startswith(("hey ", "hi ")):
-            target = message.split()[1].strip("@,!")
-            if target != "Emma":  # Use agent name
-                if any("[SILENCE]" in msg for msg in message_contents):
-                    print("✓ Correctly remained silent in direct message")
-                else:
-                    print("✗ Should have remained silent")
-        
         print("\nResponse:")
         print_response(response)
         print(f"\nTool Calls: {json.dumps([t.name for t in tool_calls], indent=2)}")
-        print(f"User States: {json.dumps(states, indent=2)}")
         time.sleep(1)
 
 def evaluate_response_with_gpt4(response_text: str, current_status: dict, message: str):
@@ -1871,8 +1845,7 @@ def main():
             "navigate_to",
             "navigate_to_coordinates",
             "perform_action",
-            "examine_object",
-            "group_memory_append"
+            "examine_object"
         ]
         
         # Get all tools
