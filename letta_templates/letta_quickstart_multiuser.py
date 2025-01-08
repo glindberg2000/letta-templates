@@ -8,7 +8,7 @@ import time
 import argparse
 from typing import Optional, Any
 import sys
-from letta.schemas.tool import ToolUpdate
+from letta.schemas.tool import ToolUpdate, Tool
 from letta.schemas.message import (
     ToolCallMessage, 
     ToolReturnMessage, 
@@ -571,6 +571,7 @@ def create_personalized_agent(
     
     # Create and attach custom tools
     print("\nSetting up custom tools:")
+    # Then register other tools
     for name, tool_info in TOOL_REGISTRY.items():
         try:
             # Check if tool already exists
@@ -1659,11 +1660,21 @@ def test_echo(message: str) -> str:
 def test_player_notes(client, agent_id: str):
     print("\nTesting player notes functionality...")
     
+    expected_notes = [
+        "Looking for Pete's Stand",  # Initial
+        "Prefers to be called Bobby",
+        "Loves surfing, especially at sunset",
+        "Chef at Pete's, makes the best burgers in town"
+    ]
+    
     try:
         # Print initial state
         print("\nInitial group state:")
         initial_block = json.loads(client.get_agent(agent_id).memory.get_block("group_members").value)
         print(json.dumps(initial_block, indent=2))
+        
+        # Verify initial note
+        assert expected_notes[0] in initial_block["members"]["bob123"]["notes"], "Initial note missing"
         
         # Test scenarios for notes
         scenarios = [
@@ -1682,12 +1693,26 @@ def test_player_notes(client, agent_id: str):
         
         for speaker, message in scenarios:
             print(f"\n{speaker} says: {message}")
-            response = client.send_message(
-                agent_id=agent_id,
-                message=message,
-                role="user",
-                name=speaker
-            )
+            max_retries = 3
+            retry_delay = 2
+            
+            for attempt in range(max_retries):
+                try:
+                    response = client.send_message(
+                        agent_id=agent_id,
+                        message=message,
+                        role="user",
+                        name=speaker
+                    )
+                    break  # Success, exit retry loop
+                except Exception as e:
+                    if attempt == max_retries - 1:  # Last attempt
+                        print(f"Failed after {max_retries} attempts: {e}")
+                        raise
+                    print(f"Attempt {attempt + 1} failed, retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+              
             print("\nResponse:")
             print_response(response)
             
@@ -1739,7 +1764,8 @@ def main():
             "navigate_to",
             "navigate_to_coordinates",
             "perform_action",
-            "examine_object"
+            "examine_object",
+            "group_memory_append"
         ]
         
         # Get all tools

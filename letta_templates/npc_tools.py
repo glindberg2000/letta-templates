@@ -363,46 +363,29 @@ def test_echo(message: str) -> str:
     """
     return f"[TEST_ECHO_V3] {message} (echo...Echo...ECHO!)"
 
-def group_memory_append(agent_state: "AgentState", player_name: str, note: str) -> Optional[str]:
-    """
-    Add notes about a player to the group_members block.
-    
-    Args:
-        agent_state (AgentState): The agent's state containing memory
-        player_name (str): Name of the player (e.g., "Bob")
-        note (str): Note to add (e.g., "Prefers to be called Bobby", "Loves surfing")
-    
-    Returns:
-        Optional[str]: None is always returned as this function does not produce a response.
-    """
-    import json
-    group_block = json.loads(agent_state.memory.get_block("group_members").value)
-    
-    # Find the player's ID by name
-    player_id = None
-    for id, info in group_block["members"].items():
-        if info["name"] == player_name:
-            player_id = id
-            break
-    
-    if not player_id:
-        raise ValueError(f"Player {player_name} not found in current group")
+def group_memory_append(client, agent_id: str, player_name: str, note: str, request_heartbeat: bool = False):
+    """Append a note to a player's memory."""
+    try:
+        memory = client.get_in_context_memory(agent_id)
+        block = json.loads(memory.get_block("group_members").value)
         
-    # Append to existing notes
-    current_notes = group_block["members"][player_id]["notes"]
-    if current_notes:
-        new_notes = current_notes + "; " + note
-    else:
-        new_notes = note
+        # Convert Bobby -> bob123 if needed
+        player_id = f"{player_name.lower()}123" if not player_name.endswith("123") else player_name
         
-    group_block["members"][player_id]["notes"] = new_notes
-    
-    # Update the block
-    agent_state.memory.update_block_value(
-        label="group_members",
-        value=json.dumps(group_block)
-    )
-    return None
+        if player_id not in block["members"]:
+            return f"Error: Player {player_name} not found in group members"
+        
+        current_notes = block["members"][player_id]["notes"]
+        if current_notes:
+            block["members"][player_id]["notes"] = current_notes + "; " + note
+        else:
+            block["members"][player_id]["notes"] = note
+        
+        memory.update_block_value(label="group_members", value=json.dumps(block))
+        return f"Added note for {player_name}: {note}"
+    except Exception as e:
+        print(f"Error in group_memory_append: {e}")
+        return f"Failed to add note: {str(e)}"
 
 def group_memory_replace(agent_state: "AgentState", player_name: str, old_note: str, new_note: str) -> Optional[str]:
     """
