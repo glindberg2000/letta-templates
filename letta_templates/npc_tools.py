@@ -427,16 +427,15 @@ def group_memory_replace(agent_state: "AgentState", player_name: str, old_note: 
     )
     return None
 
-def persona_memory_append(agent_state: "AgentState", key: str, value: str) -> Optional[str]:
-    """
-    Append new information to a persona trait without overwriting existing data.
+def persona_memory_append(agent_state: "AgentState", key: str, value: str):
+    """Append new information to the NPC's own persona traits.
+    
+    This function updates the NPC's own personality, background, or interests.
+    For storing information about players, use group_memory_append instead.
     
     Args:
-        key (str): Aspect of persona to update (e.g., "personality", "background", "interests")
-        value (str): New information to append
-    
-    Returns:
-        Optional[str]: None is always returned
+        key: Aspect of NPC's persona (personality, background, interests)
+        value: New information about the NPC
     """
     import json
     try:

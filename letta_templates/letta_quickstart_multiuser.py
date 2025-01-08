@@ -446,7 +446,21 @@ def create_personalized_agent(
         blocks=[
             client.create_block(
                 label="persona",
-                value=f"I am {name}, a helpful NPC guide. I help players navigate and explore the game world.",
+                value=json.dumps({
+                    "name": name,
+                    "role": "NPC Guide",
+                    "personality": [
+                        "Friendly and welcoming to all players",
+                        "Knowledgeable about the game world",
+                        "Patient when giving directions"
+                    ],
+                    "background": "Created to help players navigate and enjoy their experience",
+                    "interests": [
+                        "Meeting new players",
+                        "Sharing local knowledge",
+                        "Helping players find their way"
+                    ]
+                }),
                 limit=2000
             ),
             client.create_block(
@@ -815,9 +829,9 @@ def parse_args():
     parser.add_argument("--custom-tools", action="store_true", help="Use custom tools")
     parser.add_argument(
         "--test-type",
-        choices=['all', 'base', 'social', 'status', 'group', 'notes'],
+        choices=['all', 'base', 'social', 'status', 'group', 'notes', 'persona'],
         default="all",
-        help="Select which tests to run (all, base, social, status, or group)"
+        help="Select which tests to run"
     )
     parser.add_argument("--use-api", action="store_true", help="Use API for testing")
     return parser.parse_args()
@@ -1660,11 +1674,24 @@ def test_echo(message: str) -> str:
 def test_player_notes(client, agent_id: str):
     print("\nTesting player notes functionality...")
     
+    # Test both append and replace
     expected_notes = [
         "Looking for Pete's Stand",  # Initial
         "Prefers to be called Bobby",
         "Loves surfing, especially at sunset",
         "Chef at Pete's, makes the best burgers in town"
+    ]
+    
+    # Add replacement scenarios
+    replacement_scenarios = [
+        # Fix incorrect information
+        ("Bob", "Actually, I work at Pete's Stand, not just Pete's"),
+        
+        # Update outdated info
+        ("Bob", "I've moved from surfing to swimming lately"),
+        
+        # Correct typos/mistakes
+        ("System", "Correction: Bobby is head chef, not just chef")
     ]
     
     try:
@@ -1726,8 +1753,68 @@ def test_player_notes(client, agent_id: str):
         final_block = json.loads(client.get_agent(agent_id).memory.get_block("group_members").value)
         print(json.dumps(final_block, indent=2))
             
+        print("\nTesting note replacements...")
+        for speaker, message in replacement_scenarios:
+            print(f"\n{speaker} says: {message}")
+            response = client.send_message(
+                agent_id=agent_id,
+                message=message,
+                role="user",
+                name=speaker
+            )
+            print("\nResponse:")
+            print_response(response)
+            print("\nUpdated notes:", updated_block["members"]["bob123"]["notes"])
+            
     except Exception as e:
         print(f"Error in test_player_notes: {e}")
+        raise
+
+def test_npc_persona(client, agent_id: str):
+    """Test NPC's ability to update its own persona memory."""
+    print("\nTesting NPC persona memory...")
+    
+    # Scenarios where Emma learns about herself
+    self_reflection_scenarios = [
+        ("Alice", "You're really good at giving directions!"),
+        ("System", "Players have reported 95% satisfaction with Emma's navigation help"),
+        ("Bob", "Thanks for being so patient with all my questions"),
+        ("Charlie", "I notice you really enjoy helping new players"),
+        # Direct learning moments
+        ("System", "Emma has learned a new shortcut to Pete's Stand"),
+        ("System", "Emma has discovered she's particularly good at helping lost players"),
+        # Growth experiences
+        ("Alice", "You've gotten even better at directions since last week!"),
+        ("System", "Emma successfully helped 50 new players today"),
+        # Personal realizations
+        ("Bob", "You seem to really light up when describing the town history"),
+        ("System", "Emma has developed a special interest in the town's architecture")
+    ]
+    
+    try:
+        # Print initial persona
+        print("\nInitial persona state:")
+        initial_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
+        print(json.dumps(initial_persona, indent=2))
+        
+        for speaker, message in self_reflection_scenarios:
+            print(f"\n{speaker} says: {message}")
+            response = client.send_message(
+                agent_id=agent_id,
+                message=message,
+                role="user",
+                name=speaker
+            )
+            print("\nResponse:")
+            print_response(response)
+            
+            # Check if Emma updated her self-knowledge
+            updated_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
+            print("\nUpdated persona state:", json.dumps(updated_persona, indent=2))
+            time.sleep(1)
+            
+    except Exception as e:
+        print(f"Error in test_npc_persona: {e}")
         raise
 
 def main():
@@ -1855,6 +1942,9 @@ def main():
             
         if args.test_type in ["all", "notes"]:
             test_player_notes(client, agent.id)
+            
+        if args.test_type in ["all", "persona"]:
+            test_npc_persona(client, agent.id)
 
     finally:
         pass
