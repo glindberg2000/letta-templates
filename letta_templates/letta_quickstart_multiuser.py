@@ -1740,23 +1740,24 @@ def test_player_notes(client, agent_id: str):
 
 def test_npc_persona(client, agent_id: str):
     """Test NPC's ability to update its own persona memory."""
-    print("\nTesting NPC persona memory...")
+    print("\nTesting NPC persona interest updates...")
     
-    # Scenarios where Emma learns about herself
-    self_reflection_scenarios = [
-        ("Alice", "You're really good at giving directions!"),
-        ("System", "Players have reported 95% satisfaction with Emma's navigation help"),
-        ("Bob", "Thanks for being so patient with all my questions"),
-        ("Charlie", "I notice you really enjoy helping new players"),
-        # Direct learning moments
-        ("System", "Emma has learned a new shortcut to Pete's Stand"),
-        ("System", "Emma has discovered she's particularly good at helping lost players"),
-        # Growth experiences
-        ("Alice", "You've gotten even better at directions since last week!"),
-        ("System", "Emma successfully helped 50 new players today"),
-        # Personal realizations
-        ("Bob", "You seem to really light up when describing the town history"),
-        ("System", "Emma has developed a special interest in the town's architecture")
+    # Test scenarios for updating interests
+    interest_scenarios = [
+        # Adding new interests
+        ("System", "Update your interests to include skiing"),
+        ("System", "Add surfing to your interests"),
+        ("System", "Include skating in your interests"),
+        
+        # Verifying interests
+        ("Alice", "What are your interests?"),
+        
+        # Modifying existing interests
+        ("System", "Change skiing to snowboarding"),
+        ("System", "Remove surfing from your interests"),
+        
+        # Final verification
+        ("Bob", "Can you tell me what you like to do?")
     ]
     
     try:
@@ -1765,21 +1766,40 @@ def test_npc_persona(client, agent_id: str):
         initial_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
         print(json.dumps(initial_persona, indent=2))
         
-        for speaker, message in self_reflection_scenarios:
+        for speaker, message in interest_scenarios:
             print(f"\n{speaker} says: {message}")
-            response = client.send_message(
-                agent_id=agent_id,
-                message=message,
-                role="user",
-                name=speaker
-            )
+            max_retries = 3
+            retry_delay = 2
+            
+            for attempt in range(max_retries):
+                try:
+                    response = client.send_message(
+                        agent_id=agent_id,
+                        message=message,
+                        role="user",
+                        name=speaker
+                    )
+                    break  # Success, exit retry loop
+                except Exception as e:
+                    if attempt == max_retries - 1:  # Last attempt
+                        print(f"Failed after {max_retries} attempts: {e}")
+                        raise
+                    print(f"Attempt {attempt + 1} failed, retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+            
             print("\nResponse:")
             print_response(response)
             
-            # Check if Emma updated her self-knowledge
+            # Check persona updates
             updated_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
-            print("\nUpdated persona state:", json.dumps(updated_persona, indent=2))
+            print("\nCurrent interests:", updated_persona["interests"])
             time.sleep(1)
+            
+        # Print final state
+        print("\nFinal persona state:")
+        final_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
+        print(json.dumps(final_persona, indent=2))
             
     except Exception as e:
         print(f"Error in test_npc_persona: {e}")

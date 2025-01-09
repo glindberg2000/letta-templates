@@ -88,13 +88,17 @@ You have two main tools for managing player information:
 
 1. group_memory_append:
    - Add new information about players
-   - Example: When Bob says "Call me Bobby", use group_memory_append("Bob", "Prefers to be called Bobby")
+   - Example: When Diamond says "Call me Di", use group_memory_append("Diamond", "Prefers to be called Di")
    - Notes are preserved and restored when players return to the area
 
 2. group_memory_replace:
-   - Update or correct existing information
-   - Example: If Bob changes preference from "Bobby" to "Robert", update accordingly
-   - Keeps player information accurate and current
+   - Replace specific notes with new information
+   - Must provide exact old note to replace
+   - Example: When player changes hobbies:
+     Current notes: "Loves surfing, especially at sunset"
+     group_memory_replace("Diamond", 
+         "Loves surfing, especially at sunset",
+         "Loves swimming; previously enjoyed surfing")
 
 Important Memory Guidelines:
 - Always update notes when learning new information about players
@@ -105,15 +109,15 @@ Important Memory Guidelines:
 
 Example Memory Usage:
 Good:
-✓ Player: "I love surfing!"
-  Action: group_memory_append("Player", "Enjoys surfing")
-✓ Player: "Actually I prefer swimming now"
-  Action: group_memory_replace("Player", "Enjoys surfing", "Prefers swimming")
+✓ Diamond: "I love surfing!"
+  Action: group_memory_append("Diamond", "Loves surfing")
+✓ Diamond: "Actually I prefer swimming now"
+  Action: group_memory_replace("Diamond", "Loves surfing", "Loves swimming")
 
 Bad:
-✗ Not updating notes when learning new information
-✗ Storing temporary or irrelevant details
-✗ Mixing current and past information
+✗ Wrong old note: group_memory_replace("Diamond", "likes surfing", "loves swimming")
+✗ Missing old note: group_memory_replace("Diamond", "", "loves swimming")
+✗ Using IDs: group_memory_replace("123456", ...)  # Use display names instead
 
 Control flow:
 Your brain runs in response to events (messages, joins, leaves) and regular heartbeats.
@@ -136,15 +140,14 @@ From now on, you are going to act as your persona.
 
 Persona Management:
 - Your personality and traits are stored in the persona memory block
-- Use persona_memory_update to set/replace character traits
-- Use persona_memory_append to add new traits or experiences
+- Use persona_memory_update to set or replace traits (e.g., "Update interests to X")
 - Stay consistent with your established personality
 - Develop your character naturally through interactions
 
 Example Persona Usage:
 Good:
-✓ Learning new interest: persona_memory_append("interests", "Discovered love for stargazing")
-✓ Updating trait: persona_memory_update("personality", "Becoming more outgoing after meeting new friends")
+✓ "Update interests to swimming" -> persona_memory_update("interests", "Swimming")
+✓ "Remove X and replace with Y" -> persona_memory_update to replace entire array
 
 Bad:
 ✗ Contradicting established traits
@@ -550,69 +553,69 @@ def test_echo(message: str) -> str:
     """
     return f"[TEST_ECHO_V3] {message} (echo...Echo...ECHO!)"
 
-def group_memory_append(client, agent_id: str, player_name: str, note: str, request_heartbeat: bool = False):
-    """Append a note to a player's memory."""
+def group_memory_append(agent_state: "AgentState", player_name: str, note: str) -> Optional[str]:
+    """Add a note to a player's memory."""
     try:
-        memory = client.get_in_context_memory(agent_id)
-        block = json.loads(memory.get_block("group_members").value)
+        block = json.loads(agent_state.memory.get_block("group_members").value)
         
-        # Convert Bobby -> bob123 if needed
-        player_id = f"{player_name.lower()}123" if not player_name.endswith("123") else player_name
-        
-        if player_id not in block["members"]:
-            return f"Error: Player {player_name} not found in group members"
-        
+        # Find player
+        player_id = None
+        for id, info in block["members"].items():
+            if info["name"] == player_name:
+                player_id = id
+                break
+                
+        if not player_id:
+            return f"Player {player_name} not found - use original name from members block, not preferred name"
+            
+        # Append note
         current_notes = block["members"][player_id]["notes"]
         if current_notes:
             block["members"][player_id]["notes"] = current_notes + "; " + note
         else:
             block["members"][player_id]["notes"] = note
-        
-        memory.update_block_value(label="group_members", value=json.dumps(block))
-        return f"Added note for {player_name}: {note}"
+            
+        agent_state.memory.update_block_value(
+            label="group_members",
+            value=json.dumps(block)
+        )
+        return None
+            
     except Exception as e:
         print(f"Error in group_memory_append: {e}")
         return f"Failed to add note: {str(e)}"
 
 def group_memory_replace(agent_state: "AgentState", player_name: str, old_note: str, new_note: str) -> Optional[str]:
-    """
-    Replace notes about a player in the group_members block.
-    
-    Args:
-        player_name (str): Name of the player
-        old_note (str): Existing note to replace
-        new_note (str): New note content
+    """Replace specific notes about a player."""
+    try:
+        block = json.loads(agent_state.memory.get_block("group_members").value)
         
-    Returns:
-        Optional[str]: None is always returned
-    """
-    import json
-    group_block = json.loads(agent_state.memory.get_block("group_members").value)
-    
-    # Find player
-    player_id = None
-    for id, info in group_block["members"].items():
-        if info["name"] == player_name:
-            player_id = id
-            break
-    
-    if not player_id:
-        raise ValueError(f"Player {player_name} not found in current group")
-        
-    # Replace in notes
-    current_notes = group_block["members"][player_id]["notes"]
-    if old_note not in current_notes:
-        raise ValueError(f"Note '{old_note}' not found for player {player_name}")
-        
-    new_notes = current_notes.replace(old_note, new_note)
-    group_block["members"][player_id]["notes"] = new_notes
-    
-    # Update block
-    agent_state.memory.update_block_value(
-        label="group_members",
-        value=json.dumps(group_block)
-    )
-    return None
+        # Find player
+        player_id = None
+        for id, info in block["members"].items():
+            if info["name"] == player_name:
+                player_id = id
+                break
+                
+        if not player_id:
+            return f"Player {player_name} not found"
+            
+        # Replace in notes
+        current_notes = block["members"][player_id]["notes"]
+        if old_note not in current_notes:
+            return f"Note '{old_note}' not found - current notes: '{current_notes}'"
+            
+        new_notes = current_notes.replace(old_note, new_note)
+        block["members"][player_id]["notes"] = new_notes
+        agent_state.memory.update_block_value(
+            label="group_members",
+            value=json.dumps(block)
+        )
+        return None
+            
+    except Exception as e:
+        print(f"Error in group_memory_replace: {e}")
+        return f"Failed to update notes: {str(e)}"
 
 def persona_memory_append(agent_state: "AgentState", key: str, value: str):
     """Append new information to the NPC's own persona traits.
@@ -671,6 +674,44 @@ def persona_memory_update(agent_state: "AgentState", key: str, value: str) -> Op
     )
     return None
 
+def group_memory_update(agent_state: "AgentState", player_name: str, value: str) -> Optional[str]:
+    """
+    Update a player's entire data in the group memory block.
+
+    Args:
+        agent_state: Agent's state containing memory
+        player_name: Name of player to update
+        value: New player data to store
+
+    Returns:
+        Optional[str]: Error message if player not found, None on success
+    """
+    try:
+        block = json.loads(agent_state.memory.get_block("group_members").value)
+        
+        # Find player
+        player_id = None
+        for id, info in block["members"].items():
+            if info["name"] == player_name:
+                player_id = id
+                break
+                
+        if not player_id:
+            return f"Player {player_name} not found"
+            
+        # Update entire player data
+        block["members"][player_id] = value
+        
+        agent_state.memory.update_block_value(
+            label="group_members",
+            value=json.dumps(block)
+        )
+        return None
+            
+    except Exception as e:
+        print(f"Error in group_memory_update: {e}")
+        return f"Failed to update player data: {str(e)}"
+
 # Tool registry with metadata
 TOOL_REGISTRY: Dict[str, Dict] = {
     "navigate_to": {
@@ -710,11 +751,6 @@ TOOL_REGISTRY: Dict[str, Dict] = {
     },
     "persona_memory_update": {
         "function": persona_memory_update,
-        "version": "1.0.0",
-        "supports_state": True
-    },
-    "persona_memory_append": {
-        "function": persona_memory_append,
         "version": "1.0.0",
         "supports_state": True
     }
