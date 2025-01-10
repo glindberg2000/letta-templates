@@ -1,8 +1,51 @@
-"""Roblox integration helpers for Letta Templates."""
+"""Roblox integration helpers for Letta Templates.
+
+Quick Start:
+    >>> from letta_templates.roblox_integration import RobloxNPCManager
+    >>> npc_manager = RobloxNPCManager(letta_client)
+    
+    # Create NPC with memory blocks
+    >>> blocks = npc_manager.create_memory_blocks(
+    ...     npc_name="Guide Emma",
+    ...     home_location="Town Square",
+    ...     known_locations=[{"name": "Town Square", "coordinates": [0,0,0]}]
+    ... )
+
+Critical Integration Points:
+    1. Memory Block Synchronization
+       - Status block must reflect current Roblox state
+       - Group block must match actual nearby players
+       
+    2. SILENCE Protocol
+       - Check responses for "[SILENCE]"
+       - Return None/nil in Lua when SILENCE detected
+       
+    3. Player Information
+       - Keep appearance descriptions updated
+       - Track player locations accurately
+       
+    4. Location Awareness
+       - Update status block when NPC moves
+       - Keep nearby_locations list current
+
+See https://github.com/glindberg2000/letta-templates/blob/feature/group-memory-tools/README_ROBLOX.md
+for full documentation and Lua examples.
+"""
+
 from typing import Dict, List, Optional
 from datetime import datetime
 
 class RobloxNPCManager:
+    """Manager class for Roblox NPC integration.
+    
+    Example:
+        >>> manager = RobloxNPCManager(client)
+        >>> blocks = manager.create_memory_blocks(
+        ...     npc_name="Emma",
+        ...     home_location="Town Square",
+        ...     known_locations=[...]
+        ... )
+    """
     def __init__(self, client):
         self.client = client
         
