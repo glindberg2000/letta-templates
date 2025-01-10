@@ -1,219 +1,172 @@
-# NPC System Development Status (December 2024)
+# NPC System Development Status (January 2025)
 
 ## Letta Integration (Updated)
 
 ### Agent System
 1. **Core Integration**
    - Letta 0.6.6 server integration
-   - Custom memory blocks:
-     * persona (NPC personality)
-     * human (interaction context)
+   - Enhanced memory blocks:
+     * persona (NPC identity and journal)
+     * group_members (social tracking)
      * locations (navigation data)
-   - Tool registration system
-   - Autonomous behavior support
-   - System prompt integration
+     * status (current state)
+   - Expanded tool registry
+   - Multi-user conversation support
+   - Advanced system prompt integration
 
 2. **Memory System**
    ```python
    # Complete Memory Block Structure
    memory = BasicBlockMemory(
        blocks=[
-           # Persona Block - NPC's core identity and behavior
+           # Persona Block - NPC's identity, personality, and journal
            client.create_block(
                label="persona",
-               value=f"""
-               Name: {npc_details['display_name']}
-               Role: {npc_details.get('role', 'Friendly NPC')}
-               Personality: {npc_details['system_prompt']}
-               Interests: {npc_details.get('interests', [])}
-               Home Location: {npc_details.get('home_location', 'Unknown')}
-               """.strip(),
-               limit=2000
+               value=json.dumps({
+                   "name": "emma_assistant",
+                   "role": "NPC Guide",
+                   "personality": "Friendly and helpful. Knows the world well.",
+                   "background": "Guide who helps players explore",
+                   "interests": [
+                       "Meeting players",
+                       "Sharing knowledge",
+                       "Helping others"
+                   ],
+                   "journal": []  # Records experiences and interactions
+               }),
+               limit=2500
            ),
            
-           # Human Block - Current interaction context
+           # Group Members Block - Social awareness
            client.create_block(
-               label="human",
+               label="group_members",
                value=json.dumps({
-                   "name": interaction_context['participant_name'],
-                   "type": interaction_context['participant_type'],
-                   "description": human_description,
-                   "last_interaction": None,
-                   "relationship_status": "neutral",
-                   "notable_interactions": []
+                   "members": {
+                       "emma_npc": {
+                           "name": name,
+                           "appearance": "A friendly NPC guide",
+                           "last_location": "Town Square",
+                           "last_seen": "2024-01-06T22:30:45Z",
+                           "notes": "I am a friendly NPC guide."
+                       }
+                   },
+                   "summary": "Emma is ready to help players.",
+                   "updates": ["Emma is ready to help players."],
+                   "last_updated": "2024-01-06T22:35:00Z"
                }),
                limit=2000
            ),
            
-           # Locations Block - Navigation and spatial awareness
+           # Locations Block - Navigation and spatial data
            client.create_block(
                label="locations",
                value=json.dumps({
                    "known_locations": [
                        {
-                           "name": "Pete's Merch Stand",
+                           "name": "Pete's Stand",
                            "description": "A friendly food stand run by Pete",
                            "coordinates": [-12.0, 18.9, -127.0],
-                           "slug": "petes_stand",
-                           "category": "shop",
-                           "connected_to": ["town_square", "market_district"],
-                           "typical_visitors": ["shoppers", "merchants"]
+                           "slug": "petes_stand"
                        },
-                       # Additional locations...
-                   ],
-                   "current_location": {
-                       "name": "Unknown",
-                       "coordinates": None
-                   },
-                   "favorite_spots": [],
-                   "restricted_areas": []
+                       {
+                           "name": "Secret Garden",
+                           "description": "A hidden garden with rare flowers",
+                           "coordinates": [15.5, 20.0, -110.8],
+                           "slug": "secret_garden"
+                       }
+                   ]
                }),
-               limit=5000
+               limit=1500
+           ),
+           
+           # Status Block - Current state tracking
+           client.create_block(
+               label="status",
+               value=json.dumps({
+                   "region": "Town Square",
+                   "current_location": "Town Square",
+                   "previous_location": None,
+                   "current_action": "idle",
+                   "nearby_locations": ["Market District", "Pete's Stand"],
+                   "movement_state": "stationary"
+               }),
+               limit=500
            )
        ]
    )
    ```
 
-   **Memory Block Testing Guidelines:**
-   1. Persona Block Tests:
-      - Verify all required fields present
-      - Test character limit handling
-      - Validate prompt injection prevention
-      - Sample size: 10-15 diverse NPC types
-
-   2. Human Block Tests:
-      - Test JSON serialization/deserialization
-      - Verify interaction history updates
-      - Check relationship status changes
-      - Sample size: 20-30 interaction scenarios
-
-   3. Locations Block Tests:
-      - Validate coordinate formats
-      - Test slug generation/validation
-      - Verify location relationships
-      - Sample size: 50-100 location combinations
-
-   **Memory Integration Points:**
-   1. Tool Integration:
-      - Tools read from relevant memory blocks
-      - Tools update memory after actions
-      - Memory influences tool behavior
-
-   2. State Management:
-      - Current location tracking
-      - Relationship status updates
-      - Interaction history maintenance
-
-   3. Decision Making:
-      - Location preferences from persona
-      - Relationship-based responses
-      - Context-aware navigation
-
 3. **Tool System**
-   - Navigation Tools:
-     * navigate_to(slug) - Location-based movement
-     * navigate_to_coordinates(x,y,z) - Direct coordinate movement
-   - Action Tools:
-     * perform_action("follow", target="player")
-     * perform_action("emote", type="wave|dance|sit")
-     * perform_action("unfollow")
-   - Autonomous Behaviors:
-     * Self-initiated navigation
-     * Natural conversation endings
-     * Dynamic emote usage
-     * Location-based decisions
-
-4. **Current Capabilities**
    ```python
-   # Available tools
+   # Available tools with enhanced functionality
    TOOL_REGISTRY = {
-       "navigate_to": navigate_to,
-       "navigate_to_coordinates": navigate_to_coordinates,
-       "perform_action": perform_action,
-       "examine_object": examine_object
+       # Navigation Tools
+       "navigate_to": navigate_to,  # Slug-based navigation
+       "navigate_to_coordinates": navigate_to_coordinates,  # Direct coordinate movement
+       
+       # Action Tools
+       "perform_action": perform_action,  # Emotes and interactions
+       "examine_object": examine_object,  # Object inspection
+       
+       # Memory Tools
+       "group_memory_append": group_memory_append,    # Add group updates
+       "group_memory_replace": group_memory_replace,  # Update group info
+       "persona_memory_update": persona_memory_update # Update NPC traits
    }
    ```
 
-### Recent Improvements
+### Verified Capabilities
 1. **Navigation System**
-   - Slug-based location system
-   - Coordinate support
-   - Autonomous movement
-   - Natural transitions
-
-2. **Conversation Management**
-   - Graceful endings
-   - Loop prevention
-   - Natural transitions
-   - Context awareness
-
-3. **Behavior System**
-   - Emote integration
-   - Follow/unfollow actions
+   - Slug-based location navigation
+   - Coordinate-based movement
    - Location awareness
-   - Personality expression
+   - Movement state tracking
+   - Natural transitions
 
-### Next Steps
-1. **Tool Enhancements**
-   - [ ] Add emote cancellation
-   - [ ] Improve group chat handling
-   - [ ] Add more complex actions
-   - [ ] Enhance location awareness
+2. **Social System**
+   - Multi-user conversation handling
+   - Group member tracking
+   - Social awareness ([SILENCE] protocol)
+   - Relationship memory
+   - Natural conversation endings
 
-2. **Memory Improvements**
-   - [ ] Add relationship tracking
-   - [ ] Improve location memory
-   - [ ] Add event memory
-   - [ ] Better context retention
+3. **Memory System**
+   - Persona management
+   - Group tracking
+   - Location awareness
+   - Status updates
+   - Journal entries
 
-3. **Behavior Refinements**
-   - [ ] More natural transitions
-   - [ ] Better group dynamics
-   - [ ] Enhanced personality traits
-   - [ ] Improved decision making
+4. **Test Coverage**
+   - Base functionality
+   - Notes system
+   - Social awareness
+   - Status tracking
+   - Group dynamics
+   - Persona management
+   - Journal system
 
-### System Prompt Design
-```python
-# System prompt must instruct the NPC how to:
-system_prompt = f"""
-Memory Usage Instructions:
-1. Persona Memory:
-  - Access your identity from persona block
-  - Use interests to guide decisions
-  - Reference home location for context
-  - Stay in character based on role
+### Next Steps (2025 Q2)
+1. **Enhanced Group Dynamics**
+   - [ ] Multi-group awareness
+   - [ ] Dynamic relationship tracking
+   - [ ] Group activity memory
+   - [ ] Social network modeling
 
-2. Human Interaction Memory:
-  - Track relationship status
-  - Reference past interactions
-  - Adapt tone based on relationship
-  - Update notable_interactions after significant events
+2. **Advanced Navigation**
+   - [ ] Pathfinding integration
+   - [ ] Dynamic obstacle avoidance
+   - [ ] Location preference learning
+   - [ ] Area familiarity system
 
-3. Location Memory:
-  - Use known_locations for navigation
-  - Consider connected_to for natural movement
-  - Update current_location after movement
-  - Build favorite_spots based on experiences
+3. **Memory Improvements**
+   - [ ] Long-term memory compression
+   - [ ] Experience categorization
+   - [ ] Memory priority system
+   - [ ] Emotional memory tagging
 
-Memory Integration Rules:
-- Always check relevant memory before making decisions
-- Update memory blocks after significant events
-- Use memory context to guide tool usage
-- Maintain consistent personality across interactions
-
-{TOOL_INSTRUCTIONS}  # Tool usage instructions
-"""
-```
-
-**Memory-Prompt Integration Testing:**
-1. Verify NPC:
-  - References correct memory blocks
-  - Updates memory appropriately
-  - Maintains consistent behavior
-  - Uses tools as instructed
-
-2. Test Scenarios:
-  - New player interactions
-  - Returning player recognition
-  - Location-based decisions
-  - Memory-guided responses
+4. **Behavior System**
+   - [ ] Complex action chains
+   - [ ] Conditional behaviors
+   - [ ] Time-based activities
+   - [ ] Environmental adaptation

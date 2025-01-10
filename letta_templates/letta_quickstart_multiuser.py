@@ -838,7 +838,16 @@ def parse_args():
     parser.add_argument("--continue-on-error", action="store_true", help="Continue to next test on failure")
     parser.add_argument(
         "--test-type",
-        choices=['all', 'base', 'social', 'status', 'group', 'notes', 'persona', 'journal'],
+        choices=[
+            'all', 
+            'base',
+            'notes',
+            'social', 
+            'status', 
+            'group',
+            'persona',
+            'journal'
+        ],
         default="all",
         help="Select which tests to run"
     )
@@ -1972,93 +1981,150 @@ def main():
         
         print("\n✓ All required prompt components found")
         
-        # Only continue with tests if tools are verified
-        print_agent_details(client, agent.id, "INITIAL STATE")
-        
-        # Run tests based on selection
-        if args.test_type in ["all", "base"]:
-            try:
-                test_agent_identity(client, agent.id)
-            except Exception as e:
-                print(f"❌ Agent identity test failed: {e}")
-                if not args.continue_on_error:
-                    return
-                print("Continuing with next test...")
-            try:
-                test_multi_user_conversation(client, agent.id)
-            except Exception as e:
-                print(f"❌ Multi-user conversation test failed: {e}")
-                if not args.continue_on_error:
-                    return
-                print("Continuing with next test...")
-            try:
-                test_navigation(client, agent.id)
-            except Exception as e:
-                print(f"❌ Navigation test failed: {e}")
-                if not args.continue_on_error:
-                    return
-                print("Continuing with next test...")
-            try:
-                test_actions(client, agent.id)
-            except Exception as e:
-                print(f"❌❌ Actions test failed: {e}")
-                if not args.continue_on_error:
-                    return
-                print("Continuing with next test...")
+        # Print test sequence
+        print("\n" + "="*50)
+        print("TEST SEQUENCE:")
+        if args.test_type == "all":
+            tests = [
+                "base",       # Identity, Multi-user, Navigation, Actions
+                "notes",      # Player notes
+                "social",     # Social awareness
+                "status",     # Status awareness
+                "group",      # Group block updates
+                "persona",    # NPC persona
+                "journal"     # NPC journal
+            ]
+            print("Running full test suite in order:")
+            for i, test in enumerate(tests, 1):
+                print(f"{i}. {test}")
+        else:
+            print(f"Running single test: {args.test_type}")
+        print("="*50 + "\n")
 
-        if args.test_type in ["all", "social"]:
-            try:
-                test_social_awareness(client, agent.id)
-            except Exception as e:
-                print(f"❌ Social awareness test failed: {e}")
-                if not args.continue_on_error:
-                    return
-                print("Continuing with next test...")
-            
-        if args.test_type in ["all", "status"]:
-            try:
-                test_status_awareness(client, agent.id)
-            except Exception as e:
-                print(f"❌ Status awareness test failed: {e}")
-                if not args.continue_on_error:
-                    return
-                print("Continuing with next test...")
-            
-        if args.test_type in ["all", "group"]:
-            try:
-                test_group_block_updates(client, agent.id)
-            except Exception as e:
-                print(f"❌ Group block updates test failed: {e}")
-                if not args.continue_on_error:
-                    return
-                print("Continuing with next test...")
-            
-        if args.test_type in ["all", "notes"]:
-            try:
-                test_player_notes(client, agent.id)
-            except Exception as e:
-                print(f"❌ Player notes test failed: {e}")
-                if not args.continue_on_error:
-                    return
-                print("Continuing with next test...")
-            
-        if args.test_type in ["all", "persona"]:
-            try:
-                test_npc_persona(client, agent.id)
-            except Exception as e:
-                print(f"❌ NPC persona test failed: {e}")
-                if not args.continue_on_error:
-                    return
-                print("Continuing with next test...")
+        # Track test results
+        completed_tests = []
+        failed_tests = []
 
-        if args.test_type in ["all", "journal"]:
-            try:
-                test_npc_journal(client, agent.id)
-            except Exception as e:
-                print(f"❌ NPC journal test failed: {e}")
-                if not args.continue_on_error:
-                    return
-                print("Continuing with next test...")
+        try:
+            # Base test
+            if args.test_type in ["all", "base"]:
+                print("\n" + "="*50)
+                print("RUNNING BASE TEST")
+                print("="*50)
+                try:
+                    test_agent_identity(client, agent.id)
+                    completed_tests.append("base")
+                except Exception as e:
+                    print(f"❌ Base test failed: {e}")
+                    failed_tests.append("base")
+                    if not args.continue_on_error:
+                        return
+
+            # Notes test
+            if args.test_type in ["all", "notes"]:
+                print("\n" + "="*50)
+                print("RUNNING NOTES TEST")
+                print("="*50)
+                try:
+                    test_player_notes(client, agent.id)
+                    completed_tests.append("notes")
+                except Exception as e:
+                    print(f"❌ Notes test failed: {e}")
+                    failed_tests.append("notes")
+                    if not args.continue_on_error:
+                        return
+
+            # Social test
+            if args.test_type in ["all", "social"]:
+                print("\n" + "="*50)
+                print("RUNNING SOCIAL TEST")
+                print("="*50)
+                try:
+                    test_social_awareness(client, agent.id)
+                    completed_tests.append("social")
+                except Exception as e:
+                    print(f"❌ Social test failed: {e}")
+                    failed_tests.append("social")
+                    if not args.continue_on_error:
+                        return
+
+            # Status test
+            if args.test_type in ["all", "status"]:
+                print("\n" + "="*50)
+                print("RUNNING STATUS TEST")
+                print("="*50)
+                try:
+                    test_status_awareness(client, agent.id)
+                    completed_tests.append("status")
+                except Exception as e:
+                    print(f"❌ Status test failed: {e}")
+                    failed_tests.append("status")
+                    if not args.continue_on_error:
+                        return
+
+            # Group test (using correct function)
+            if args.test_type in ["all", "group"]:
+                print("\n" + "="*50)
+                print("RUNNING GROUP TEST")
+                print("="*50)
+                try:
+                    test_group_block_updates(client, agent.id)  # Use existing function
+                    completed_tests.append("group")
+                except Exception as e:
+                    print(f"❌ Group test failed: {e}")
+                    failed_tests.append("group")
+                    if not args.continue_on_error:
+                        return
+
+            # Persona test
+            if args.test_type in ["all", "persona"]:
+                print("\n" + "="*50)
+                print("RUNNING PERSONA TEST")
+                print("="*50)
+                try:
+                    test_npc_persona(client, agent.id)
+                    completed_tests.append("persona")
+                except Exception as e:
+                    print(f"❌ Persona test failed: {e}")
+                    failed_tests.append("persona")
+                    if not args.continue_on_error:
+                        return
+
+            # Journal test
+            if args.test_type in ["all", "journal"]:
+                print("\n" + "="*50)
+                print("RUNNING JOURNAL TEST")
+                print("="*50)
+                try:
+                    test_npc_journal(client, agent.id)
+                    completed_tests.append("journal")
+                except Exception as e:
+                    print(f"❌ Journal test failed: {e}")
+                    failed_tests.append("journal")
+                    if not args.continue_on_error:
+                        return
+
+            # Print test summary
+            print("\n" + "="*50)
+            print("TEST SEQUENCE SUMMARY")
+            print("="*50)
+            print(f"\nTests completed ({len(completed_tests)}/6):")
+            for test in completed_tests:
+                print(f"✓ {test}")
+            if failed_tests:
+                print(f"\nTests failed ({len(failed_tests)}):")
+                for test in failed_tests:
+                    print(f"❌ {test}")
+            if args.test_type == "all":
+                not_run = set(["base", "notes", "social", "status", "group", "persona", "journal"]) - set(completed_tests) - set(failed_tests)
+                if not_run:
+                    print(f"\nTests not run ({len(not_run)}):")
+                    for test in not_run:
+                        print(f"- {test}")
+            print("\n" + "="*50)
+
+        finally:
+            pass
 
     finally:
         pass
