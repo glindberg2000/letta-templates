@@ -2,15 +2,14 @@ from setuptools import setup, find_packages
 
 setup(
     name="letta_templates",
-    version="0.2.13",
-    description="Templates and tools for Letta AI server",
-    author="LettaDev",
+    version="0.7.0",
+    description="Templates and tools for Letta AI agents",
+    author="Letta Team",
     packages=find_packages(),
-    scripts=['letta_cli.py'],
     install_requires=[
         "letta>=0.6.6",
-        "python-dotenv>=0.19.0",
-        "grpcio-tools>=1.68.1",
-        "protobuf>=5.26.1"
+        "python-dotenv",
+        "requests"
     ],
+    python_requires=">=3.8",
 )
