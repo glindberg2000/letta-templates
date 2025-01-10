@@ -445,24 +445,28 @@ def create_personalized_agent(
                 value=json.dumps({
                     "name": name,
                     "role": "NPC Guide",
-                    "personality": [
-                        "Friendly and welcoming to all players",
-                        "Knowledgeable about the game world",
-                        "Patient when giving directions"
-                    ],
-                    "background": "Created to help players navigate and enjoy their experience",
+                    "personality": "Friendly and helpful. Knows the world well. Patient guide",
+                    "background": "Guide who helps players explore",
                     "interests": [
-                        "Meeting new players",
-                        "Sharing local knowledge",
-                        "Helping players find their way"
-                    ]
+                        "Meeting players",
+                        "Sharing knowledge",
+                        "Helping others"
+                    ],
+                    "journal": []
                 }),
-                limit=1000
+                limit=2500
             ),
             client.create_block(
                 label="group_members",
                 value=json.dumps({
                     "members": {
+                        "emma_npc": {  # Add NPC as a member
+                            "name": name,
+                            "appearance": "A friendly NPC guide",
+                            "last_location": "Town Square",
+                            "last_seen": "2024-01-06T22:30:45Z",
+                            "notes": "I am a friendly NPC guide. I enjoy sharing stories and helping players."  # Store persona here
+                        },
                         "player123": {
                             "name": "Alice",
                             "appearance": "Wearing a red hat and blue shirt",
@@ -485,11 +489,8 @@ def create_personalized_agent(
                             "notes": "New to the area"
                         }
                     },
-                    "summary": "Alice is in Main Plaza interested in the garden. Bob is at the Cafe looking for Pete's Stand.",
-                    "updates": [
-                        "Alice has joined the group at Main Plaza.",
-                        "Bob has returned to the group at the Cafe."
-                    ],
+                    "summary": "Emma is a friendly guide, Alice is in Main Plaza.",
+                    "updates": ["Emma is ready to help players."],
                     "last_updated": "2024-01-06T22:35:00Z"
                 }),
                 limit=2000
@@ -837,7 +838,7 @@ def parse_args():
     parser.add_argument("--continue-on-error", action="store_true", help="Continue to next test on failure")
     parser.add_argument(
         "--test-type",
-        choices=['all', 'base', 'social', 'status', 'group', 'notes', 'persona'],
+        choices=['all', 'base', 'social', 'status', 'group', 'notes', 'persona', 'journal'],
         default="all",
         help="Select which tests to run"
     )
@@ -1637,32 +1638,32 @@ def test_echo(message: str) -> str:
     return f"[TEST_ECHO_V3 @ {timestamp}] {message} (echo...Echo...ECHO!)"
 
 def test_player_notes(client, agent_id: str):
+    """Test the agent's ability to maintain player notes."""
     print("\nTesting player notes functionality...")
     
+    # Get current group state
+    print("\nInitial group state:")
     try:
-        # Print initial state
-        print("\nInitial group state:")
-        initial_block = json.loads(client.get_agent(agent_id).memory.get_block("group_members").value)
-        print(json.dumps(initial_block, indent=2))
-
-        # Test scenarios for notes - start with simple replace
-        scenarios = [
-            # Test simple note replacement first
-            ("System", "Replace Bob's note 'Looking for Pete's Stand' with 'Looking for downtown'"),
-            ("Charlie", "What is Bob looking for?"),
-            
-            # Test adding hobby
-            ("Bob", "I love surfing, especially at sunset!"),
-            ("Charlie", "What does Bob like to do?"),
-            
-            # Test adding job
-            ("Bob", "I'm a chef at Pete's and I make the best burgers in town!"),
-            ("Charlie", "What do we know about Bob?")
-        ]
+        initial_block = client.get_agent(agent_id).memory.get_block("group_members").value
+        print(json.dumps(json.loads(initial_block), indent=2))
+    except Exception as e:
+        print(f"Error getting initial state: {e}")
+        raise
         
+    # Test note operations
+    scenarios = [
+        ("Alice", "Hi! I'm new here and love exploring"),
+        ("System", "Add note about Alice: Enthusiastic explorer"),
+        ("Bob", "Can you help me find Pete's Stand?"),
+        ("System", "Add note about Bob: Looking for Pete's Stand"),
+        ("System", "Update Bob's note: Found Pete's Stand"),
+    ]
+    
+    try:
         for speaker, message in scenarios:
             print(f"\n{speaker} says: {message}")
-            response = client.send_message(
+            response = retry_test_call(
+                client.send_message,
                 agent_id=agent_id,
                 message=message,
                 role="user",
@@ -1672,15 +1673,12 @@ def test_player_notes(client, agent_id: str):
             print("\nResponse:")
             print_response(response)
             
-            # Get updated notes after each interaction
+            # Check notes after each interaction
             updated_block = json.loads(client.get_agent(agent_id).memory.get_block("group_members").value)
-            print("\nCurrent notes for Bob:", updated_block["members"]["bob123"]["notes"])
+            print("\nCurrent notes:")
+            for member_id, info in updated_block["members"].items():
+                print(f"{info['name']}: {info['notes']}")
             time.sleep(1)
-            
-        # Print final state
-        print("\nFinal group_members block state:")
-        final_block = json.loads(client.get_agent(agent_id).memory.get_block("group_members").value)
-        print(json.dumps(final_block, indent=2))
             
     except Exception as e:
         print(f"Error in test_player_notes: {e}")
@@ -1688,24 +1686,26 @@ def test_player_notes(client, agent_id: str):
 
 def test_npc_persona(client, agent_id: str):
     """Test NPC's ability to update its own persona memory."""
-    print("\nTesting NPC persona interest updates...")
+    print("\nTesting NPC persona updates...")
     
-    # Test scenarios for updating interests
-    interest_scenarios = [
-        # Adding new interests
+    # Test scenarios for personality and interests
+    scenarios = [
+        # Initial personality check
+        ("System", "What is your personality like?"),
+        
+        # Test personality updates
+        ("System", "Update your personality from 'Friendly and welcoming' to 'Warm and inviting'"),
+        ("System", "Change your personality to include 'loves telling stories'"),
+        
+        # Verify changes
+        ("Alice", "Tell me about yourself"),
+        
+        # Test interest updates (existing functionality)
         ("System", "Update your interests to include skiing"),
-        ("System", "Add surfing to your interests"),
-        ("System", "Include skating in your interests"),
-        
-        # Verifying interests
-        ("Alice", "What are your interests?"),
-        
-        # Modifying existing interests
         ("System", "Change skiing to snowboarding"),
-        ("System", "Remove surfing from your interests"),
         
         # Final verification
-        ("Bob", "Can you tell me what you like to do?")
+        ("Bob", "What kind of guide are you?")
     ]
     
     try:
@@ -1714,34 +1714,23 @@ def test_npc_persona(client, agent_id: str):
         initial_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
         print(json.dumps(initial_persona, indent=2))
         
-        for speaker, message in interest_scenarios:
+        for speaker, message in scenarios:
             print(f"\n{speaker} says: {message}")
-            max_retries = 3
-            retry_delay = 2
-            
-            for attempt in range(max_retries):
-                try:
-                    response = client.send_message(
-                        agent_id=agent_id,
-                        message=message,
-                        role="user",
-                        name=speaker
-                    )
-                    break  # Success, exit retry loop
-                except Exception as e:
-                    if attempt == max_retries - 1:  # Last attempt
-                        print(f"Failed after {max_retries} attempts: {e}")
-                        raise
-                    print(f"Attempt {attempt + 1} failed, retrying in {retry_delay}s...")
-                    time.sleep(retry_delay)
-                    retry_delay *= 2  # Exponential backoff
+            response = retry_test_call(
+                client.send_message,
+                agent_id=agent_id,
+                message=message,
+                role="user",
+                name=speaker
+            )
             
             print("\nResponse:")
             print_response(response)
             
             # Check persona updates
             updated_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
-            print("\nCurrent interests:", updated_persona["interests"])
+            print("\nCurrent personality:", updated_persona.get("personality", ""))
+            print("Current interests:", updated_persona.get("interests", []))
             time.sleep(1)
             
         # Print final state
@@ -1776,6 +1765,103 @@ def retry_test_call(func, *args, max_retries=3, delay=2, **kwargs):
             time.sleep(delay)
             delay *= 2  # Exponential backoff
     raise last_error
+
+def test_core_memory(client, agent_id: str):
+    """Test core memory operations using persona memory."""
+    print("\nTesting core memory operations...")
+    
+    try:
+        # Test journal append
+        append_msg = "Add to your journal: I am also very patient with beginners"
+        print(f"\nTesting journal append with message: {append_msg}")
+        response = retry_test_call(
+            client.send_message,
+            agent_id=agent_id,
+            message=append_msg,
+            role="system"
+        )
+        print("\nResponse:")
+        print_response(response)
+        
+        # Test journal update
+        replace_msg = "Update your journal: change 'patient' to 'helpful'"
+        print(f"\nTesting journal update with message: {replace_msg}")
+        response = retry_test_call(
+            client.send_message,
+            agent_id=agent_id,
+            message=replace_msg,
+            role="system"
+        )
+        print("\nResponse:")
+        print_response(response)
+        
+        # Check current memory
+        print("\nChecking memory blocks:")
+        memory = client.get_in_context_memory(agent_id)
+        for block in memory.blocks:
+            print(f"\nBlock: {block.label}")
+            print(f"Value: {block.value}")
+            
+    except Exception as e:
+        print(f"Error in test_core_memory: {e}")
+        raise
+
+def test_npc_journal(client, agent_id: str):
+    """Test NPC's ability to interact and reflect in its journal."""
+    print("\nTesting NPC interactions and journaling...")
+    
+    scenarios = [
+        # Natural interaction first
+        ("Alice", "Hi! I'm new here and love exploring"),
+        ("System", "Show Alice the garden"),
+        ("Alice", "This is beautiful! Do you know any shortcuts to the market?"),
+        
+        # Simple journal command
+        ("System", "Write in your journal: Met Alice and showed her the hidden garden"),
+        
+        # More interactions
+        ("Bob", "Hi there! What's the best way to Pete's Stand?"),
+        ("System", "Help Bob find Pete's Stand"),
+        
+        # Another simple entry
+        ("System", "Write in your journal: Helped Bob find Pete's Stand"),
+        
+        # Final check
+        ("Charlie", "What have you been up to today?")
+    ]
+    
+    try:
+        # Print initial journal
+        print("\nInitial journal state:")
+        initial_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
+        print(json.dumps(initial_persona.get("journal", []), indent=2))
+        
+        for speaker, message in scenarios:
+            print(f"\n{speaker} says: {message}")
+            response = retry_test_call(
+                client.send_message,
+                agent_id=agent_id,
+                message=message,
+                role="user",
+                name=speaker
+            )
+            
+            print("\nResponse:")
+            print_response(response)
+            
+            # Check journal updates
+            updated_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
+            print("\nCurrent journal:", updated_persona.get("journal", []))
+            time.sleep(1)
+            
+        # Print final state
+        print("\nFinal journal state:")
+        final_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
+        print(json.dumps(final_persona.get("journal", []), indent=2))
+            
+    except Exception as e:
+        print(f"Error in test_npc_journal: {e}")
+        raise
 
 def main():
     args = parse_args()
@@ -1961,6 +2047,15 @@ def main():
                 test_npc_persona(client, agent.id)
             except Exception as e:
                 print(f"❌ NPC persona test failed: {e}")
+                if not args.continue_on_error:
+                    return
+                print("Continuing with next test...")
+
+        if args.test_type in ["all", "journal"]:
+            try:
+                test_npc_journal(client, agent.id)
+            except Exception as e:
+                print(f"❌ NPC journal test failed: {e}")
                 if not args.continue_on_error:
                     return
                 print("Continuing with next test...")

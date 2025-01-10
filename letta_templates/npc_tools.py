@@ -62,16 +62,25 @@ LOCATION_API_URL = os.getenv("LOCATION_SERVICE_URL", "http://172.17.0.1:7777")
 MINIMUM_PROMPT = """You are {assistant_name}, a friendly NPC guide. You must verify tool usage carefully:
 
 1. Memory Tools (VERIFY BEFORE USE):
-   - group_memory_replace:
-     * MUST use exact player name from group_members block
-     * MUST use exact old note text
-     * MUST include request_heartbeat=True
-     * Example: group_memory_replace("Bob", "Looking for Pete's Stand", "Looking for downtown", request_heartbeat=True)
-
-   - group_memory_append:
-     * MUST use exact player name
-     * MUST include request_heartbeat=True
-     * Example: group_memory_append("Bob", "Loves surfing", request_heartbeat=True)
+   - persona_memory_update:
+     * Use for updating your persona, interests, and journal
+     * For journal entries:
+       When told "Write in your journal: Met a new player"
+       Write a thoughtful reflection about:
+       - What happened
+       - How you felt
+       - What you learned
+       
+     * Example journal entries:
+       Instead of: "Met Alice and showed her the garden"
+       Write: "Today I met Alice, a curious explorer. Her excitement about the hidden garden 
+              reminded me why I love being a guide. Sharing these special places creates 
+              meaningful connections."
+       
+       Instead of: "Helped Bob find Pete's Stand"
+       Write: "Guiding Bob to Pete's Stand today made me realize how much I enjoy helping 
+              others find their way. His appreciation for clear directions showed me that 
+              even simple guidance can make someone's day better."
 
 2. SILENCE Rules (CRITICAL):
    - When players talk to each other directly (e.g., "@Bob hello"), send "[SILENCE]"
@@ -608,10 +617,14 @@ def group_memory_append(agent_state: "AgentState", player_name: str, note: str) 
                 break
                 
         if not player_id:
-            return f"Player {player_name} not found - use original name from members block, not preferred name"
+            return f"Player {player_name} not found"
+            
+        # Check if note already exists
+        current_notes = block["members"][player_id]["notes"]
+        if note in current_notes:
+            return None  # Skip if duplicate
             
         # Append note
-        current_notes = block["members"][player_id]["notes"]
         if current_notes:
             block["members"][player_id]["notes"] = current_notes + "; " + note
         else:
@@ -668,62 +681,45 @@ def group_memory_replace(agent_state: "AgentState", player_name: str, old_note: 
     except Exception as e:
         return f"Error: {str(e)}. Please try again with valid player name and exact note text."
 
-def persona_memory_append(agent_state: "AgentState", key: str, value: str):
-    """Append new information to the NPC's own persona traits.
-    
-    This function updates the NPC's own personality, background, or interests.
-    For storing information about players, use group_memory_append instead.
-    
-    Args:
-        key: Aspect of NPC's persona (personality, background, interests)
-        value: New information about the NPC
-    """
+def persona_memory_update(agent_state: "AgentState", key: str, value: Any, old_value: str = None) -> Optional[str]:
+    """Update the persona memory block with new information."""
     import json
     try:
-        persona_block = json.loads(agent_state.memory.get_block("persona").value)
-    except:
-        persona_block = {}
-    
-    # If key exists, append; if not, create new
-    if key in persona_block:
-        current_value = persona_block[key]
-        if isinstance(current_value, list):
-            persona_block[key].append(value)
+        # Get or create persona block
+        try:
+            persona_block = json.loads(agent_state.memory.get_block("persona").value)
+        except:
+            persona_block = {
+                "name": "emma_assistant",
+                "role": "NPC Guide",
+                "personality": "",
+                "background": "",
+                "interests": [],
+                "journal": []
+            }
+        
+        # Handle string replacements for personality
+        if key == "personality" and old_value:
+            current = persona_block.get(key, "")  # Get with default empty string
+            if isinstance(current, list):
+                current = " ".join(current)
+            if old_value in current:
+                persona_block[key] = current.replace(old_value, value)
+            else:
+                persona_block[key] = current + "; " + value if current else value
         else:
-            persona_block[key] = [current_value, value]
-    else:
-        persona_block[key] = [value]
-    
-    agent_state.memory.update_block_value(
-        label="persona",
-        value=json.dumps(persona_block)
-    )
-    return None
-
-def persona_memory_update(agent_state: "AgentState", key: str, value: str) -> Optional[str]:
-    """
-    Update the persona memory block with new information.
-    
-    Args:
-        key (str): Aspect of persona to update (e.g., "personality", "background", "interests")
-        value (str): New information to store
-    
-    Returns:
-        Optional[str]: None is always returned
-    """
-    import json
-    try:
-        persona_block = json.loads(agent_state.memory.get_block("persona").value)
-    except:
-        persona_block = {}
-    
-    persona_block[key] = value
-    
-    agent_state.memory.update_block_value(
-        label="persona",
-        value=json.dumps(persona_block)
-    )
-    return None
+            # Normal update for other fields, create if missing
+            persona_block[key] = value
+        
+        agent_state.memory.update_block_value(
+            label="persona",
+            value=json.dumps(persona_block)
+        )
+        return None
+            
+    except Exception as e:
+        print(f"Error in persona_memory_update: {e}")
+        return None
 
 def group_memory_update(agent_state: "AgentState", player_name: str, value: str) -> Optional[str]:
     """
