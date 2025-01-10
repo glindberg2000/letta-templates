@@ -587,6 +587,7 @@ def group_memory_append(agent_state: "AgentState", player_name: str, note: str) 
 
 def group_memory_replace(agent_state: "AgentState", player_name: str, old_note: str, new_note: str) -> Optional[str]:
     """Replace specific notes about a player."""
+    import json
     try:
         block = json.loads(agent_state.memory.get_block("group_members").value)
         
@@ -598,24 +599,32 @@ def group_memory_replace(agent_state: "AgentState", player_name: str, old_note: 
                 break
                 
         if not player_id:
-            return f"Player {player_name} not found"
+            available_players = [info["name"] for info in block["members"].values()]
+            return f"Error: Player '{player_name}' not found. Available players: {available_players}"
             
         # Replace in notes
         current_notes = block["members"][player_id]["notes"]
         if old_note not in current_notes:
-            return f"Note '{old_note}' not found - current notes: '{current_notes}'"
+            return f"Error: Note '{old_note}' not found. Current notes are: '{current_notes}'. Please check the exact note text."
             
         new_notes = current_notes.replace(old_note, new_note)
         block["members"][player_id]["notes"] = new_notes
+        
+        # Update block and verify
         agent_state.memory.update_block_value(
             label="group_members",
             value=json.dumps(block)
         )
+        
+        # Verify update succeeded
+        verify = json.loads(agent_state.memory.get_block("group_members").value)
+        if verify["members"][player_id]["notes"] != new_notes:
+            return f"Error: Update failed. Tried to replace '{old_note}' with '{new_note}' but notes are still: '{verify['members'][player_id]['notes']}'"
+            
         return None
             
     except Exception as e:
-        print(f"Error in group_memory_replace: {e}")
-        return f"Failed to update notes: {str(e)}"
+        return f"Error: {str(e)}. Please try again with valid player name and exact note text."
 
 def persona_memory_append(agent_state: "AgentState", key: str, value: str):
     """Append new information to the NPC's own persona traits.

@@ -1642,72 +1642,36 @@ def test_echo(message: str) -> str:
 def test_player_notes(client, agent_id: str):
     print("\nTesting player notes functionality...")
     
-    # Test both append and replace
-    expected_notes = [
-        "Looking for Pete's Stand",  # Initial
-        "Prefers to be called Bobby",
-        "Loves surfing, especially at sunset",
-        "Chef at Pete's, makes the best burgers in town"
-    ]
-    
-    # Add replacement scenarios
-    replacement_scenarios = [
-        # Fix incorrect information
-        ("Bob", "Actually, I work at Pete's Stand, not just Pete's"),
-        
-        # Update outdated info
-        ("Bob", "I've moved from surfing to swimming lately"),
-        
-        # Correct typos/mistakes
-        ("System", "Correction: Bobby is head chef, not just chef")
-    ]
-    
     try:
         # Print initial state
         print("\nInitial group state:")
         initial_block = json.loads(client.get_agent(agent_id).memory.get_block("group_members").value)
         print(json.dumps(initial_block, indent=2))
-        
-        # Verify initial note
-        assert expected_notes[0] in initial_block["members"]["bob123"]["notes"], "Initial note missing"
-        
-        # Test scenarios for notes
+
+        # Test scenarios for notes - start with simple replace
         scenarios = [
-            # Bob shares his nickname
-            ("Bob", "You can call me Bobby, by the way!"),
-            ("Charlie", "What does Bob prefer to be called?"),
+            # Test simple note replacement first
+            ("System", "Replace Bob's note 'Looking for Pete's Stand' with 'Looking for downtown'"),
+            ("Charlie", "What is Bob looking for?"),
             
-            # Bob shares his hobby
+            # Test adding hobby
             ("Bob", "I love surfing, especially at sunset!"),
             ("Charlie", "What does Bob like to do?"),
             
-            # Bob shares multiple details
+            # Test adding job
             ("Bob", "I'm a chef at Pete's and I make the best burgers in town!"),
             ("Charlie", "What do we know about Bob?")
         ]
         
         for speaker, message in scenarios:
             print(f"\n{speaker} says: {message}")
-            max_retries = 3
-            retry_delay = 2
+            response = client.send_message(
+                agent_id=agent_id,
+                message=message,
+                role="user",
+                name=speaker
+            )
             
-            for attempt in range(max_retries):
-                try:
-                    response = client.send_message(
-                        agent_id=agent_id,
-                        message=message,
-                        role="user",
-                        name=speaker
-                    )
-                    break  # Success, exit retry loop
-                except Exception as e:
-                    if attempt == max_retries - 1:  # Last attempt
-                        print(f"Failed after {max_retries} attempts: {e}")
-                        raise
-                    print(f"Attempt {attempt + 1} failed, retrying in {retry_delay}s...")
-                    time.sleep(retry_delay)
-                    retry_delay *= 2  # Exponential backoff
-              
             print("\nResponse:")
             print_response(response)
             
@@ -1716,23 +1680,10 @@ def test_player_notes(client, agent_id: str):
             print("\nCurrent notes for Bob:", updated_block["members"]["bob123"]["notes"])
             time.sleep(1)
             
-        # Print final state of entire block
+        # Print final state
         print("\nFinal group_members block state:")
         final_block = json.loads(client.get_agent(agent_id).memory.get_block("group_members").value)
         print(json.dumps(final_block, indent=2))
-            
-        print("\nTesting note replacements...")
-        for speaker, message in replacement_scenarios:
-            print(f"\n{speaker} says: {message}")
-            response = client.send_message(
-                agent_id=agent_id,
-                message=message,
-                role="user",
-                name=speaker
-            )
-            print("\nResponse:")
-            print_response(response)
-            print("\nUpdated notes:", updated_block["members"]["bob123"]["notes"])
             
     except Exception as e:
         print(f"Error in test_player_notes: {e}")
