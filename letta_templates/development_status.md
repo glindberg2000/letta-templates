@@ -160,6 +160,11 @@
    - [ ] Area familiarity system
 
 3. **Memory Improvements**
+   - [ ] Fix journal entry handling:
+     * Currently overwrites single entry
+     * Need to implement array-based journal
+     * Support multiple entries with timestamps
+     * Add entry categorization
    - [ ] Long-term memory compression
    - [ ] Experience categorization
    - [ ] Memory priority system
