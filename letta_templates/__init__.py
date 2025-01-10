@@ -11,10 +11,11 @@ from .npc_tools import (
     TOOL_REGISTRY,
     NAVIGATION_TOOLS,
     navigate_to,
-    perform_action
+    perform_action,
+    examine_object
 )
 
-__version__ = "0.2.13"
+__version__ = "0.7.0"
 __all__ = [
     "TOOL_INSTRUCTIONS",
     "TOOL_REGISTRY",
