@@ -17,6 +17,7 @@ from letta.schemas.message import (
 )
 from letta_templates.npc_tools import (
     TOOL_REGISTRY,
+    MINIMUM_PROMPT,
     BASE_PROMPT,
     SOCIAL_AWARENESS_PROMPT,
     GROUP_AWARENESS_PROMPT,
@@ -26,7 +27,6 @@ from letta_templates.npc_tools import (
     navigate_to_coordinates,
     perform_action,
     examine_object,
-
     test_echo
 )
 import requests
@@ -380,10 +380,7 @@ def create_personalized_agent(
     
     # Use minimal prompt for testing if requested
     if minimal_prompt:
-        system_prompt = (
-            base_system +
-            "\n\n" + TOOL_INSTRUCTIONS  # Keep essential tool instructions
-        )
+        system_prompt = MINIMUM_PROMPT.format(assistant_name=name)
     else:
         system_prompt = (
             base_system +
