@@ -1,94 +1,147 @@
 # Roblox NPC Integration Guide
 
 ## Quick Start
-```python
-from letta_templates.roblox_integration import RobloxNPCManager
 
-# Initialize
-npc_manager = RobloxNPCManager(letta_client)
-
-# Create NPC with memory blocks
-blocks = npc_manager.create_memory_blocks(
-    npc_name="Guide Emma",
-    home_location="Town Square",
-    known_locations=[
-        {
-            "name": "Town Square",
-            "coordinates": [0, 0, 0],
-            "slug": "town_square"
-        }
-    ]
-)
-
-# Create agent
-agent = letta_client.create_agent(
-    name="emma_guide",
-    memory=blocks,
-    system=system_prompt
-)
-
-# Update when players move nearby
-nearby_players = [
-    {
-        "name": "Player1",
-        "appearance": "Red shirt, blue hat",
-        "notes": "New player"
-    }
-]
-npc_manager.update_group_status(
-    agent.id,
-    nearby_players=nearby_players,
-    current_location="Town Square"
-)
-
-# Handle responses in Lua
-response = agent.send_message("Hello!")
-if response != "[SILENCE]":
-    # Send response to player
+1. Install latest version with NPC support:
+```bash
+pip install git+https://github.com/yourusername/letta-templates.git@v0.8.0
 ```
+
+2. Basic usage:
+```python
+from letta_templates import create_personalized_agent, update_group_status
+
+# Create NPC agent (uses minimal prompt by default)
+agent = create_personalized_agent(
+    name="town_guide",
+    client=letta_client
+)
+
+# Update when players are nearby
+update_group_status(
+    client=letta_client,
+    agent_id=agent.id,
+    nearby_players=[{
+        "id": "player_123",
+        "name": "Alex",
+        "appearance": "Wearing a blue hat",
+        "notes": "First time visitor"
+    }],
+    current_location="Town Square",
+    current_action="idle"
+)
+
+# Handle chat responses
+response = client.send_message(
+    agent_id=agent.id,
+    message="Hi! Can you show me around?",
+    role="user",
+    name="Alex"
+)
+```
+
+## Example Implementation
+See `examples/roblox_npc_example.py` for a complete working example showing:
+- NPC creation with minimal prompt
+- Group formation and dissolution
+- Location updates and navigation
+- Status tracking
+- Memory management
 
 ## Critical Integration Points
 
-1. **Memory Block Synchronization**
-   - Status block must reflect current Roblox state
-   - Group block must match actual nearby players
-   - Both blocks should update together using `update_group_status()`
+1. **Status Updates**
+   - Update status when NPC moves:
+     ```python
+     update_group_status(
+         client=client,
+         agent_id=agent.id,
+         current_location="Market District",
+         current_action="moving"
+     )
+     ```
 
-2. **SILENCE Protocol**
-   - Check responses for "[SILENCE]"
-   - Return None/nil in Lua when SILENCE detected
-   - Skip sending response to players
+2. **Group Management**
+   - Track nearby players:
+     ```python
+     update_group_status(
+         client=client,
+         agent_id=agent.id,
+         nearby_players=[
+             {
+                 "id": "player_1",
+                 "name": "Alice",
+                 "appearance": "Red shirt",
+                 "notes": "Looking for garden"
+             },
+             # ... more players
+         ]
+     )
+     ```
 
-3. **Player Information**
-   - Keep appearance descriptions updated
-   - Track player locations accurately
-   - Maintain notes about interactions
+3. **Tool Usage**
+   - NPC will automatically use:
+     - `navigate_to` for movement
+     - `perform_action` for emotes
+     - `examine_object` for surroundings
 
-4. **Location Awareness**
-   - Update status block when NPC moves
-   - Keep nearby_locations list current
-   - Track previous locations for context
+4. **SILENCE Protocol**
+   - Check responses for "[SILENCE]":
+     ```python
+     response = client.send_message(
+         agent_id=agent.id,
+         message="@Bob hey where are you?",  # Player-to-player chat
+         role="user",
+         name="Alice"
+     )
+     if response.messages[-1].content == "[SILENCE]":
+         # Skip sending response to players
+         pass
+     ```
+   - In Lua, return nil when SILENCE detected
+   - Skip sending response to players for private chats
+
+5. **Memory System**
+   - Status block: Current state
+   - Group block: Player tracking
+   - Locations block: Navigation points
+   - Persona block: NPC personality
 
 ## Example Lua Integration
 ```lua
 local LettaNPC = require("LettaNPC")
 
--- Initialize NPC
-local emma = LettaNPC.new({
-    name = "Guide Emma",
-    location = "Town Square"
+-- Initialize NPC with minimal prompt
+local guide = LettaNPC.new({
+    name = "town_guide",
+    minimal_prompt = true  -- Uses simpler prompt
 })
 
--- Update nearby players
+-- Update on player proximity
 game.Players.PlayerAdded:Connect(function(player)
-    local nearby = emma:getNearbyPlayers()
-    emma:updateGroupStatus(nearby)
+    local nearby = guide:getNearbyPlayers()
+    guide:updateGroupStatus(nearby)
 end)
 
--- Handle chat
-emma.onMessage:Connect(function(response)
-    if response ~= "[SILENCE]" then
-        -- Send response to players
-    end
+-- Handle movement
+guide.onLocationChanged:Connect(function(newLocation)
+    guide:updateStatus({
+        location = newLocation,
+        action = "moving"
+    })
 end)
-``` 
+```
+
+## Testing
+Use the example file as a reference:
+```bash
+python examples/roblox_npc_example.py
+```
+
+This demonstrates:
+1. NPC creation and setup
+2. Player interactions
+3. Group formation
+4. Navigation
+5. Status updates
+6. Memory management 
