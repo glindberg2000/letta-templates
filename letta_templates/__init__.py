@@ -6,20 +6,20 @@ This package provides reusable components for Letta AI:
 - System prompts
 """
 
-from .npc_tools import (
-    TOOL_INSTRUCTIONS,
-    TOOL_REGISTRY,
-    NAVIGATION_TOOLS,
-    navigate_to,
-    perform_action,
-    examine_object
+from letta_templates.letta_quickstart_multiuser import (
+    create_personalized_agent,
+    chat_with_agent,
+    print_agent_details
+)
+
+from letta_templates.npc_utils import (
+    update_group_status
 )
 
 __version__ = "0.7.0"
 __all__ = [
-    "TOOL_INSTRUCTIONS",
-    "TOOL_REGISTRY",
-    "perform_action",
-    "navigate_to",
-    "examine_object"
+    'create_personalized_agent',
+    'chat_with_agent',
+    'print_agent_details',
+    'update_group_status'
 ]

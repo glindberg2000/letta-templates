@@ -359,7 +359,7 @@ def create_personalized_agent(
     overwrite: bool = False,
     with_custom_tools: bool = True,
     custom_registry = None,
-    minimal_prompt: bool = False
+    minimal_prompt: bool = True  # Changed default to True
 ):
     """Create a personalized agent with memory and tools"""
     logger = logging.getLogger('letta_test')
@@ -380,8 +380,10 @@ def create_personalized_agent(
     
     # Use minimal prompt for testing if requested
     if minimal_prompt:
+        logger.info(f"Using MINIMUM_PROMPT (minimal_prompt={minimal_prompt})")
         system_prompt = MINIMUM_PROMPT.format(assistant_name=name)
     else:
+        logger.info(f"Using full prompt (minimal_prompt={minimal_prompt})")
         system_prompt = (
             base_system +
             "\n\n" + TOOL_INSTRUCTIONS +
@@ -392,9 +394,11 @@ def create_personalized_agent(
     
     # Log what we're using
     logger.info("\nSystem prompt components:")
-    logger.info(f"1. Base system: {len(base_system)} chars")
-    logger.info(f"2. TOOL_INSTRUCTIONS: {len(TOOL_INSTRUCTIONS)} chars")
-    if not minimal_prompt:
+    if minimal_prompt:
+        logger.info(f"Using MINIMUM_PROMPT: {len(system_prompt)} chars")
+    else:
+        logger.info(f"1. Base system: {len(base_system)} chars")
+        logger.info(f"2. TOOL_INSTRUCTIONS: {len(TOOL_INSTRUCTIONS)} chars")
         logger.info(f"3. SOCIAL_AWARENESS_PROMPT: {len(SOCIAL_AWARENESS_PROMPT)} chars")
         logger.info(f"4. LOCATION_AWARENESS_PROMPT: {len(LOCATION_AWARENESS_PROMPT)} chars")
     
@@ -544,9 +548,11 @@ def create_personalized_agent(
 
     # Log what we're using
     logger.info("\nSystem prompt components:")
-    logger.info(f"1. Base system: {len(base_system)} chars")
-    logger.info(f"2. TOOL_INSTRUCTIONS: {len(TOOL_INSTRUCTIONS)} chars")
-    if not minimal_prompt:
+    if minimal_prompt:
+        logger.info(f"Using MINIMUM_PROMPT: {len(system_prompt)} chars")
+    else:
+        logger.info(f"1. Base system: {len(base_system)} chars")
+        logger.info(f"2. TOOL_INSTRUCTIONS: {len(TOOL_INSTRUCTIONS)} chars")
         logger.info(f"3. SOCIAL_AWARENESS_PROMPT: {len(SOCIAL_AWARENESS_PROMPT)} chars")
         logger.info(f"4. LOCATION_AWARENESS_PROMPT: {len(LOCATION_AWARENESS_PROMPT)} chars")
     
