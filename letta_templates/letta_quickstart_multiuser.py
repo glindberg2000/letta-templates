@@ -31,7 +31,7 @@ from letta_templates.npc_tools import (
 )
 import requests
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
+# from concurrent.futures import ThreadPoolExecutor
 import logging
 import inspect
 from textwrap import dedent
@@ -96,88 +96,88 @@ def print_agent_details(client, agent_id, stage=""):
         print(f"Limit: {block.limit}")
         print("-" * 50)
 
-def create_roblox_agent(client, name: str, persona: str = None):
-    """
-    Create a Letta agent configured for Roblox development assistance.
+# def create_roblox_agent(client, name: str, persona: str = None):
+#     """
+#     Create a Letta agent configured for Roblox development assistance.
     
-    Args:
-        client: Letta client instance
-        name (str): Name for the new agent
-        persona (str, optional): Custom persona text. If not provided, uses default Roblox expert persona
+#     Args:
+#         client: Letta client instance
+#         name (str): Name for the new agent
+#         persona (str, optional): Custom persona text. If not provided, uses default Roblox expert persona
     
-    Returns:
-        Agent: Created agent object
+#     Returns:
+#         Agent: Created agent object
     
-    Example:
-        >>> agent = create_roblox_agent(
-        ...     client,
-        ...     "RobloxHelper",
-        ...     "You are a Lua optimization expert..."
-        ... )
+#     Example:
+#         >>> agent = create_roblox_agent(
+#         ...     client,
+#         ...     "RobloxHelper",
+#         ...     "You are a Lua optimization expert..."
+#         ... )
     
-    Note:
-        Configures agent with:
-        - OpenAI embeddings
-        - GPT-4 model
-        - Roblox-specific memory configuration
-        - Base tools enabled
-    """
-    # Add timestamp to name to avoid conflicts
-    timestamp = int(time.time())
-    unique_name = f"{name}_{timestamp}"
+#     Note:
+#         Configures agent with:
+#         - OpenAI embeddings
+#         - GPT-4 model
+#         - Roblox-specific memory configuration
+#         - Base tools enabled
+#     """
+#     # Add timestamp to name to avoid conflicts
+#     timestamp = int(time.time())
+#     unique_name = f"{name}_{timestamp}"
     
-    return client.create_agent(
-        name=unique_name,
-        embedding_config=EmbeddingConfig(
-            embedding_endpoint_type="openai",
-            embedding_endpoint="https://api.openai.com/v1",
-            embedding_model="text-embedding-ada-002",
-            embedding_dim=1536,
-            embedding_chunk_size=300,
-        ),
-        llm_config=LLMConfig(
-            model="gpt-3.5-turbo",
-            model_endpoint_type="openai",
-            model_endpoint="https://api.openai.com/v1",
-            context_window=4000,
-        ),
-        memory=ChatMemory(
-            persona="A helpful NPC guide",
-            human="A Roblox player exploring the game",
-            locations={
-                "known_locations": [
-                    {
-                        "name": "Pete's Stand",
-                        "description": "A friendly food stand run by Pete",
-                        "coordinates": [-12.0, 18.9, -127.0],
-                        "slug": "petes_stand"
-                    },
-                    {
-                        "name": "Town Square",
-                        "description": "Central gathering place with fountain", 
-                        "coordinates": [45.2, 12.0, -89.5],
-                        "slug": "town_square"
-                    },
-                    {
-                        "name": "Market District",
-                        "description": "Busy shopping area with many vendors",
-                        "coordinates": [-28.4, 15.0, -95.2],
-                        "slug": "market_district"
-                    },
-                    {
-                        "name": "Secret Garden",
-                        "description": "A hidden garden with rare flowers",
-                        "coordinates": [15.5, 20.0, -110.8]
-                        # No slug - agent should use coordinates
-                    }
-                ]
-            }
-        ),
-        system=gpt_system.get_system_text("memgpt_chat"),
-        include_base_tools=True,  # Keep base tools enabled
-        tools=None,
-        description="A Roblox development assistant"
-    )
+#     return client.create_agent(
+#         name=unique_name,
+#         embedding_config=EmbeddingConfig(
+#             embedding_endpoint_type="openai",
+#             embedding_endpoint="https://api.openai.com/v1",
+#             embedding_model="text-embedding-ada-002",
+#             embedding_dim=1536,
+#             embedding_chunk_size=300,
+#         ),
+#         llm_config=LLMConfig(
+#             model="gpt-3.5-turbo",
+#             model_endpoint_type="openai",
+#             model_endpoint="https://api.openai.com/v1",
+#             context_window=4000,
+#         ),
+#         memory=ChatMemory(
+#             persona="A helpful NPC guide",
+#             human="A Roblox player exploring the game",
+#             locations={
+#                 "known_locations": [
+#                     {
+#                         "name": "Pete's Stand",
+#                         "description": "A friendly food stand run by Pete",
+#                         "coordinates": [-12.0, 18.9, -127.0],
+#                         "slug": "petes_stand"
+#                     },
+#                     {
+#                         "name": "Town Square",
+#                         "description": "Central gathering place with fountain", 
+#                         "coordinates": [45.2, 12.0, -89.5],
+#                         "slug": "town_square"
+#                     },
+#                     {
+#                         "name": "Market District",
+#                         "description": "Busy shopping area with many vendors",
+#                         "coordinates": [-28.4, 15.0, -95.2],
+#                         "slug": "market_district"
+#                     },
+#                     {
+#                         "name": "Secret Garden",
+#                         "description": "A hidden garden with rare flowers",
+#                         "coordinates": [15.5, 20.0, -110.8]
+#                         # No slug - agent should use coordinates
+#                     }
+#                 ]
+#             }
+#         ),
+#         system=gpt_system.get_system_text("memgpt_chat"),
+#         include_base_tools=True,  # Keep base tools enabled
+#         tools=None,
+#         description="A Roblox development assistant"
+#     )
 
 def update_agent_persona(client, agent_id: str, blocks: dict):
     """
