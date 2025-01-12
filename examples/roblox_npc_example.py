@@ -26,11 +26,14 @@ from letta_templates import (
     create_personalized_agent,
     update_group_status,
     chat_with_agent,
-    print_agent_details
+    print_agent_details,
+    get_memory_block,
+    update_memory_block
 )
 from dotenv import load_dotenv
 import os
 import json
+from datetime import datetime
 
 def print_response(response):
     """Print detailed response including tool usage"""
@@ -64,16 +67,55 @@ def main():
         base_url="http://localhost:8283"
     )
     
-    # Create an NPC agent (using minimal prompt by default)
+    # Create NPC with custom memory blocks
     print("Creating NPC agent...")
     agent = create_personalized_agent(
         name="town_guide",
-        client=client
-        # minimal_prompt=True is now default
+        client=client,
+        memory_blocks={
+            "locations": {
+                "known_locations": [
+                    {
+                        "name": "Pete's Stand",
+                        "description": "A friendly food stand run by Pete",
+                        "coordinates": [-12.0, 18.9, -127.0],
+                        "slug": "petes_stand"
+                    },
+                    {
+                        "name": "Town Square",
+                        "description": "Central gathering place with fountain",
+                        "coordinates": [45.2, 12.0, -89.5],
+                        "slug": "town_square"
+                    }
+                ]
+            },
+            "status": {
+                "region": "Tutorial",
+                "current_location": "Town Square",
+                "previous_location": None,
+                "current_action": "idle",
+                "nearby_locations": ["Pete's Stand"],
+                "movement_state": "stationary"
+            },
+            "group_members": {
+                "members": {},  # Start empty
+                "summary": "No players nearby",
+                "updates": [],
+                "last_updated": datetime.now().isoformat()
+            },
+            "persona": {
+                "name": "town_guide",
+                "role": "Tutorial Guide",
+                "personality": "Patient and friendly",
+                "background": "Helps new players explore",
+                "interests": ["Teaching", "Exploring"],
+                "journal": []
+            }
+        }
     )
     print(f"Created agent with ID: {agent.id}")
     
-    # Print initial agent details
+    # Print initial state
     print_agent_details(client, agent.id, "INITIAL STATE")
     
     # Test 1: Player approaches NPC
@@ -237,6 +279,38 @@ def main():
         current_action="idle"
     )
     print_memory_blocks(client, agent.id)
+
+    # Read any block
+    locations = get_memory_block(client, agent.id, "locations")
+    
+    # Example of reading/writing custom blocks:
+    # custom = get_memory_block(client, agent.id, "custom_block")
+    # update_memory_block(client, agent.id, "custom_block", {
+    #     "my_data": "custom value",
+    #     "timestamp": datetime.now().isoformat()
+    # })
+    
+    # Update any block
+    update_memory_block(client, agent.id, "locations", {
+        "known_locations": [
+            # New location data...
+        ]
+    })
+
+    # Update group and status together
+    update_group_status(
+        client=client,
+        agent_id=agent.id,
+        nearby_players=[
+            {
+                "id": "p1",
+                "name": "Alex",
+                "appearance": "Blue hat",
+                "notes": "New player"
+            }
+        ],
+        current_location="Training Area"
+    )
 
 if __name__ == "__main__":
     main() 

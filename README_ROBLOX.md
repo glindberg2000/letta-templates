@@ -11,10 +11,43 @@ pip install git+https://github.com/yourusername/letta-templates.git@v0.8.0
 ```python
 from letta_templates import create_personalized_agent, update_group_status
 
-# Create NPC agent (uses minimal prompt by default)
+# Create NPC agent with required memory blocks
 agent = create_personalized_agent(
     name="town_guide",
-    client=letta_client
+    client=letta_client,
+    memory_blocks={
+        "persona": {
+            "name": "town_guide",
+            "role": "Tutorial Guide",
+            "personality": "Patient and friendly",
+            "background": "Helps new players explore",
+            "interests": ["Teaching", "Exploring"],
+            "journal": []  # Optional
+        },
+        "status": {
+            "region": "Tutorial",
+            "current_location": "Town Square",
+            "current_action": "idle",
+            "movement_state": "stationary",
+            "nearby_locations": ["Market", "Garden"]
+        },
+        "group_members": {
+            "members": {},
+            "summary": "No players nearby",
+            "updates": [],
+            "last_updated": "2024-01-12T00:00:00Z"
+        },
+        "locations": {
+            "known_locations": [
+                {
+                    "name": "Market District",
+                    "description": "Busy shopping area",
+                    "coordinates": [-28.4, 15.0, -95.2],
+                    "slug": "market_district"
+                }
+            ]
+        }
+    }
 )
 
 # Update when players are nearby
@@ -30,19 +63,56 @@ update_group_status(
     current_location="Town Square",
     current_action="idle"
 )
+```
 
-# Handle chat responses
-response = client.send_message(
-    agent_id=agent.id,
-    message="Hi! Can you show me around?",
-    role="user",
-    name="Alex"
-)
+## Memory System
+
+### Required Memory Blocks
+All blocks must be provided during creation:
+
+1. **Persona Block**
+   - Basic identity and personality
+   - Optional journal for experiences
+   - Customizable fields for character depth
+
+2. **Status Block**
+   - NPC's current state
+   - Location and movement tracking
+   - Action status
+
+3. **Group Members Block**
+   - Current group members
+   - Last 10 group updates (joins/leaves)
+   - Member appearance and notes
+
+4. **Locations Block**
+   - Known navigation points
+   - Coordinates and descriptions
+   - Navigation slugs
+
+### Group Updates
+The system maintains a history of group changes:
+```python
+{
+    "members": {
+        "player_123": {
+            "name": "Alex",
+            "appearance": "Blue hat",
+            "notes": "First time visitor"
+        }
+    },
+    "summary": "Current members: Alex",
+    "updates": [
+        "Emma left the group",
+        "Alex joined the group"
+    ],
+    "last_updated": "2024-01-12T00:00:00Z"
+}
 ```
 
 ## Example Implementation
 See `examples/roblox_npc_example.py` for a complete working example showing:
-- NPC creation with minimal prompt
+- NPC creation with custom memory blocks
 - Group formation and dissolution
 - Location updates and navigation
 - Status tracking
