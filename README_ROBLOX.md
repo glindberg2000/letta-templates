@@ -1,10 +1,63 @@
 # Roblox NPC Integration Guide
 
+## Version 0.9.0 Breaking Changes
+
+### Upgrading from 0.8.x
+1. Memory blocks are now required during creation:
+```python
+# Old way (no longer works):
+agent = create_personalized_agent(name="guide")
+
+# New way (required):
+agent = create_personalized_agent(
+    name="guide",
+    memory_blocks={
+        "persona": { ... },  # Required
+        "status": { ... },   # Required
+        "group_members": { ... },  # Required
+        "locations": { ... }  # Required
+    }
+)
+```
+
+2. Group member structure simplified:
+```python
+# Old structure had location tracking
+members = {
+    "player_1": {
+        "last_location": "Market",
+        "last_seen": timestamp,
+        # ...
+    }
+}
+
+# New structure (location in status block)
+members = {
+    "player_1": {
+        "name": "Alice",
+        "appearance": "Red shirt",
+        "notes": "Looking for garden"
+    }
+}
+```
+
+3. Group updates now track meaningful events:
+```python
+# Old updates
+"updates": ["Updated group at Market"]
+
+# New updates (limited to 10)
+"updates": [
+    "Alice joined the group",
+    "Bob left the group"
+]
+```
+
 ## Quick Start
 
 1. Install latest version with NPC support:
 ```bash
-pip install git+https://github.com/yourusername/letta-templates.git@v0.8.0
+pip install git+https://github.com/yourusername/letta-templates.git@v0.9.0
 ```
 
 2. Basic usage:
