@@ -57,7 +57,7 @@ members = {
 
 1. Install latest version with NPC support:
 ```bash
-pip install git+https://github.com/yourusername/letta-templates.git@v0.9.0
+pip install git+https://github.com/glindberg2000/letta-templates.git@v0.9.0
 ```
 
 2. Basic usage:
