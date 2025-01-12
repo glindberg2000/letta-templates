@@ -69,7 +69,7 @@ def update_group_status(client, agent_id: str, nearby_players: list,
     group = get_memory_block(client, agent_id, "group_members")
     
     # Track group changes
-    current_members = set(group["members"].keys())
+    current_members = set(group.get("members", {}).keys())
     new_members = set(p["id"] for p in nearby_players)
     
     # Calculate who joined and left
@@ -84,7 +84,7 @@ def update_group_status(client, agent_id: str, nearby_players: list,
         left_names = [group["members"][pid]["name"] for pid in left]
         updates.append(f"{', '.join(left_names)} left the group")
     
-    # Update status
+    # Update status (preserve existing fields)
     status.update({
         "current_location": current_location,
         "previous_location": status.get("current_location"),

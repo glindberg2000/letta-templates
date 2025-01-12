@@ -57,7 +57,11 @@ members = {
 
 1. Install latest version with NPC support:
 ```bash
-pip install git+https://github.com/glindberg2000/letta-templates.git@v0.9.0
+# Option 1: From PyPI (recommended)
+pip install letta_templates==0.9.1
+
+# Option 2: From GitHub (if needed)
+pip install git+https://github.com/glindberg2000/letta-templates.git@v0.9.1
 ```
 
 2. Basic usage:
@@ -127,16 +131,113 @@ All blocks must be provided during creation:
    - Basic identity and personality
    - Optional journal for experiences
    - Customizable fields for character depth
+   - Extensible personality data:
+     ```python
+     "persona": {
+         # Core fields (recommended but flexible)
+         "name": "town_guide",
+         "role": "Tutorial Guide",
+         
+         # Personality (all optional/customizable)
+         "personality": {
+             "traits": ["friendly", "patient"],
+             "mood": "cheerful",
+             "speaking_style": "casual",
+             "favorite_phrases": ["Welcome!", "Let me show you around"]
+         },
+         
+         # Background (optional/customizable)
+         "background": {
+             "origin": "Born in Market District",
+             "years_as_guide": 5,
+             "specialties": ["garden tours", "history"],
+             "relationships": {"Pete": "good friend", "Market": "hometown"}
+         },
+         
+         # Optional features
+         "interests": ["Teaching", "Exploring"],
+         "journal": [],  # For memories/experiences
+         
+         # Game-specific fields
+         "quest_preferences": ["helping_new_players"],
+         "daily_schedule": {"morning": "market", "evening": "garden"},
+         "dialog_triggers": ["sees_new_player", "at_landmark"],
+         
+         # Add any fields needed
+         "your_custom_field": "any value"
+     }
+     ```
+   - No mandatory structure
+   - Tools can access all fields
+   - Game defines personality depth
 
 2. **Status Block**
    - NPC's current state
-   - Location and movement tracking
+   - Location tracking (flexible format):
+     ```python
+     # Can use coordinates
+     "current_location": "12.5, -45.2, 78.9"
+     
+     # Or named locations
+     "current_location": "Market District"
+     
+     # Or both
+     "current_location": "Market District (12.5, -45.2, 78.9)"
+     
+     # Or any custom format needed by the game
+     "current_location": "zone_4_market_district_coords_12.5_-45.2_78.9"
+     ```
    - Action status
+   - Extensible for game-specific data:
+     ```python
+     "status": {
+         # Core fields
+         "current_location": "Market",
+         "current_action": "idle",
+         "movement_state": "stationary",
+         
+         # Game-specific fields
+         "vision_range": 50,
+         "visible_objects": ["tree_1", "rock_2"],
+         "local_events": ["market_sale", "festival"],
+         "weather": "rainy",
+         "time_of_day": "evening",
+         "quest_triggers_nearby": ["help_merchant"],
+         
+         # Add any fields needed
+         "your_custom_field": "any value"
+     }
+     ```
 
 3. **Group Members Block**
    - Current group members
    - Last 10 group updates (joins/leaves)
    - Member appearance and notes
+   - Extensible member data:
+     ```python
+     "members": {
+         "player_123": {
+             # Core fields used by tools
+             "name": "Emma",
+             "appearance": "Purple dress",
+             "notes": "Regular visitor",
+             
+             # Game-specific fields
+             "role": "group_leader",
+             "permissions": ["can_invite", "can_kick"],
+             "friendship_level": 3,
+             "shared_quests": ["garden_tour"],
+             "favorite_locations": ["Secret Garden"],
+             "interaction_history": ["helped_with_quest", "shared_item"],
+             
+             # Add any fields needed
+             "your_custom_field": "any value"
+         }
+     }
+     ```
+   - Tools can read/write any fields
+   - No validation on extra fields
+   - Game can store any player-specific data
 
 4. **Locations Block**
    - Known navigation points
