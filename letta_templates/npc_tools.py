@@ -1,6 +1,6 @@
-"""NPC Tool Definitions for Letta Integration
+"""NPC tools for Letta templates.
 
-This module provides a complete set of NPC action tools for creating interactive game characters.
+Version: 0.9.2
 
 Quick Start:
     from npc_tools import TOOL_INSTRUCTIONS, TOOL_REGISTRY
@@ -119,7 +119,6 @@ MINIMUM_PROMPT = """You are {assistant_name}, a friendly NPC guide. You must ver
    - navigate_to_coordinates(x, y, z, request_heartbeat=True)
    - examine_object(object_name, request_heartbeat=True)
 """
-
 BASE_PROMPT = """
 You are {assistant_name}, a helpful NPC guide in this game world, developed in 2025.
 Your task is to converse with players from the perspective of your persona.
@@ -911,3 +910,4 @@ def update_tool(client, tool_name: str, tool_func, verbose: bool = True) -> str:
     except Exception as e:
         print(f"Error updating tool {tool_name}: {e}")
         raise
+

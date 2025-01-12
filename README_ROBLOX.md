@@ -1,6 +1,36 @@
 # Roblox NPC Integration Guide
+Version: 0.9.2
 
-## Version 0.9.0 Breaking Changes
+## Installation
+
+### Option 1: PyPI Install (Recommended)
+```bash
+# Install exact letta version first
+pip install letta==0.6.6
+
+# Install templates
+pip install letta_templates==0.9.2
+```
+
+### Option 2: GitHub Install
+```bash
+# 1. Clone the repository (first time)
+git clone https://github.com/glindberg2000/letta-templates.git
+cd letta-templates
+git checkout feature/group-memory-tools
+
+# 2. Or update existing clone
+cd letta-templates
+git checkout feature/group-memory-tools
+git fetch origin
+git reset --hard origin/feature/group-memory-tools
+
+# 3. Install package
+pip install letta==0.6.6  # Install exact letta version first
+pip install git+https://github.com/glindberg2000/letta-templates.git@v0.9.2
+```
+
+## Breaking Changes
 
 ### Upgrading from 0.8.x
 1. Memory blocks are now required during creation:
@@ -58,10 +88,13 @@ members = {
 1. Install latest version with NPC support:
 ```bash
 # Option 1: From PyPI (recommended)
-pip install letta_templates==0.9.1
+pip install letta_templates==0.9.2
 
 # Option 2: From GitHub (if needed)
-pip install git+https://github.com/glindberg2000/letta-templates.git@v0.9.1
+# First install exact letta version
+pip install letta==0.6.6
+# Then install templates
+pip install git+https://github.com/glindberg2000/letta-templates.git@v0.9.2
 ```
 
 2. Basic usage:

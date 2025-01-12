@@ -2,6 +2,16 @@ from typing import Dict, Any, Optional
 import json
 from datetime import datetime
 
+"""NPC utility functions for Letta templates.
+
+Version: 0.9.2
+
+Provides core functionality for:
+- Memory block management
+- Group status updates
+- Location tracking
+"""
+
 def create_memory_blocks(client, blocks: Dict[str, Any]) -> list:
     """Create memory blocks from provided data
     

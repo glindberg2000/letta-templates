@@ -1,24 +1,12 @@
 """
-Roblox NPC Example using Letta Templates
+Roblox NPC Example
+Version: 0.9.2
 
-Setup Requirements:
-1. Docker installed
-2. OpenAI API key
-
-Setup Steps:
-1. Start Letta server with Docker:
-   docker run -d --name letta-server \
-     -v ~/.letta/.persist/pgdata:/var/lib/postgresql/data \
-     -p 8283:8283 \
-     -e OPENAI_API_KEY="your_api_key" \
-     letta/letta:latest
-
-2. Set environment variables in .env:
-   LETTA_BASE_URL=http://localhost:8283
-   OPENAI_API_KEY=your_api_key
-
-3. Install requirements:
-   pip install letta_templates python-dotenv
+Demonstrates:
+- NPC creation with memory blocks
+- Group management
+- Navigation
+- Status updates
 """
 
 from letta import create_client

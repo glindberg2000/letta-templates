@@ -1,3 +1,11 @@
+"""
+Letta Quickstart Template
+Version: 0.9.2
+
+This template provides a basic structure for creating Letta agents with memory blocks and tools.
+It includes functions for creating agents, updating memory blocks, and sending messages.
+"""
+
 import os
 from dotenv import load_dotenv
 from letta import EmbeddingConfig, LLMConfig, create_client, ChatMemory, BasicBlockMemory
