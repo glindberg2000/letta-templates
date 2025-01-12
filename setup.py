@@ -7,9 +7,10 @@ setup(
     author="G. Lindberg",
     packages=find_packages(),
     install_requires=[
-        "letta>=0.6.6",
+        "letta==0.6.6",
         "python-dotenv",
-        "requests"
+        "requests",
+        "numpy>=1.17.0"
     ],
     python_requires=">=3.8",
 )
