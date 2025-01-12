@@ -67,49 +67,63 @@ def main():
         base_url="http://localhost:8283"
     )
     
-    # Create NPC with custom memory blocks
-    print("Creating NPC agent...")
+    # Create NPC agent
     agent = create_personalized_agent(
         name="town_guide",
         client=client,
         memory_blocks={
-            "locations": {
-                "known_locations": [
-                    {
-                        "name": "Pete's Stand",
-                        "description": "A friendly food stand run by Pete",
-                        "coordinates": [-12.0, 18.9, -127.0],
-                        "slug": "petes_stand"
-                    },
-                    {
-                        "name": "Town Square",
-                        "description": "Central gathering place with fountain",
-                        "coordinates": [45.2, 12.0, -89.5],
-                        "slug": "town_square"
-                    }
-                ]
-            },
-            "status": {
-                "region": "Tutorial",
-                "current_location": "Town Square",
-                "previous_location": None,
-                "current_action": "idle",
-                "nearby_locations": ["Pete's Stand"],
-                "movement_state": "stationary"
-            },
-            "group_members": {
-                "members": {},  # Start empty
-                "summary": "No players nearby",
-                "updates": [],
-                "last_updated": datetime.now().isoformat()
-            },
             "persona": {
                 "name": "town_guide",
                 "role": "Tutorial Guide",
-                "personality": "Patient and friendly",
-                "background": "Helps new players explore",
-                "interests": ["Teaching", "Exploring"],
+                "personality": {
+                    "traits": ["enthusiastic", "knowledgeable"],
+                    "speaking_style": "friendly and casual",
+                    "favorite_phrases": ["Let me show you around!", "That's a great spot!"]
+                },
+                "background": {
+                    "origin": "Started as a visitor, loved it so much became a guide",
+                    "specialties": ["hidden spots", "local history", "best views"]
+                },
+                "interests": ["discovering new places", "meeting travelers", "sharing stories"],
                 "journal": []
+            },
+            "status": {
+                "region": "Tutorial",
+                "current_location": "Welcome Center",
+                "current_action": "idle",
+                "movement_state": "stationary",
+                "nearby_locations": ["Visitor Plaza", "Scenic Lookout"],
+                "time_of_day": "morning",
+                "weather": "sunny",
+                "current_visitors": 3
+            },
+            "group_members": {
+                "members": {},
+                "summary": "Ready to greet visitors",
+                "updates": [],
+                "last_updated": datetime.now().isoformat()
+            },
+            "locations": {
+                "known_locations": [
+                    {
+                        "name": "Visitor Plaza",
+                        "description": "Bustling central area with information kiosk",
+                        "coordinates": [120.5, 15.0, -85.2],
+                        "slug": "visitor_plaza"
+                    },
+                    {
+                        "name": "Scenic Lookout",
+                        "description": "Elevated spot with amazing views",
+                        "coordinates": [145.2, 35.0, -90.5],
+                        "slug": "scenic_lookout"
+                    },
+                    {
+                        "name": "Welcome Center",
+                        "description": "Starting point for new visitors",
+                        "coordinates": [100.0, 15.0, -80.0],
+                        "slug": "welcome_center"
+                    }
+                ]
             }
         }
     )
@@ -132,16 +146,16 @@ def main():
             "appearance": "Wearing a blue hat and red shirt",
             "notes": "First time visitor"
         }],
-        current_location="Town Square",
+        current_location="Welcome Center",
         current_action="idle"
     )
     print_memory_blocks(client, agent.id)
 
     # Player initiates conversation
-    print("\nPlayer: Hi! Can you take me to Pete's Stand?")
+    print("\nPlayer: Hi! Can you show me around the Visitor Plaza?")
     response = client.send_message(
         agent_id=agent.id,
-        message="Hi! Can you take me to Pete's Stand?",
+        message="Hi! Can you show me around the Visitor Plaza?",
         role="user",
         name="Alex"
     )
@@ -158,13 +172,13 @@ def main():
             "appearance": "Wearing a blue hat and red shirt",
             "notes": "First time visitor"
         }],
-        current_location="Town Square",
+        current_location="Welcome Center",
         current_action="moving"  # Status change: now moving
     )
     print_memory_blocks(client, agent.id)
 
     # Game event: NPC arrives at destination
-    print("\nGame Event: NPC arrives at Pete's Stand")
+    print("\nGame Event: NPC arrives at Visitor Plaza")
     update_group_status(
         client=client,
         agent_id=agent.id,
@@ -174,7 +188,7 @@ def main():
             "appearance": "Wearing a blue hat and red shirt",
             "notes": "First time visitor"
         }],
-        current_location="Pete's Stand",
+        current_location="Visitor Plaza",
         current_action="idle"  # Back to idle after arriving
     )
     print_memory_blocks(client, agent.id)
@@ -201,23 +215,23 @@ def main():
                 "notes": "Regular visitor, likes the garden"
             }
         ],
-        current_location="Pete's Stand",
+        current_location="Visitor Plaza",
         current_action="idle"
     )
     print_memory_blocks(client, agent.id)
 
     # Test group interaction
-    print("\nPlayer Emma: Can we all go to the Secret Garden?")
+    print("\nPlayer Emma: Can we all go to the Scenic Lookout?")
     response = client.send_message(
         agent_id=agent.id,
-        message="Can we all go to the Secret Garden?",
+        message="Can we all go to the Scenic Lookout?",
         role="user",
         name="Emma"
     )
     print_response(response)
 
     # Game event: Group starts moving
-    print("\nGame Event: Group starts moving to Secret Garden")
+    print("\nGame Event: Group starts moving to Scenic Lookout")
     update_group_status(
         client=client,
         agent_id=agent.id,
@@ -235,7 +249,7 @@ def main():
                 "notes": "Regular visitor, likes the garden"
             }
         ],
-        current_location="Pete's Stand",
+        current_location="Visitor Plaza",
         current_action="moving"
     )
     print_memory_blocks(client, agent.id)
@@ -254,7 +268,7 @@ def main():
             "appearance": "Purple dress with a backpack",
             "notes": "Regular visitor, likes the garden"
         }],
-        current_location="Secret Garden",
+        current_location="Scenic Lookout",
         current_action="idle"
     )
     print_memory_blocks(client, agent.id)
@@ -275,7 +289,7 @@ def main():
         client=client,
         agent_id=agent.id,
         nearby_players=[],
-        current_location="Secret Garden",
+        current_location="Scenic Lookout",
         current_action="idle"
     )
     print_memory_blocks(client, agent.id)
@@ -296,21 +310,6 @@ def main():
             # New location data...
         ]
     })
-
-    # Update group and status together
-    update_group_status(
-        client=client,
-        agent_id=agent.id,
-        nearby_players=[
-            {
-                "id": "p1",
-                "name": "Alex",
-                "appearance": "Blue hat",
-                "notes": "New player"
-            }
-        ],
-        current_location="Training Area"
-    )
 
 if __name__ == "__main__":
     main() 
