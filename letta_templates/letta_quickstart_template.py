@@ -57,6 +57,32 @@ BASE_TOOLS = {
     "core_memory_replace"
 }
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger('letta_debug')
+
+def log_tool_usage(tool_name: str, args: dict, result: dict):
+    """Log tool calls and results"""
+    logger.info(f"\nTool Call: {tool_name}")
+    logger.info(f"Arguments: {json.dumps(args, indent=2)}")
+    logger.info(f"Result: {json.dumps(result, indent=2)}")
+
+def log_memory_update(block_name: str, old_value: dict, new_value: dict):
+    """Log memory block changes"""
+    logger.info(f"\nMemory Update: {block_name}")
+    logger.info("Previous state:")
+    logger.info(json.dumps(old_value, indent=2))
+    logger.info("New state:")
+    logger.info(json.dumps(new_value, indent=2))
+
+def log_agent_reasoning(agent_id: str, thought_process: str):
+    """Log agent's decision making"""
+    logger.info(f"\nAgent {agent_id} reasoning:")
+    logger.info(thought_process)
+
 def print_agent_details(client, agent_id, stage=""):
     """
     Print detailed information about an agent's configuration and memory.

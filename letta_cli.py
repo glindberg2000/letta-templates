@@ -11,62 +11,39 @@ import json
 load_dotenv()
 
 def list_all_agents(client):
-    """List all available agents with their details, memory blocks, and LLM config."""
+    """List all available agents with their IDs, names, and memory blocks."""
     try:
         agents = client.list_agents()
-        print("\nAll Available Agents:")
+        print("\nAvailable Agents:")
         for agent in agents:
-            print(f"ID: {agent.id}")
+            print(f"\nAgent ID: {agent.id}")
             print(f"Name: {agent.name}")
-            print(f"Description: {agent.description}")
-            
-            # Add LLM Configuration display with correct attributes
-            try:
-                if hasattr(agent, 'llm_config'):
-                    print("\nLLM Configuration:")
-                    config = agent.llm_config
-                    print(f"  Model: {config.model}")
-                    print(f"  Endpoint Type: {config.model_endpoint_type}")
-                    print(f"  Endpoint: {config.model_endpoint}")
-                    if hasattr(config, 'model_wrapper'):
-                        print(f"  Model Wrapper: {config.model_wrapper}")
-                else:
-                    print("\nLLM Configuration: Not available")
-            except Exception as e:
-                print(f"\nError fetching LLM config: {e}")
-            
-            # Display attached tools
-            try:
-                print("\nAttached Tools:")
-                if hasattr(agent, 'tools') and agent.tools:
-                    for tool in agent.tools:
-                        print(f"  Tool: {tool.name}")
-                        if tool.description:
-                            print(f"    Description: {tool.description}")
-                        if tool.tags:
-                            print(f"    Tags: {', '.join(tool.tags)}")
-                        if tool.module:
-                            print(f"    Module: {tool.module}")
-                else:
-                    print("  No custom tools attached")
-                
-                # Display if base tools are included
-                if hasattr(agent, 'include_base_tools'):
-                    print(f"  Base Tools: {'Enabled' if agent.include_base_tools else 'Disabled'}")
-            except Exception as e:
-                print(f"  Error fetching tools: {e}")
             
             # Get memory blocks for each agent
             try:
                 memory = client.get_in_context_memory(agent.id)
                 print("\nMemory Blocks:")
                 for block in memory.blocks:
-                    if block.label in ['human', 'persona']:
-                        print(f"  {block.label.capitalize()}:")
-                        # Split and indent the value for better readability
-                        value_lines = block.value.split('\n')
-                        for line in value_lines:
-                            print(f"    {line}")
+                    print(f"  • {block.label}")
+                    # Pretty print JSON block values
+                    try:
+                        value = json.loads(block.value)
+                        # Show full contents for important blocks
+                        if block.label in ['group_members', 'status']:
+                            preview = json.dumps(value, indent=2)
+                        else:
+                            preview = json.dumps(value, indent=2)[:200]  # Limit other blocks
+                            if len(preview) >= 200:
+                                preview += "\n    ..."
+                        # Indent all lines
+                        preview = '\n'.join('    ' + line for line in preview.split('\n'))
+                        print(preview)
+                    except json.JSONDecodeError:
+                        # For non-JSON blocks, show first few lines
+                        preview = block.value.split('\n')[0][:100]
+                        if len(preview) == 100:
+                            preview += "..."
+                        print(f"    {preview}")
             except Exception as e:
                 print(f"  Unable to fetch memory blocks: {e}")
             

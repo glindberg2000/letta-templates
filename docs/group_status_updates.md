@@ -149,3 +149,43 @@ update_group_status(
    - When players enter/leave NPC's area
 3. Use consistent location names
 4. Set appropriate action states ("idle" vs "moving") 
+
+## Debugging & Verification
+You can inspect memory blocks using these built-in functions:
+
+### 1. Get Specific Block Contents
+```python
+from letta_templates.npc_utils import get_memory_block
+
+# Check if NPC is using [SILENCE] correctly
+response = chat_with_agent(
+    client=direct_client,
+    agent_id=agent.id,
+    message="@OtherPlayer how are you?",  # Direct message to another player
+    role="user",
+    name="Player1"
+)
+print(f"Response: {response}")  # Should show [SILENCE] for direct messages
+
+# Check group block
+group_block = get_memory_block(client, agent_id, "group_members")
+print(f"Current group members: {json.dumps(group_block, indent=2)}")
+
+# Check status block
+status_block = get_memory_block(client, agent_id, "status")
+print(f"Current status: {json.dumps(status_block, indent=2)}")
+```
+
+### 2. Print All Agent Details
+```python
+from letta_templates import print_agent_details
+
+# Print all memory blocks and system prompt
+print_agent_details(client, agent_id, stage="After Update")
+```
+
+This will show:
+- All memory block contents
+- System prompt
+- Agent configuration
+- Block limits and IDs 
