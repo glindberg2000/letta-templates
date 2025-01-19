@@ -19,7 +19,7 @@ from letta_templates.npc_utils import (
     create_memory_blocks
 )
 
-__version__ = "0.8.0"
+__version__ = "0.9.3"
 __all__ = [
     'create_personalized_agent',
     'chat_with_agent',

@@ -785,16 +785,6 @@ TOOL_REGISTRY: Dict[str, Dict] = {
         "version": "2.0.0",
         "supports_state": True
     },
-    "examine_object": {
-        "function": examine_object,
-        "version": "2.0.0",
-        "supports_state": True
-    },
-    "test_echo": {
-        "function": test_echo,
-        "version": "1.0.0",
-        "supports_state": False
-    },
     "group_memory_append": {
         "function": group_memory_append,
         "version": "1.0.0",

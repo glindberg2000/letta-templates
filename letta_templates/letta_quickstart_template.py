@@ -389,13 +389,14 @@ def create_group_tools():
 
 def create_personalized_agent(
     name: str = "emma_assistant",
-    client = None,
-    use_claude: bool = False,
+    client=None,
     overwrite: bool = False,
     with_custom_tools: bool = True,
-    custom_registry = None,
+    custom_registry=None,
     minimal_prompt: bool = True,
-    memory_blocks: dict = None
+    memory_blocks: dict = None,
+    llm_config=None,
+    system_prompt=None
 ):
     """Create a personalized agent with memory blocks and tools."""
     logger = logging.getLogger('letta_test')
@@ -414,41 +415,34 @@ def create_personalized_agent(
     timestamp = int(time.time())
     unique_name = f"{name}_{timestamp}"
     
-    # Format base prompt with assistant name
-    base_system = BASE_PROMPT.format(assistant_name=name)
+    # Default system prompt logic
+    if system_prompt is None:
+        if minimal_prompt:
+            logger.info(f"Using MINIMUM_PROMPT (minimal_prompt={minimal_prompt})")
+            system_prompt = MINIMUM_PROMPT.format(assistant_name=name)
+        else:
+            logger.info(f"Using full prompt (minimal_prompt={minimal_prompt})")
+            base_system = BASE_PROMPT.format(assistant_name=name)
+            system_prompt = (
+                base_system +
+                "\n\n" + TOOL_INSTRUCTIONS +
+                "\n\n" + SOCIAL_AWARENESS_PROMPT +
+                "\n\n" + GROUP_AWARENESS_PROMPT +
+                "\n\n" + LOCATION_AWARENESS_PROMPT
+            )
     
-    # Use minimal prompt for testing if requested
-    if minimal_prompt:
-        logger.info(f"Using MINIMUM_PROMPT (minimal_prompt={minimal_prompt})")
-        system_prompt = MINIMUM_PROMPT.format(assistant_name=name)
-    else:
-        logger.info(f"Using full prompt (minimal_prompt={minimal_prompt})")
-        system_prompt = (
-            base_system +
-            "\n\n" + TOOL_INSTRUCTIONS +
-            "\n\n" + SOCIAL_AWARENESS_PROMPT +
-            "\n\n" + GROUP_AWARENESS_PROMPT +
-            "\n\n" + LOCATION_AWARENESS_PROMPT
-        )
-    
-    # Log what we're using
-    logger.info("\nSystem prompt components:")
-    if minimal_prompt:
-        logger.info(f"Using MINIMUM_PROMPT: {len(system_prompt)} chars")
-    else:
-        logger.info(f"1. Base system: {len(base_system)} chars")
-        logger.info(f"2. TOOL_INSTRUCTIONS: {len(TOOL_INSTRUCTIONS)} chars")
-        logger.info(f"3. SOCIAL_AWARENESS_PROMPT: {len(SOCIAL_AWARENESS_PROMPT)} chars")
-        logger.info(f"4. LOCATION_AWARENESS_PROMPT: {len(LOCATION_AWARENESS_PROMPT)} chars")
-    
-    # Create configs first
-    llm_config = LLMConfig(
-        model="gpt-4o-mini",
+    # Default LLM configuration
+    default_llm_config = LLMConfig(
+        model="openai-4o-mini",
+        context_window=32000,
         model_endpoint_type="openai",
-        model_endpoint="https://api.openai.com/v1",
-        context_window=128000,
+        model_endpoint="https://api.openai.com/v1"
     )
-    
+
+    # Use provided configuration or default
+    llm_config = llm_config or default_llm_config
+
+    # Embedding configuration
     embedding_config = EmbeddingConfig(
         embedding_endpoint_type="openai",
         embedding_endpoint="https://api.openai.com/v1",
@@ -456,42 +450,13 @@ def create_personalized_agent(
         embedding_dim=1536,
         embedding_chunk_size=300,
     )
-    
-    # Define all possible locations
-    all_locations = [
-        {
-            "name": "Cafe",
-            "description": "Cozy cafe with fresh pastries",
-            "coordinates": [10.0, 15.0, -100.0],
-            "slug": "cafe"
-        },
-        {
-            "name": "Fountain",
-            "description": "Central fountain with benches",
-            "coordinates": [20.0, 15.0, -105.0],
-            "slug": "fountain"
-        },
-        {
-            "name": "Shop Row",
-            "description": "Line of small shops and stalls",
-            "coordinates": [15.0, 15.0, -110.0],
-            "slug": "shop_row"
-        }
-        # ... other locations ...
-    ]
-    
+
     # Create memory blocks with consistent identity
     memory = BasicBlockMemory(blocks=create_memory_blocks(client, memory_blocks))
 
     # Log what we're using
     logger.info("\nSystem prompt components:")
-    if minimal_prompt:
-        logger.info(f"Using MINIMUM_PROMPT: {len(system_prompt)} chars")
-    else:
-        logger.info(f"1. Base system: {len(base_system)} chars")
-        logger.info(f"2. TOOL_INSTRUCTIONS: {len(TOOL_INSTRUCTIONS)} chars")
-        logger.info(f"3. SOCIAL_AWARENESS_PROMPT: {len(SOCIAL_AWARENESS_PROMPT)} chars")
-        logger.info(f"4. LOCATION_AWARENESS_PROMPT: {len(LOCATION_AWARENESS_PROMPT)} chars")
+    logger.info(f"System prompt length: {len(system_prompt)} chars")
     
     # Log params in a readable way
     print("\nCreating agent with params:")
@@ -508,8 +473,8 @@ def create_personalized_agent(
     # Create agent first
     agent = client.create_agent(
         name=unique_name,
-        embedding_config=embedding_config,
         llm_config=llm_config,
+        embedding_config=embedding_config,
         memory=memory,
         system=system_prompt,
         include_base_tools=False,  # We'll add tools manually

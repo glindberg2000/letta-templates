@@ -7,8 +7,8 @@ from letta_local_client import LocalAPIClient
 import time
 import json
 
-# Load environment variables
-load_dotenv()
+# Move to top of file, before argument parser setup
+load_dotenv(override=True)  # Add override=True to ensure env vars are loaded
 
 def list_all_agents(client):
     """List all available agents with their IDs, names, and memory blocks."""
@@ -721,7 +721,7 @@ def main():
     parser.add_argument('--endpoint',
                        help='Local API endpoint for testing')
     parser.add_argument('--url', 
-                       default=os.getenv('LETTA_BASE_URL', 'memory://'), 
+                       default=os.getenv('LETTA_BASE_URL', 'memory://'),
                        help='Base URL for the Letta service')
     parser.add_argument('--port',
                        type=int,
@@ -843,6 +843,10 @@ def main():
         base_url=args.url,
         port=args.port
     )
+    
+    # Add near the start of main():
+    print(f"Environment LETTA_BASE_URL: {os.getenv('LETTA_BASE_URL')}")
+    print(f"Args URL: {args.url}")
     
     if args.command == 'messages':
         get_agent_messages(client, args.agent_id, args.limit, args.role, 

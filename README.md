@@ -6,8 +6,7 @@ A collection of tools and utilities for working with the Letta AI server, includ
 
 ### Client-Server Version Matching
 The Letta client must match the server version to handle tool schemas correctly. If you see validation errors like:
-```
-ValidationError: validation errors for AgentState
+```ValidationError: validation errors for AgentState
 tools.0.return_char_limit
   Extra inputs are not permitted
 ```
@@ -871,3 +870,16 @@ python letta_cli.py create
 # Delete agent
 python letta_cli.py delete <agent_id>
 ```
+
+## Environment Configuration
+
+The package now properly loads environment variables from `.env` files with override support. Create a `.env` file in your project root:
+
+```bash
+# Letta Server Configuration
+LETTA_SERVER_HOST=your.server.host
+LETTA_SERVER_PORT=8283
+LETTA_BASE_URL=http://your.server.host:8283
+```
+
+The package will automatically load these settings when creating clients and agents.
