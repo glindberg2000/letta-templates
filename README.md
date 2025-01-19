@@ -29,11 +29,20 @@ pip install letta_templates
 ### Option 2: From Source
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/letta-templates.git
+git clone https://github.com/glindberg2000/letta-templates.git
 cd letta-templates
 
 # Install in development mode
 pip install -e .
+```
+
+### Option 3: Direct from GitHub
+```bash
+# Install latest version
+pip install git+https://github.com/glindberg2000/letta-templates.git
+
+# Install specific version
+pip install git+https://github.com/glindberg2000/letta-templates.git@v0.9.3
 ```
 
 ### Verify Installation
