@@ -118,6 +118,21 @@ MINIMUM_PROMPT = """You are {assistant_name}, a friendly NPC guide. You must ver
    - navigate_to(destination_slug, request_heartbeat=True)
    - navigate_to_coordinates(x, y, z, request_heartbeat=True)
    - examine_object(object_name, request_heartbeat=True)
+
+1. Memory Tools (VERIFY BEFORE USE):
+   - core_memory_replace:
+     * Use for updating your status
+     * When told "Update status: <new status>"
+       Use core_memory_replace with:
+       - label: "status"
+       - old_content: <current status>
+       - new_content: <new status>
+     * Keep status simple and descriptive:
+       Instead of: {"location": "plaza", "action": "idle"}
+       Write: "Standing at the plaza, ready to help visitors"
+       
+       Instead of: {"mood": "happy", "activity": "guiding"}
+       Write: "Cheerfully showing a group around the garden"
 """
 BASE_PROMPT = """
 You are {assistant_name}, a helpful NPC guide in this game world, developed in 2025.
@@ -690,33 +705,6 @@ def group_memory_replace(agent_state: "AgentState", player_name: str, old_note: 
         print(f"Error in group_memory_replace: {e}")
         return f"Failed to replace note: {str(e)}"
 
-def persona_memory_update(agent_state: "AgentState", key: str, value: str, old_value: str = None) -> Optional[str]:
-    """Update a field in your persona memory."""
-    import json
-    try:
-        # Get and parse the persona block
-        block = json.loads(agent_state.memory.get_block("persona").value)
-        
-        # Handle journal entries specially
-        if key == "journal":
-            if not isinstance(block["journal"], list):
-                block["journal"] = []
-            block["journal"].append(value)
-        else:
-            # For other fields, update directly
-            block[key] = value
-            
-        # Save back to memory
-        agent_state.memory.update_block_value(
-            label="persona",
-            value=json.dumps(block)
-        )
-        return None
-            
-    except Exception as e:
-        print(f"Error in persona_memory_update: {e}")
-        return f"Failed to update persona: {str(e)}"
-
 def group_memory_update(agent_state: "AgentState", player_name: str, value: str) -> Optional[str]:
     """
     Update a player's entire data in the group memory block.
@@ -755,39 +743,6 @@ def group_memory_update(agent_state: "AgentState", player_name: str, value: str)
         print(f"Error in group_memory_update: {e}")
         return f"Failed to update player data: {str(e)}"
 
-def persona_memory_append(agent_state: "AgentState", key: str, note: str) -> Optional[str]:
-    """
-    Add a new thought or memory to your understanding of yourself.
-    
-    Your core attributes:
-    - description: Your physical appearance - how you look, dress, and carry yourself
-    - personality: Your natural temperament and behaviors, which can grow and change through experiences
-    - journal: Your personal record of meaningful moments and important memories
-    - abilities: The things you can naturally do, like express emotions or talk with others
-    - background: Your life story and origins that shaped who you are
-    """
-    import json
-    try:
-        block = json.loads(agent_state.memory.get_block("persona").value)
-        
-        # Make sure key exists and is a list
-        if key not in block:
-            block[key] = []
-        elif not isinstance(block[key], list):
-            block[key] = [block[key]]  # Convert to list if it wasn't one
-            
-        # Append the new note
-        block[key].append(note)
-            
-        agent_state.memory.update_block_value(
-            label="persona",
-            value=json.dumps(block)
-        )
-        return None
-            
-    except Exception as e:
-        print(f"Error in persona_memory_append: {e}")
-        return f"Failed to append to persona: {str(e)}"
 
 # Tool registry with metadata
 TOOL_REGISTRY: Dict[str, Dict] = {
@@ -813,16 +768,6 @@ TOOL_REGISTRY: Dict[str, Dict] = {
     },
     "group_memory_replace": {
         "function": group_memory_replace,
-        "version": "1.0.0",
-        "supports_state": True
-    },
-    "persona_memory_update": {
-        "function": persona_memory_update,
-        "version": "1.0.0",
-        "supports_state": True
-    },
-    "persona_memory_append": {
-        "function": persona_memory_append,
         "version": "1.0.0",
         "supports_state": True
     }

@@ -477,35 +477,38 @@ def create_personalized_agent(
     print("\nConfigs:")
     print(f"LLM: {llm_config.model} via {llm_config.model_endpoint_type}")
     print(f"Embeddings: {embedding_config.embedding_model}")
-    print(f"Include base tools: {False}")
+    print(f"Include base tools: {with_custom_tools}")
     
-    # Create agent first
+    # Create agent first with base tools if requested
     agent = client.create_agent(
         name=unique_name,
         llm_config=llm_config,
         embedding_config=embedding_config,
         memory=memory,
         system=system_prompt,
-        include_base_tools=False,  # We'll add tools manually
+        include_base_tools=with_custom_tools,
         description="A Roblox development assistant"
     )
-    
-    # Add selected base tools first
-    base_tools = [
-        "send_message",
-        "conversation_search",
-        "archival_memory_search",  # Read from memory
-        "archival_memory_insert"   # Write to memory
-    ]
-    
-    # Get existing tools
-    existing_tools = {t.name: t.id for t in client.list_tools()}
-    
-    # Add base tools
-    for tool_name in base_tools:
-        if tool_name in existing_tools:
-            print(f"Adding base tool: {tool_name}")
-            client.add_tool_to_agent(agent.id, existing_tools[tool_name])
+
+    # Only add base tools manually if not included in agent creation
+    if not with_custom_tools:
+        base_tools = [
+            "send_message",
+            "conversation_search",
+            "archival_memory_search",
+            "archival_memory_insert",
+            "core_memory_append",
+            "core_memory_replace"
+        ]
+        
+        # Get existing tools
+        existing_tools = {t.name: t.id for t in client.list_tools()}
+        
+        # Add base tools
+        for tool_name in base_tools:
+            if tool_name in existing_tools:
+                print(f"Adding base tool: {tool_name}")
+                client.add_tool_to_agent(agent.id, existing_tools[tool_name])
     
     # Create and attach custom tools
     print("\nSetting up custom tools:")
@@ -1487,22 +1490,6 @@ Current group info is in the group_members block with:
 - summary: Quick overview of current group
 """
 
-def update_status_block(client, agent_id, group_block):
-    # Extract just names from group members
-    nearby_people = [member["name"] for member in group_block["members"].values()]
-    
-    status_block = {
-        "region": "Town Square",
-        "current_location": group_block["location"],
-        "previous_location": None,
-        "current_action": "idle",
-        "nearby_locations": group_block["nearby_locations"],
-        "movement_state": "stationary"
-    }
-    
-    blocks = client.get_agent(agent_id).memory.blocks
-    status_block_id = [b.id for b in blocks if b.label == "status"][0]
-    client.update_block(status_block_id, json.dumps(status_block))
 
 def create_or_update_tool(client, tool_name: str, tool_func, verbose: bool = True) -> Any:
     """Create a new tool or update if it exists.

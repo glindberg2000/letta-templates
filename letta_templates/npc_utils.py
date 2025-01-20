@@ -13,16 +13,7 @@ Provides core functionality for:
 """
 
 def create_memory_blocks(client, blocks: Dict[str, Any]) -> list:
-    """Create memory blocks from provided data
-    
-    Args:
-        client: Letta client
-        blocks: Dict of block data containing required blocks:
-            - locations
-            - status
-            - group_members
-            - persona
-    """
+    """Create memory blocks with consistent identity"""
     required_blocks = ["locations", "status", "group_members", "persona"]
     
     # Validate all required blocks are present
@@ -36,7 +27,7 @@ def create_memory_blocks(client, blocks: Dict[str, Any]) -> list:
     for label, data in blocks.items():
         block = client.create_block(
             label=label,
-            value=json.dumps(data),
+            value=data if isinstance(data, str) else json.dumps(data),
             limit=5000
         )
         memory_blocks.append(block)
@@ -71,11 +62,9 @@ def update_memory_block(client, agent_id: str, block_label: str, data: dict):
         value=json.dumps(data)
     )
 
-def update_group_status(client, agent_id: str, nearby_players: list, 
-                       current_location: str, current_action: str = "idle"):
-    """Update group and status blocks together"""
-    # Get current blocks
-    status = get_memory_block(client, agent_id, "status")
+def update_group_members(client, agent_id: str, nearby_players: list):
+    """Update group members block with current players"""
+    # Get current group block
     group = get_memory_block(client, agent_id, "group_members")
     
     # Track group changes
@@ -94,15 +83,7 @@ def update_group_status(client, agent_id: str, nearby_players: list,
         left_names = [group["members"][pid]["name"] for pid in left]
         updates.append(f"{', '.join(left_names)} left the group")
     
-    # Update status (preserve existing fields)
-    status.update({
-        "current_location": current_location,
-        "previous_location": status.get("current_location"),
-        "current_action": current_action,
-        "movement_state": "stationary" if current_action == "idle" else "moving"
-    })
-    
-    # Update group (simplified structure)
+    # Update group
     members = {}
     for player in nearby_players:
         members[player.get("id")] = {
@@ -126,5 +107,23 @@ def update_group_status(client, agent_id: str, nearby_players: list,
     })
     
     # Save updates
-    update_memory_block(client, agent_id, "status", status)
-    update_memory_block(client, agent_id, "group_members", group) 
+    update_memory_block(client, agent_id, "group_members", group)
+
+def update_status(client, agent_id: str, new_status: str):
+    """Update the status block with a new status message
+    
+    Args:
+        client: Letta client
+        agent_id: ID of agent to update
+        new_status: New status message (e.g. "Taking a break by the fountain")
+    """
+    update_memory_block(client, agent_id, "status", new_status)
+
+# Remove the old combined function
+def update_group_status(client, agent_id: str, nearby_players: list, 
+                       current_location: str, current_action: str = "idle"):
+    """DEPRECATED: Use update_group_members() and update_status() instead"""
+    raise DeprecationWarning(
+        "update_group_status is deprecated. Use update_group_members() for group updates "
+        "and update_status() for status updates instead."
+    ) 

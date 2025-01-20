@@ -47,6 +47,29 @@ def print_memory_blocks(client, agent_id, blocks=["status", "group_members"]):
             print(f"\n{block.label.upper()} BLOCK:")
             print(json.dumps(json.loads(block.value), indent=2))
 
+def test_status_update(client, agent_id):
+    """Test status block updates"""
+    print("\n=== Testing Status Updates ===")
+    
+    # Print initial status
+    print("\nInitial Status:")
+    status = get_memory_block(client, agent_id, "status")
+    print(status)
+    
+    # Test 1: Basic status update
+    print("\nTest 1: Basic Status Update...")
+    response = client.send_message(
+        agent_id=agent_id,
+        message="Update status: Taking a break near the fountain, watching visitors pass by.",
+        role="system"
+    )
+    print_response(response)
+    
+    # Print final status
+    print("\nFinal Status:")
+    status = get_memory_block(client, agent_id, "status")
+    print(status)
+
 def main():
     # Load environment variables first
     load_dotenv()
@@ -74,16 +97,7 @@ def main():
                 "interests": ["discovering new places", "meeting travelers", "sharing stories"],
                 "journal": []
             },
-            "status": {
-                "region": "Tutorial",
-                "current_location": "Welcome Center",
-                "current_action": "idle",
-                "movement_state": "stationary",
-                "nearby_locations": ["Visitor Plaza", "Scenic Lookout"],
-                "time_of_day": "morning",
-                "weather": "sunny",
-                "current_visitors": 3
-            },
+            "status": "Alert and enthusiastic, keeping watch near the Welcome Center for any visitors who need guidance.",
             "group_members": {
                 "members": {},
                 "summary": "Ready to greet visitors",
@@ -297,6 +311,9 @@ def main():
             # New location data...
         ]
     })
+
+    # Test status update
+    test_status_update(client, agent.id)
 
 if __name__ == "__main__":
     main() 
