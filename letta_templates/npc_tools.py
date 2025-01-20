@@ -614,31 +614,29 @@ def test_echo(message: str) -> str:
     return f"[TEST_ECHO_V3] {message} (echo...Echo...ECHO!)"
 
 def group_memory_append(agent_state: "AgentState", player_name: str, note: str) -> Optional[str]:
-    """Add a note to a player's memory."""
+    """Add a note about a player to the group memory."""
+    import json
     try:
+        # Parse the block value as JSON
         block = json.loads(agent_state.memory.get_block("group_members").value)
         
-        # Find player
+        # Find player by name in members
         player_id = None
         for id, info in block["members"].items():
-            if info["name"] == player_name:
+            if info["name"].lower() == player_name.lower():
                 player_id = id
                 break
                 
         if not player_id:
             return f"Player {player_name} not found"
             
-        # Check if note already exists
+        # Add note
         current_notes = block["members"][player_id]["notes"]
-        if note in current_notes:
-            return None  # Skip if duplicate
-            
-        # Append note
-        if current_notes:
-            block["members"][player_id]["notes"] = current_notes + "; " + note
-        else:
-            block["members"][player_id]["notes"] = note
-            
+        block["members"][player_id]["notes"] = f"{current_notes}; {note}" if current_notes else note
+        
+        block["last_updated"] = datetime.now().isoformat()
+        
+        # Convert back to JSON string
         agent_state.memory.update_block_value(
             label="group_members",
             value=json.dumps(block)
@@ -646,89 +644,78 @@ def group_memory_append(agent_state: "AgentState", player_name: str, note: str) 
         return None
             
     except Exception as e:
-        print(f"Error in group_memory_append: {e}")
-        return f"Failed to add note: {str(e)}"
+        return f"Failed to append note: {str(e)}"
 
 def group_memory_replace(agent_state: "AgentState", player_name: str, old_note: str, new_note: str) -> Optional[str]:
-    """Replace specific notes about a player."""
+    """
+    Replace a specific note about a player.
+    
+    Args:
+        agent_state (AgentState): Current agent state
+        player_name (str): Name of the player
+        old_note (str): Existing note to replace
+        new_note (str): New note to use instead
+    
+    Returns:
+        Optional[str]: Error message if failed, None if successful
+    """
     import json
     try:
         block = json.loads(agent_state.memory.get_block("group_members").value)
         
-        # Find player
-        player_id = None
-        for id, info in block["members"].items():
-            if info["name"] == player_name:
-                player_id = id
-                break
-                
+        # Find player entry
+        player_id = next((id for id, info in block["members"].items() 
+                         if player_name.lower() in info["description"].lower()), None)
+                         
         if not player_id:
-            available_players = [info["name"] for info in block["members"].values()]
-            return f"Error: Player '{player_name}' not found. Available players: {available_players}"
+            return f"Player {player_name} not found"
             
-        # Replace in notes
-        current_notes = block["members"][player_id]["notes"]
-        if old_note not in current_notes:
-            return f"Error: Note '{old_note}' not found. Current notes are: '{current_notes}'. Please check the exact note text."
+        # Replace in notes field
+        if old_note not in block["members"][player_id]["notes"]:
+            return f"Note '{old_note}' not found in player's notes"
             
-        new_notes = current_notes.replace(old_note, new_note)
-        block["members"][player_id]["notes"] = new_notes
+        block["members"][player_id]["notes"] = block["members"][player_id]["notes"].replace(old_note, new_note)
         
-        # Update block and verify
+        # Add to updates
+        block["updates"].append(f"Updated note about {player_name}")
+        block["last_updated"] = datetime.now().isoformat()
+        
         agent_state.memory.update_block_value(
             label="group_members",
             value=json.dumps(block)
         )
-        
-        # Verify update succeeded
-        verify = json.loads(agent_state.memory.get_block("group_members").value)
-        if verify["members"][player_id]["notes"] != new_notes:
-            return f"Error: Update failed. Tried to replace '{old_note}' with '{new_note}' but notes are still: '{verify['members'][player_id]['notes']}'"
-            
         return None
             
     except Exception as e:
-        return f"Error: {str(e)}. Please try again with valid player name and exact note text."
+        print(f"Error in group_memory_replace: {e}")
+        return f"Failed to replace note: {str(e)}"
 
-def persona_memory_update(agent_state: "AgentState", key: str, value: Any, old_value: str = None) -> Optional[str]:
-    """Update the persona memory block with new information."""
+def persona_memory_update(agent_state: "AgentState", key: str, value: str, old_value: str = None) -> Optional[str]:
+    """Update a field in your persona memory."""
     import json
     try:
-        # Get or create persona block
-        try:
-            persona_block = json.loads(agent_state.memory.get_block("persona").value)
-        except:
-            persona_block = {
-                "name": "emma_assistant",
-                "role": "NPC Guide",
-                "personality": "",
-                "background": "",
-                "interests": [],
-                "journal": []
-            }
+        # Get and parse the persona block
+        block = json.loads(agent_state.memory.get_block("persona").value)
         
-        # Handle string replacements for personality
-        if key == "personality" and old_value:
-            current = persona_block.get(key, "")  # Get with default empty string
-            if isinstance(current, list):
-                current = " ".join(current)
-            if old_value in current:
-                persona_block[key] = current.replace(old_value, value)
-            else:
-                persona_block[key] = current + "; " + value if current else value
+        # Handle journal entries specially
+        if key == "journal":
+            if not isinstance(block["journal"], list):
+                block["journal"] = []
+            block["journal"].append(value)
         else:
-            # Normal update for other fields, create if missing
-            persona_block[key] = value
-        
+            # For other fields, update directly
+            block[key] = value
+            
+        # Save back to memory
         agent_state.memory.update_block_value(
             label="persona",
-            value=json.dumps(persona_block)
+            value=json.dumps(block)
         )
         return None
             
     except Exception as e:
         print(f"Error in persona_memory_update: {e}")
-        return None
+        return f"Failed to update persona: {str(e)}"
 
 def group_memory_update(agent_state: "AgentState", player_name: str, value: str) -> Optional[str]:
     """
@@ -768,6 +755,40 @@ def group_memory_update(agent_state: "AgentState", player_name: str, value: str)
         print(f"Error in group_memory_update: {e}")
         return f"Failed to update player data: {str(e)}"
 
+def persona_memory_append(agent_state: "AgentState", key: str, note: str) -> Optional[str]:
+    """
+    Add a new thought or memory to your understanding of yourself.
+    
+    Your core attributes:
+    - description: Your physical appearance - how you look, dress, and carry yourself
+    - personality: Your natural temperament and behaviors, which can grow and change through experiences
+    - journal: Your personal record of meaningful moments and important memories
+    - abilities: The things you can naturally do, like express emotions or talk with others
+    - background: Your life story and origins that shaped who you are
+    """
+    import json
+    try:
+        block = json.loads(agent_state.memory.get_block("persona").value)
+        
+        # Make sure key exists and is a list
+        if key not in block:
+            block[key] = []
+        elif not isinstance(block[key], list):
+            block[key] = [block[key]]  # Convert to list if it wasn't one
+            
+        # Append the new note
+        block[key].append(note)
+            
+        agent_state.memory.update_block_value(
+            label="persona",
+            value=json.dumps(block)
+        )
+        return None
+            
+    except Exception as e:
+        print(f"Error in persona_memory_append: {e}")
+        return f"Failed to append to persona: {str(e)}"
+
 # Tool registry with metadata
 TOOL_REGISTRY: Dict[str, Dict] = {
     "navigate_to": {
@@ -797,6 +818,11 @@ TOOL_REGISTRY: Dict[str, Dict] = {
     },
     "persona_memory_update": {
         "function": persona_memory_update,
+        "version": "1.0.0",
+        "supports_state": True
+    },
+    "persona_memory_append": {
+        "function": persona_memory_append,
         "version": "1.0.0",
         "supports_state": True
     }

@@ -290,10 +290,19 @@ def chat_with_agent(client, agent_id: str, message: str, role: str = "user", nam
 
 def create_letta_client():
     """Create Letta client with configuration"""
-    base_url = os.getenv("LETTA_BASE_URL", "http://localhost:8283")
-    print("\nLetta Quickstart Configuration:")
-    print(f"Base URL: {base_url}")
-    print("-" * 50 + "\n")
+    base_url = os.getenv("LETTA_BASE_URL")  # Remove localhost default
+    if not base_url:
+        raise ValueError("LETTA_BASE_URL must be set in environment")
+        
+    logger = logging.getLogger('letta_test')
+    
+    logger.info("="*50)
+    logger.info("LETTA SERVER CONFIGURATION")
+    logger.info("="*50)
+    logger.info(f"Environment LETTA_BASE_URL: {base_url}")
+    logger.info(f"Using base URL: {base_url}")
+    logger.info("="*50)
+    
     return create_client(base_url=base_url)
 
 def run_quick_test(client, npc_id="test-npc-1", user_id="test-user-1"):
@@ -433,10 +442,10 @@ def create_personalized_agent(
     
     # Default LLM configuration
     default_llm_config = LLMConfig(
-        model="openai-4o-mini",
-        context_window=32000,
-        model_endpoint_type="openai",
-        model_endpoint="https://api.openai.com/v1"
+        model=os.getenv("LETTA_MODEL", "gpt-4o-mini"),  # Get from env or use default
+        context_window=int(os.getenv("LETTA_CONTEXT_WINDOW", "32000")),
+        model_endpoint_type=os.getenv("LETTA_ENDPOINT_TYPE", "openai"),
+        model_endpoint=os.getenv("LETTA_MODEL_ENDPOINT", "https://api.openai.com/v1")
     )
 
     # Use provided configuration or default

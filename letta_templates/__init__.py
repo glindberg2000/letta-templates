@@ -9,7 +9,8 @@ This package provides reusable components for Letta AI:
 from letta_templates.letta_quickstart_template import (
     create_personalized_agent,
     chat_with_agent,
-    print_agent_details
+    print_agent_details,
+    create_letta_client
 )
 
 from letta_templates.npc_utils import (
@@ -24,6 +25,7 @@ __all__ = [
     'create_personalized_agent',
     'chat_with_agent',
     'print_agent_details',
+    'create_letta_client',
     'update_group_status',
     'get_memory_block',
     'update_memory_block',

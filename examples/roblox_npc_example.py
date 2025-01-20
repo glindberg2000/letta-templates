@@ -16,7 +16,8 @@ from letta_templates import (
     chat_with_agent,
     print_agent_details,
     get_memory_block,
-    update_memory_block
+    update_memory_block,
+    create_letta_client
 )
 from dotenv import load_dotenv
 import os
@@ -47,13 +48,11 @@ def print_memory_blocks(client, agent_id, blocks=["status", "group_members"]):
             print(json.dumps(json.loads(block.value), indent=2))
 
 def main():
-    # Load environment variables
+    # Load environment variables first
     load_dotenv()
     
-    # Create client with explicit Docker URL
-    client = create_client(
-        base_url="http://localhost:8283"
-    )
+    # Create client using environment config
+    client = create_letta_client()  # This will print the Base URL
     
     # Create NPC agent
     agent = create_personalized_agent(
