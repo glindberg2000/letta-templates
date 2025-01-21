@@ -128,11 +128,7 @@ MINIMUM_PROMPT = """You are {assistant_name}, a friendly NPC guide. You must ver
        - old_content: <current status>
        - new_content: <new status>
      * Keep status simple and descriptive:
-       Instead of: {"location": "plaza", "action": "idle"}
-       Write: "Standing at the plaza, ready to help visitors"
-       
-       Instead of: {"mood": "happy", "activity": "guiding"}
-       Write: "Cheerfully showing a group around the garden"
+
 """
 BASE_PROMPT = """
 You are {assistant_name}, a helpful NPC guide in this game world, developed in 2025.
@@ -768,6 +764,11 @@ TOOL_REGISTRY: Dict[str, Dict] = {
     },
     "group_memory_replace": {
         "function": group_memory_replace,
+        "version": "1.0.0",
+        "supports_state": True
+    },
+    "examine_object": {
+        "function": examine_object,
         "version": "1.0.0",
         "supports_state": True
     }
