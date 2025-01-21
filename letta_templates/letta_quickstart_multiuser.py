@@ -28,11 +28,12 @@ from letta_templates.npc_tools import (
     perform_action,
     examine_object,
     test_echo,
-    update_tools
+    update_tools,
+    create_personalized_agent,
+    create_letta_client
 )
 import requests
 import asyncio
-# from concurrent.futures import ThreadPoolExecutor
 import logging
 import inspect
 from textwrap import dedent
@@ -353,7 +354,7 @@ def create_group_tools():
         "group_gather": group_gather
     }
 
-def create_personalized_agent(
+def create_personalized_agent_bak(
     name: str = "emma_assistant",
     client = None,
     use_claude: bool = False,

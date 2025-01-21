@@ -52,6 +52,23 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import time
+import logging
+
+from letta import (
+    EmbeddingConfig, 
+    LLMConfig, 
+    create_client, 
+    ChatMemory, 
+    BasicBlockMemory
+)
+
+from letta.schemas.tool import ToolUpdate, Tool
+from letta.schemas.message import (
+    ToolCallMessage,
+    ToolReturnMessage,
+    ReasoningMessage,
+    Message
+)
 
 # Configuration
 GAME_ID = int(os.getenv("LETTA_GAME_ID", "74"))
@@ -900,3 +917,240 @@ def update_tools(client):
     client.create_tool(group_memory_append, name="group_memory_append")
     client.create_tool(group_memory_replace, name="group_memory_replace")
 
+def create_letta_client():
+    """Create a configured Letta client"""
+    # Just use LETTA_BASE_URL from .env
+    base_url = os.getenv('LETTA_BASE_URL', 'http://localhost:8283')
+    
+    return create_client(
+        base_url=base_url
+    )
+
+def create_personalized_agent(
+    name: str = "emma_assistant",
+    client = None,
+    use_claude: bool = False,
+    overwrite: bool = False,
+    with_custom_tools: bool = True,
+    custom_registry = None,
+    minimal_prompt: bool = True  # Changed default to True
+):
+    """Create a personalized agent with memory and tools"""
+    logger = logging.getLogger('letta_test')
+    
+    if client is None:
+        client = create_letta_client()
+        
+    # Clean up existing agents if overwrite is True
+    if overwrite:
+        cleanup_agents(client, name)
+    
+    # Add timestamp to name to avoid conflicts
+    timestamp = int(time.time())
+    unique_name = f"{name}_{timestamp}"
+    
+    # Format base prompt with assistant name
+    base_system = BASE_PROMPT.format(assistant_name=name)
+    
+    # Use minimal prompt for testing if requested
+    if minimal_prompt:
+        logger.info(f"Using MINIMUM_PROMPT (minimal_prompt={minimal_prompt})")
+        system_prompt = MINIMUM_PROMPT.format(assistant_name=name)
+    else:
+        logger.info(f"Using full prompt (minimal_prompt={minimal_prompt})")
+        system_prompt = (
+            base_system +
+            "\n\n" + TOOL_INSTRUCTIONS +
+            "\n\n" + SOCIAL_AWARENESS_PROMPT +
+            "\n\n" + GROUP_AWARENESS_PROMPT +
+            "\n\n" + LOCATION_AWARENESS_PROMPT
+        )
+    
+    # Log what we're using
+    logger.info("\nSystem prompt components:")
+    if minimal_prompt:
+        logger.info(f"Using MINIMUM_PROMPT: {len(system_prompt)} chars")
+    else:
+        logger.info(f"1. Base system: {len(base_system)} chars")
+        logger.info(f"2. TOOL_INSTRUCTIONS: {len(TOOL_INSTRUCTIONS)} chars")
+        logger.info(f"3. SOCIAL_AWARENESS_PROMPT: {len(SOCIAL_AWARENESS_PROMPT)} chars")
+        logger.info(f"4. LOCATION_AWARENESS_PROMPT: {len(LOCATION_AWARENESS_PROMPT)} chars")
+    
+    # Create configs first
+    llm_config = LLMConfig(
+        model="gpt-4o-mini",
+        model_endpoint_type="openai",
+        model_endpoint="https://api.openai.com/v1",
+        context_window=128000,
+    )
+    
+    embedding_config = EmbeddingConfig(
+        embedding_endpoint_type="openai",
+        embedding_endpoint="https://api.openai.com/v1",
+        embedding_model="text-embedding-ada-002",
+        embedding_dim=1536,
+        embedding_chunk_size=300,
+    )
+    
+
+    
+    # Create memory blocks with consistent identity
+    memory = BasicBlockMemory(
+        blocks=[
+            client.create_block(
+                label="persona", 
+                value=f"I am {name}, a friendly and helpful NPC guide. I know this world well and patiently help players explore. I love meeting new players, sharing my knowledge, and helping others in any way I can.",
+                limit=2500
+            ),
+            client.create_block(
+                label="group_members",
+                value=json.dumps({
+                    "members": {
+                        "player123": {
+                            "name": "Alice",
+                            "appearance": "Wearing a red hat and blue shirt", 
+                            "last_location": "Main Plaza",
+                            "last_seen": "2024-01-06T22:30:45Z",
+                            "notes": "Interested in exploring the garden"
+                        },
+                        "bob123": {  # Match the ID we use in test
+                            "name": "Bob",
+                            "appearance": "Tall with green jacket",
+                            "last_location": "Cafe",
+                            "last_seen": "2024-01-06T22:35:00Z", 
+                            "notes": "Looking for Pete's Stand"
+                        },
+                        "charlie123": {
+                            "name": "Charlie",
+                            "appearance": "Wearing a blue cap",
+                            "last_location": "Main Plaza",
+                            "last_seen": "2024-01-06T22:35:00Z",
+                            "notes": "New to the area"
+                        }
+                    },
+                    "summary": "Alice and Charlie are in Main Plaza, with Alice interested in the garden. Bob is at the Cafe looking for Pete's Stand. Charlie is new and exploring the area.",
+                    "updates": ["Alice arrived at Main Plaza", "Bob moved to Cafe searching for Pete's Stand", "Charlie joined and is exploring Main Plaza"],
+                    "last_updated": "2024-01-06T22:35:00Z"
+                }),
+                limit=2000
+            ),
+            client.create_block(
+                label="locations",
+                value=json.dumps({
+                    "known_locations": [
+                        {
+                            "name": "Pete's Stand",
+                            "description": "A friendly food stand run by Pete",
+                            "coordinates": [-12.0, 18.9, -127.0],
+                            "slug": "petes_stand"
+                        },
+                        {
+                            "name": "Town Square",
+                            "description": "Central gathering place with fountain", 
+                            "coordinates": [45.2, 12.0, -89.5],
+                            "slug": "town_square"
+                        },
+                        {
+                            "name": "Market District",
+                            "description": "Busy shopping area with many vendors",
+                            "coordinates": [-28.4, 15.0, -95.2],
+                            "slug": "market_district"
+                        },
+                        {
+                            "name": "Secret Garden",
+                            "description": "A hidden garden with rare flowers",
+                            "coordinates": [15.5, 20.0, -110.8],
+                            "slug": "secret_garden"
+                        }
+                    ]
+                }),
+                limit=1500
+            ),
+            client.create_block(
+                label="status",
+                value="You are currently standing idle in the Town Square. You previously haven't moved from this spot. From here, You can see both the bustling Market District and Pete's friendly food stand in the distance. The entire area is part of the Town Square region.",
+                limit=500
+            ),
+            client.create_block(
+                label="journal", 
+                value="",  # Empty string to start
+                limit=2500
+            )
+        ]
+    )
+
+    # Log what we're using
+    logger.info("\nSystem prompt components:")
+    if minimal_prompt:
+        logger.info(f"Using MINIMUM_PROMPT: {len(system_prompt)} chars")
+    else:
+        logger.info(f"1. Base system: {len(base_system)} chars")
+        logger.info(f"2. TOOL_INSTRUCTIONS: {len(TOOL_INSTRUCTIONS)} chars")
+        logger.info(f"3. SOCIAL_AWARENESS_PROMPT: {len(SOCIAL_AWARENESS_PROMPT)} chars")
+        logger.info(f"4. LOCATION_AWARENESS_PROMPT: {len(LOCATION_AWARENESS_PROMPT)} chars")
+    
+    # Log params in a readable way
+    print("\nCreating agent with params:")
+    print(f"Name: {unique_name}")
+    print(f"System prompt length: {len(system_prompt)} chars")
+    print("Memory blocks:")
+    for block in memory.blocks:
+        print(f"- {block.label}: {len(block.value)} chars")
+    print("\nConfigs:")
+    print(f"LLM: {llm_config.model} via {llm_config.model_endpoint_type}")
+    print(f"Embeddings: {embedding_config.embedding_model}")
+    print(f"Include base tools: {False}")
+    
+    # Create agent first
+    agent = client.create_agent(
+        name=unique_name,
+        embedding_config=embedding_config,
+        llm_config=llm_config,
+        memory=memory,
+        system=system_prompt,
+        include_base_tools=False,  # We'll add tools manually
+        description="A Roblox development assistant"
+    )
+    
+    # Add selected base tools first
+    base_tools = [
+        "send_message",
+        "conversation_search",
+        "archival_memory_search",  # Read from memory
+        "archival_memory_insert"   # Write to memory
+    ]
+    
+    # Get existing tools
+    existing_tools = {t.name: t.id for t in client.list_tools()}
+    
+    # Add base tools
+    for tool_name in base_tools:
+        if tool_name in existing_tools:
+            print(f"Adding base tool: {tool_name}")
+            client.add_tool_to_agent(agent.id, existing_tools[tool_name])
+    
+    # Create and attach custom tools
+    print("\nSetting up custom tools:")
+    # Then register other tools
+    for name, tool_info in TOOL_REGISTRY.items():
+        try:
+            # Check if tool already exists
+            if name in existing_tools:
+                print(f"Tool {name} already exists (ID: {existing_tools[name]})")
+                tool_id = existing_tools[name]
+            else:
+                print(f"Creating tool: {name}")
+                tool = client.create_tool(tool_info['function'], name=name)
+                print(f"Tool created with ID: {tool.id}")
+                tool_id = tool.id
+                
+            # Attach tool to agent
+            print(f"Attaching {name} to agent...")
+            client.add_tool_to_agent(agent.id, tool_id)
+            print(f"Tool {name} attached to agent {agent.id}")
+            
+        except Exception as e:
+            print(f"Error with tool {name}: {e}")
+            raise
+    
+    return agent
