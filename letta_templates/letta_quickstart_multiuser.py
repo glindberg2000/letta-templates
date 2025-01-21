@@ -798,7 +798,7 @@ def parse_args():
     parser.add_argument('--continue-on-error', action='store_true')
     parser.add_argument('--test-type', choices=[
         'all', 'base', 'notes', 'social', 'status', 
-        'group', 'persona', 'journal'  # Add journal here
+        'group', 'persona', 'journal', 'navigation', 'actions'  # Add new types
     ], default='all')
     return parser.parse_args()
 
@@ -899,121 +899,76 @@ def parse_and_validate_response(response: dict):
     return response
 
 def test_navigation(client, agent_id: str):
-    """Test navigation with proper tool verification"""
-    print("\nTesting navigation...")
+    """Test NPC's navigation abilities"""
+    print("\nTesting navigation functionality...")
     
-    # Test slug-based navigation with named user
-    print("\nTesting slug-based navigation...")
-    response = client.send_message(
-        agent_id=agent_id,
-        message="Please use navigate_to to take me to Pete's Stand",
-        role="user",
-        name="Sarah"
-    )
-    
-    print("\nSlug Navigation Response:")
-    for msg in response.messages:
-        print(f"\nMessage type: {msg.message_type}")
-        if isinstance(msg, ToolCallMessage):
-            print(f"Tool: {msg.tool_call.name}")
-            print(f"Args: {msg.tool_call.arguments}")
-        elif isinstance(msg, ToolReturnMessage):
-            print(f"Tool result: {msg.tool_return}")
-        elif isinstance(msg, ReasoningMessage):
-            print(f"Reasoning: {msg.reasoning}")
-    
-    # Test coordinate navigation
-    print("\nTesting coordinate navigation...")
-    response = client.send_message(
-        agent_id=agent_id,
-        message="Please use navigate_to_coordinates to take me to the Secret Garden's coordinates",
-        role="user"
-    )
-    
-    print("\nCoordinate Navigation Response:")
-    for msg in response.messages:
-        print(f"\nMessage type: {msg.message_type}")
-        if isinstance(msg, ToolCallMessage):
-            print(f"Tool: {msg.tool_call.name}")
-            print(f"Args: {msg.tool_call.arguments}")
-        elif isinstance(msg, ToolReturnMessage):
-            print(f"Tool result: {msg.tool_return}")
-        elif isinstance(msg, ReasoningMessage):
-            print(f"Reasoning: {msg.reasoning}")
-
-def test_api_navigation():
-    """Test navigation using unique test tool"""
-    print("\nTesting navigation with unique test tool...")
-    
-    # Create Letta client
-    client = create_letta_client()
-    
-    # Clean up any existing test tools first
-    cleanup_test_tools(client)
-    
-    # Create test registry with ONLY our test tool
-    test_registry = {
-        "navigate_to_test_v4": TOOL_REGISTRY["navigate_to_test_v4"]
-    }
-    
-    # Create a new test agent
-    agent = create_personalized_agent(
-        name=f"test_npc_{int(time())}",
-        client=client,
-        with_custom_tools=True,
-        custom_registry=test_registry  # Pass only our test tool
-    )
-    
-    print(f"\nCreated new test agent: {agent.id}")
-    
-    # Test the navigation
-    print("\nTesting navigation...")
-    response = client.send_message(
-        agent_id=agent.id,
-        message="Can you take me to Pete's stand?",
-        role="user"
-    )
-    
-    # Print response
-    print("\nResponse:")
-    for msg in response.messages:
-        print(f"\n{'-'*50}")
-        print(f"Type: {msg.message_type}")
-        print(f"Raw message: {msg}")  # Add raw message debug
+    scenarios = [
+        # Direct navigation
+        ("User", "Take me to Pete's Stand"),
         
-        if hasattr(msg, 'tool_call'):
-            print(f"Tool: {msg.tool_call.name}")
-            print(f"Args: {msg.tool_call.arguments}")
+        # Navigation with coordinates
+        ("User", "Navigate to coordinates [-12.0, 18.9, -127.0]"),
+        
+        # Nearby location
+        ("User", "Let's go to the Market District")
+    ]
+    
+    for speaker, message in scenarios:
+        try:
+            print(f"\n{speaker} says: {message}")
+            response = retry_test_call(  # Use retry helper
+                client.send_message,
+                agent_id=agent_id,
+                message=message,
+                role="user",
+                name=speaker,
+                max_retries=3,
+                delay=2
+            )
+            print("\nResponse:")
+            print_response(response)
             
-        elif hasattr(msg, 'tool_response'):
-            print(f"Tool Response: {msg.tool_response}")
+            # Give time for navigation
+            time.sleep(2)
             
-        elif hasattr(msg, 'reasoning'):
-            print(f"Reasoning: {msg.reasoning}")
-            
-        elif hasattr(msg, 'message'):
-            print(f"Message: {msg.message}")
-            
-        print(f"{'-'*50}")
+        except Exception as e:
+            print(f"Error in navigation test: {e}")
+            continue  # Try next scenario
 
 def test_actions(client, agent_id: str):
-    """Test perform_action tool with various actions"""
-    print("\nTesting perform_action...")
+    """Test NPC's ability to perform actions"""
+    print("\nTesting action functionality...")
     
-    try:
-        response = retry_test_call(
-            client.send_message,
-            agent_id=agent_id,
-            message="Wave hello!",
-            role="user"
-        )
-        print("\nResponse:")
-        print_response(response)
-    except Exception as e:
-        print(f"❌ Actions test failed: {e}")
-        if not args.continue_on_error:
-            return
-        print("Continuing with next test...")
+    scenarios = [
+        # Simple action
+        ("User", "Perform action: wave"),
+        
+        # Action with target
+        ("User", "Perform action: point at Pete's Stand"),
+        
+        # Action with style
+        ("User", "Perform action: dance happily")
+    ]
+    
+    for speaker, message in scenarios:
+        try:
+            print(f"\n{speaker} says: {message}")
+            response = retry_test_call(
+                client.send_message,
+                agent_id=agent_id,
+                message=message,
+                role="user",
+                name=speaker,
+                max_retries=3,
+                delay=2
+            )
+            print("\nResponse:")
+            print_response(response)
+            time.sleep(2)  # Give time for action to complete
+            
+        except Exception as e:
+            print(f"Error in action test: {e}")
+            continue  # Try next scenario
 
 def test_multi_user_conversation(client, agent_id: str):
     """Test conversation with multiple named users"""
@@ -1843,7 +1798,9 @@ def main():
                 "status",     # Status awareness
                 "group",      # Group block updates
                 "persona",    # NPC persona
-                "journal"     # NPC journal
+                "journal",    # NPC journal
+                "navigation", # NPC navigation
+                "actions"     # NPC actions
             ]
             print("Running full test suite in order:")
             for i, test in enumerate(tests, 1):
@@ -1955,11 +1912,39 @@ def main():
                     if not args.continue_on_error:
                         return
 
+            # Navigation test
+            if args.test_type in ["all", "navigation"]:
+                print("\n" + "="*50)
+                print("RUNNING NAVIGATION TEST")
+                print("="*50)
+                try:
+                    test_navigation(client, agent.id)
+                    completed_tests.append("navigation")
+                except Exception as e:
+                    print(f"❌ Navigation test failed: {e}")
+                    failed_tests.append("navigation")
+                    if not args.continue_on_error:
+                        return
+
+            # Actions test
+            if args.test_type in ["all", "actions"]:
+                print("\n" + "="*50)
+                print("RUNNING ACTIONS TEST")
+                print("="*50)
+                try:
+                    test_actions(client, agent.id)
+                    completed_tests.append("actions")
+                except Exception as e:
+                    print(f"❌ Actions test failed: {e}")
+                    failed_tests.append("actions")
+                    if not args.continue_on_error:
+                        return
+
             # Print test summary
             print("\n" + "="*50)
             print("TEST SEQUENCE SUMMARY")
             print("="*50)
-            print(f"\nTests completed ({len(completed_tests)}/7):")
+            print(f"\nTests completed ({len(completed_tests)}/10):")
             for test in completed_tests:
                 print(f"✓ {test}")
             if failed_tests:
@@ -1969,7 +1954,7 @@ def main():
             if args.test_type == "all":
                 not_run = set([
                     "base", "notes", "social", "status", 
-                    "group", "persona", "journal"  # Add journal here
+                    "group", "persona", "journal", "navigation", "actions"  # Add new types
                 ]) - set(completed_tests) - set(failed_tests)
                 if not_run:
                     print(f"\nTests not run ({len(not_run)}):")
