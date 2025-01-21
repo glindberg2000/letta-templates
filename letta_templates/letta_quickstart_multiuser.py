@@ -970,7 +970,7 @@ def test_api_navigation():
     
     # Create a new test agent
     agent = create_personalized_agent(
-        name=f"test_npc_{int(time.time())}",
+        name=f"test_npc_{int(time())}",
         client=client,
         with_custom_tools=True,
         custom_registry=test_registry  # Pass only our test tool
@@ -1395,120 +1395,54 @@ def validate_agent_setup(client, agent_id: str):
     
     # Rest of validation...
 
-def test_group_members_block(client, agent_id):
-    print("\nTesting group_members block management...")
-    
-    # 1. Test initial state
-    agent = client.get_agent(agent_id)
-    group_block = json.loads([b for b in agent.memory.blocks if b.label == "group_members"][0].value)
-    
-    print("\nInitial group_members state:")
-    assert len(group_block["members"]) == 2, "Should have 2 initial members"
-    assert "Alice" in group_block["summary"], "Summary should mention Alice"
-    assert len(group_block["updates"]) == 3, "Should have 3 initial updates"
-    
-    # 2. Test API updates (simulating RobloDev)
-    print("\nTesting API updates (RobloDev):")
-    new_player = {
-        "player789": {
-            "name": "Charlie",
-            "appearance": "Short with a yellow hat",
-            "last_location": "Garden",
-            "last_seen": "2024-01-06T22:40:00Z",
-            "notes": ""  # Empty notes - NPC will fill this
-        }
-    }
-    
-    # Update block via API
-    group_block["members"].update(new_player)
-    group_block["updates"].append("Charlie has joined the group at Garden.")
-    group_block["last_updated"] = "2024-01-06T22:40:00Z"
-    
-    # 3. Test NPC updates (via tools)
-    print("\nTesting NPC updates:")
-    test_message = "Hi everyone! I'm new here and love gardens!"
-    response = client.send_message(agent_id, test_message, role="Charlie")
-    
-    # Verify NPC updates notes and summary
-    updated_block = json.loads([b for b in agent.memory.blocks if b.label == "group_members"][0].value)
-    assert "garden" in updated_block["members"]["player789"]["notes"].lower(), "NPC should note Charlie's interest"
-    assert "Garden" in updated_block["summary"], "Summary should be updated with Charlie"
-    
-    print("\nGroup block test results:")
-    print(f"✓ API updates working")
-    print(f"✓ NPC updates working")
-    print(f"✓ Block structure maintained")
-
-def test_group_block_updates(client, agent_id: str):
-    """Test group_members block updates during multi-user interactions"""
+def test_group(client, agent_id):
+    """Test group memory block updates"""
     print("\nTesting group_members block updates...")
     
-    # Initial empty group state
+    # Initial group state
     group_block = {
-        "members": {},
-        "summary": "No players currently present.",
-        "updates": [],
-        "last_updated": "2024-01-06T22:30:45Z"
+        "members": {
+            "alice123": {
+                "name": "Alice",
+                "appearance": "Wearing a bright red dress with a golden necklace and carrying a blue handbag",
+                "last_location": "Main Plaza",
+                "last_seen": "2024-01-06T22:30:45Z",
+                "notes": ""
+            },
+            "bob123": {
+                "name": "Bob", 
+                "appearance": "Tall guy in a green leather jacket, with a silver watch and black boots",
+                "last_location": "Cafe",
+                "last_seen": "2024-01-06T22:31:00Z",
+                "notes": "Looking for Pete's Stand"
+            }
+        },
+        "summary": "Alice is in Main Plaza, Bob is at the Cafe",
+        "updates": ["Alice arrived at Main Plaza", "Bob moved to Cafe"]
     }
+    
+    # Update group block
+    print("\n_block_update:")
+    print(json.dumps(group_block, indent=2))
+    update_memory_block(client, agent_id, "group_members", group_block)
     
     # Test scenarios
     scenarios = [
-        # Test current member appearance
-        ("_block_update", {
-            "members": {
-                "alice123": {
-                    "name": "Alice",
-                    "appearance": "Wearing a bright red dress with a golden necklace and carrying a blue handbag",
-                    "last_location": "Main Plaza",
-                    "last_seen": "2024-01-06T22:30:45Z",
-                    "notes": ""
-                },
-                "bob123": {
-                    "name": "Bob",
-                    "appearance": "Tall guy in a green leather jacket, with a silver watch and black boots",
-                    "last_location": "Main Plaza",
-                    "last_seen": "2024-01-06T22:31:00Z",
-                    "notes": ""
-                }
-            },
-            "summary": "Alice and Bob are in the area.",
-            "updates": ["Both Alice and Bob are here."]
-        }),
-        ("Charlie", "Who's around right now?"),           # Test group awareness
-        ("Charlie", "Is anyone else nearby?"),            # Test presence query
-        ("Charlie", "What is Alice wearing right now?"),  # Test current member appearance
-        ("Charlie", "And what about Bob's outfit?"),      # Test another current member
-        ("Charlie", "Who is wearing a green jacket?")     # Test appearance-based query
+        ("Charlie", "Who's around right now?"),
+        ("Charlie", "What is Alice wearing?"),
+        ("Charlie", "Where is Bob?")
     ]
     
-    blocks = client.get_agent(agent_id).memory.blocks
-    group_block_id = [b.id for b in blocks if b.label == "group_members"][0]
-    
     for speaker, message in scenarios:
-        if speaker == "_block_update":
-            print(f"\n{speaker}:")
-            print(json.dumps(message, indent=2))
-        else:
-            print(f"\n{speaker} says: {message}")
-        
-        # Handle block updates from cluster
-        if speaker == "_block_update":
-            group_block.update(message)  # Direct block update
-            client.update_block(group_block_id, json.dumps(group_block))
-            continue
-        
-        # Handle normal conversation messages
+        print(f"\n{speaker} says: {message}")
         response = client.send_message(
             agent_id=agent_id,
             message=message,
             role="user",
             name=speaker
         )
-        
         print("\nResponse:")
         print_response(response)
-        print(f"\nGroup Block: {json.dumps(group_block, indent=2)}")
-        time.sleep(1)
 
 def get_npc_prompt(name: str, persona: str):
     return f"""You are {name}, {persona}
@@ -1830,6 +1764,19 @@ def test_npc_journal(client, agent_id: str):
         print(f"Error in test_npc_journal: {e}")
         raise
 
+def update_memory_block(client, agent_id: str, block_label: str, value: Any):
+    """Update contents of a memory block
+    
+    Args:
+        client: Letta client
+        agent_id: ID of agent
+        block_label: Label of block to update
+        value: New value for block (will be JSON encoded)
+    """
+    agent = client.get_agent(agent_id)
+    block = next(b for b in agent.memory.blocks if b.label == block_label)
+    client.update_block(block.id, json.dumps(value))
+
 def main():
     args = parse_args()
     
@@ -2026,7 +1973,7 @@ def main():
                 print("RUNNING GROUP TEST")
                 print("="*50)
                 try:
-                    test_group_block_updates(client, agent.id)  # Use existing function
+                    test_group(client, agent.id)
                     completed_tests.append("group")
                 except Exception as e:
                     print(f"❌ Group test failed: {e}")
