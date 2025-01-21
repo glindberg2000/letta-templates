@@ -497,6 +497,11 @@ def create_personalized_agent(
                 label="status",
                 value="You are currently standing idle in the Town Square. You previously haven't moved from this spot. From here, You can see both the bustling Market District and Pete's friendly food stand in the distance. The entire area is part of the Town Square region.",
                 limit=500
+            ),
+            client.create_block(
+                label="journal", 
+                value="",  # Empty string to start
+                limit=2500
             )
         ]
     )
@@ -784,35 +789,17 @@ def test_npc_actions(client, agent_id: str):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--keep", action="store_true", help="Keep agent after test")
-    parser.add_argument(
-        "--llm",
-        choices=["openai", "claude"],
-        default="openai",
-        help="LLM provider to use"
-    )
-    parser.add_argument("--name", default="emma_assistant", help="Agent name")
-    parser.add_argument("--overwrite", action="store_true", help="Overwrite existing agent")
-    parser.add_argument("--skip-test", action="store_true", help="Skip testing")
-    parser.add_argument("--custom-tools", action="store_true", help="Use custom tools")
-    parser.add_argument("--minimal-prompt", action="store_true", help="Use minimal prompt for testing")
-    parser.add_argument("--continue-on-error", action="store_true", help="Continue to next test on failure")
-    parser.add_argument(
-        "--test-type",
-        choices=[
-            'all', 
-            'base',
-            'notes',
-            'social', 
-            'status', 
-            'group',
-            'persona',
-            'journal'
-        ],
-        default="all",
-        help="Select which tests to run"
-    )
-    parser.add_argument("--use-api", action="store_true", help="Use API for testing")
+    parser.add_argument('--name', default='emma_assistant')
+    parser.add_argument('--llm', choices=['openai', 'claude'], default='openai')
+    parser.add_argument('--keep', action='store_true')
+    parser.add_argument('--overwrite', action='store_true')
+    parser.add_argument('--custom-tools', action='store_true', default=True)
+    parser.add_argument('--minimal-prompt', action='store_true', default=True)
+    parser.add_argument('--continue-on-error', action='store_true')
+    parser.add_argument('--test-type', choices=[
+        'all', 'base', 'notes', 'social', 'status', 
+        'group', 'persona', 'journal'  # Add journal here
+    ], default='all')
     return parser.parse_args()
 
 def get_api_url():
@@ -1683,17 +1670,10 @@ def test_npc_journal(client, agent_id: str):
     scenarios = [
         # Natural interaction first
         ("Alice", "Hi! I'm new here and love exploring"),
-        ("System", "Show Alice the garden"),
-        ("Alice", "This is beautiful! Do you know any shortcuts to the market?"),
-        
-        # Simple journal command
         ("System", "Write in your journal: Met Alice and showed her the hidden garden"),
         
         # More interactions
         ("Bob", "Hi there! What's the best way to Pete's Stand?"),
-        ("System", "Help Bob find Pete's Stand"),
-        
-        # Another simple entry
         ("System", "Write in your journal: Helped Bob find Pete's Stand"),
         
         # Final check
@@ -1703,31 +1683,24 @@ def test_npc_journal(client, agent_id: str):
     try:
         # Print initial journal
         print("\nInitial journal state:")
-        initial_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
-        print(json.dumps(initial_persona.get("journal", []), indent=2))
+        journal = client.get_agent(agent_id).memory.get_block("journal").value
+        print(journal if journal else "(Empty)")
         
         for speaker, message in scenarios:
             print(f"\n{speaker} says: {message}")
-            response = retry_test_call(
-                client.send_message,
+            response = client.send_message(
                 agent_id=agent_id,
                 message=message,
                 role="user",
                 name=speaker
             )
-            
             print("\nResponse:")
             print_response(response)
             
             # Check journal updates
-            updated_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
-            print("\nCurrent journal:", updated_persona.get("journal", []))
+            current_journal = client.get_agent(agent_id).memory.get_block("journal").value
+            print("\nCurrent journal:", current_journal if current_journal else "(Empty)")
             time.sleep(1)
-            
-        # Print final state
-        print("\nFinal journal state:")
-        final_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
-        print(json.dumps(final_persona.get("journal", []), indent=2))
             
     except Exception as e:
         print(f"Error in test_npc_journal: {e}")
@@ -1986,7 +1959,7 @@ def main():
             print("\n" + "="*50)
             print("TEST SEQUENCE SUMMARY")
             print("="*50)
-            print(f"\nTests completed ({len(completed_tests)}/6):")
+            print(f"\nTests completed ({len(completed_tests)}/7):")
             for test in completed_tests:
                 print(f"✓ {test}")
             if failed_tests:
@@ -1994,7 +1967,10 @@ def main():
                 for test in failed_tests:
                     print(f"❌ {test}")
             if args.test_type == "all":
-                not_run = set(["base", "notes", "social", "status", "group", "persona", "journal"]) - set(completed_tests) - set(failed_tests)
+                not_run = set([
+                    "base", "notes", "social", "status", 
+                    "group", "persona", "journal"  # Add journal here
+                ]) - set(completed_tests) - set(failed_tests)
                 if not_run:
                     print(f"\nTests not run ({len(not_run)}):")
                     for test in not_run:
