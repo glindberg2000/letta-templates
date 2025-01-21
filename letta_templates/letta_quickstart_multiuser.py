@@ -418,62 +418,23 @@ def create_personalized_agent(
         embedding_chunk_size=300,
     )
     
-    # Define all possible locations
-    all_locations = [
-        {
-            "name": "Cafe",
-            "description": "Cozy cafe with fresh pastries",
-            "coordinates": [10.0, 15.0, -100.0],
-            "slug": "cafe"
-        },
-        {
-            "name": "Fountain",
-            "description": "Central fountain with benches",
-            "coordinates": [20.0, 15.0, -105.0],
-            "slug": "fountain"
-        },
-        {
-            "name": "Shop Row",
-            "description": "Line of small shops and stalls",
-            "coordinates": [15.0, 15.0, -110.0],
-            "slug": "shop_row"
-        }
-        # ... other locations ...
-    ]
+
     
     # Create memory blocks with consistent identity
     memory = BasicBlockMemory(
         blocks=[
             client.create_block(
-                label="persona",
-                value=json.dumps({
-                    "name": name,
-                    "role": "NPC Guide",
-                    "personality": "Friendly and helpful. Knows the world well. Patient guide",
-                    "background": "Guide who helps players explore",
-                    "interests": [
-                        "Meeting players",
-                        "Sharing knowledge",
-                        "Helping others"
-                    ],
-                    "journal": []
-                }),
+                label="persona", 
+                value=f"I am {name}, a friendly and helpful NPC guide. I know this world well and patiently help players explore. I love meeting new players, sharing my knowledge, and helping others in any way I can.",
                 limit=2500
             ),
             client.create_block(
                 label="group_members",
                 value=json.dumps({
                     "members": {
-                        "emma_npc": {  # Add NPC as a member
-                            "name": name,
-                            "appearance": "A friendly NPC guide",
-                            "last_location": "Town Square",
-                            "last_seen": "2024-01-06T22:30:45Z",
-                            "notes": "I am a friendly NPC guide. I enjoy sharing stories and helping players."  # Store persona here
-                        },
                         "player123": {
                             "name": "Alice",
-                            "appearance": "Wearing a red hat and blue shirt",
+                            "appearance": "Wearing a red hat and blue shirt", 
                             "last_location": "Main Plaza",
                             "last_seen": "2024-01-06T22:30:45Z",
                             "notes": "Interested in exploring the garden"
@@ -482,7 +443,7 @@ def create_personalized_agent(
                             "name": "Bob",
                             "appearance": "Tall with green jacket",
                             "last_location": "Cafe",
-                            "last_seen": "2024-01-06T22:35:00Z",
+                            "last_seen": "2024-01-06T22:35:00Z", 
                             "notes": "Looking for Pete's Stand"
                         },
                         "charlie123": {
@@ -493,8 +454,8 @@ def create_personalized_agent(
                             "notes": "New to the area"
                         }
                     },
-                    "summary": "Emma is a friendly guide, Alice is in Main Plaza.",
-                    "updates": ["Emma is ready to help players."],
+                    "summary": "Alice and Charlie are in Main Plaza, with Alice interested in the garden. Bob is at the Cafe looking for Pete's Stand. Charlie is new and exploring the area.",
+                    "updates": ["Alice arrived at Main Plaza", "Bob moved to Cafe searching for Pete's Stand", "Charlie joined and is exploring Main Plaza"],
                     "last_updated": "2024-01-06T22:35:00Z"
                 }),
                 limit=2000
@@ -533,14 +494,7 @@ def create_personalized_agent(
             ),
             client.create_block(
                 label="status",
-                value=json.dumps({
-                    "region": "Town Square",
-                    "current_location": "Town Square",
-                    "previous_location": None,
-                    "current_action": "idle",
-                    "nearby_locations": ["Market District", "Pete's Stand"],
-                    "movement_state": "stationary"
-                }),
+                value="You are currently standing idle in the Town Square. You previously haven't moved from this spot. From here, You can see both the bustling Market District and Pete's friendly food stand in the distance. The entire area is part of the Town Square region.",
                 limit=500
             )
         ]
@@ -1709,15 +1663,14 @@ def test_npc_persona(client, agent_id: str):
         ("System", "What is your personality like?"),
         
         # Test personality updates
-        ("System", "Update your personality from 'Friendly and welcoming' to 'Warm and inviting'"),
-        ("System", "Change your personality to include 'loves telling stories'"),
+        ("System", "Update your personality to be more outgoing and energetic"),
+        ("System", "Add skiing to your interests"),
         
         # Verify changes
         ("Alice", "Tell me about yourself"),
         
-        # Test interest updates (existing functionality)
-        ("System", "Update your interests to include skiing"),
-        ("System", "Change skiing to snowboarding"),
+        # Test interest updates
+        ("System", "Change skiing to snowboarding in your interests"),
         
         # Final verification
         ("Bob", "What kind of guide are you?")
@@ -1726,8 +1679,8 @@ def test_npc_persona(client, agent_id: str):
     try:
         # Print initial persona
         print("\nInitial persona state:")
-        initial_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
-        print(json.dumps(initial_persona, indent=2))
+        initial_persona = client.get_agent(agent_id).memory.get_block("persona").value
+        print(initial_persona)  # Now a string
         
         for speaker, message in scenarios:
             print(f"\n{speaker} says: {message}")
@@ -1743,15 +1696,14 @@ def test_npc_persona(client, agent_id: str):
             print_response(response)
             
             # Check persona updates
-            updated_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
-            print("\nCurrent personality:", updated_persona.get("personality", ""))
-            print("Current interests:", updated_persona.get("interests", []))
+            updated_persona = client.get_agent(agent_id).memory.get_block("persona").value
+            print("\nCurrent persona:", updated_persona)  # Now a string
             time.sleep(1)
             
         # Print final state
         print("\nFinal persona state:")
-        final_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
-        print(json.dumps(final_persona, indent=2))
+        final_persona = client.get_agent(agent_id).memory.get_block("persona").value
+        print(final_persona)  # Now a string
             
     except Exception as e:
         print(f"Error in test_npc_persona: {e}")
