@@ -1260,37 +1260,26 @@ def test_status_awareness(client, agent_id: str):
     status_block = client.get_agent(agent_id).memory.get_block("status")
     print(f"\nFound status block: {status_block.id}")
     
-    # Get group block for comparison
-    group_block = client.get_agent(agent_id).memory.get_block("group_members")
-    print("\nCurrent group_members block:")
-    print(json.dumps(json.loads(group_block.value), indent=2))
-    
-    # Test scenarios
+    # Test scenarios with narrative status strings
     scenarios = [
         {
-            "status": {
-                "region": "Town Square",
-                "current_location": "Pete's Stand",
-                "previous_location": "Town Square",
-                "current_action": "idle",
-                "nearby_locations": ["Market District", "Town Square"],
-                "movement_state": "stationary"
-            },
+            "status": (
+                "You are currently at Pete's Stand in the Town Square region. "
+                "You came here from Town Square. You're currently idle and standing still. "
+                "From here, you can easily reach Market District and Town Square."
+            ),
             "messages": [
                 ("Diana", "Where are you now?"),
-                ("Charlie", "Where were you before this?"),
+                ("Charlie", "Where were you before this?"), 
                 ("Bob", "What's good around here?")
             ]
         },
         {
-            "status": {
-                "region": "Town Square",
-                "current_location": "Market District",
-                "previous_location": "Pete's Stand",
-                "current_action": "idle",
-                "nearby_locations": ["Pete's Stand", "Secret Garden"],
-                "movement_state": "stationary"
-            },
+            "status": (
+                "You are currently in the Market District area of Town Square. "
+                "You came here from Pete's Stand. You're currently idle and standing still. "
+                "From here, you can easily reach Pete's Stand and Secret Garden."
+            ),
             "messages": [
                 ("Alice", "Did you make it to the Market?"),
                 ("Bob", "You came from Pete's Stand, right?"),
@@ -1301,22 +1290,12 @@ def test_status_awareness(client, agent_id: str):
     
     for scenario in scenarios:
         try:
-            print(f"\nTesting scenario with status: {json.dumps(scenario['status'], indent=2)}")
+            print(f"\nTesting scenario with status: {scenario['status']}")
             
-            # Update status block
-            current_status = {
-                "region": "Town Square",
-                "current_location": scenario["status"]["current_location"],
-                "previous_location": scenario["status"]["previous_location"],
-                "current_action": "idle",
-                "nearby_locations": scenario["status"]["nearby_locations"],
-                "movement_state": "stationary"
-            }
-            
-            # Update status block
+            # Update status block directly with narrative string
             print("\nUpdating status to:")
-            print(json.dumps(current_status, indent=2))
-            client.update_block(status_block.id, json.dumps(current_status))
+            print(scenario['status'])
+            update_status_block(client, agent_id, scenario['status'])
             
             # Small delay to ensure status update is processed
             time.sleep(0.5)
@@ -1334,29 +1313,8 @@ def test_status_awareness(client, agent_id: str):
                     delay=2
                 )
                 
-                # Initialize tool tracking
-                tool_calls = []
-                for msg in response.messages:
-                    if isinstance(msg, ToolCallMessage):
-                        tool_calls.append(msg.tool_call)
-                  
-                # After getting response, evaluate it
-                eval_result = evaluate_response_with_gpt4(
-                    str(response),
-                    scenario["status"],
-                    message
-                )
-                
-                if eval_result:
-                    print("\nResponse Evaluation:")
-                    print(f"✓ Location Aware: {eval_result['location_aware']}")
-                    print(f"✓ Nearby Accurate: {eval_result['nearby_accurate']}")
-                    print(f"✓ Contextually Appropriate: {eval_result['contextually_appropriate']}")
-                    print(f"Explanation: {eval_result['explanation']}")
-                
                 print("\nResponse:")
                 print_response(response)
-                print(f"\nTool Calls: {json.dumps([t.name for t in tool_calls], indent=2)}")
                 time.sleep(1)
                 
         except Exception as e:
@@ -1464,22 +1422,41 @@ Current group info is in the group_members block with:
 - summary: Quick overview of current group
 """
 
-def update_status_block(client, agent_id, group_block):
-    # Extract just names from group members
-    nearby_people = [member["name"] for member in group_block["members"].values()]
-    
-    status_block = {
-        "region": "Town Square",
-        "current_location": group_block["location"],
-        "previous_location": None,
-        "current_action": "idle",
-        "nearby_locations": group_block["nearby_locations"],
-        "movement_state": "stationary"
-    }
-    
-    blocks = client.get_agent(agent_id).memory.blocks
-    status_block_id = [b.id for b in blocks if b.label == "status"][0]
-    client.update_block(status_block_id, json.dumps(status_block))
+def update_status_block(client, agent_id, status_text):
+    """Update the status block with a narrative description of the agent's current state"""
+    try:
+        # Get agent and find status block
+        agent = client.get_agent(agent_id)
+        status_blocks = [b for b in agent.memory.blocks if b.label == "status"]
+        
+        # If no status block exists, create one
+        if not status_blocks:
+            status_block = client.create_block(
+                label="status",
+                value="",
+                limit=500
+            )
+            status_block_id = status_block.id
+        else:
+            status_block_id = status_blocks[0].id
+
+        # If we're passed a string, use it directly
+        if isinstance(status_text, str):
+            status_narrative = status_text
+        else:
+            # Otherwise build narrative from dict
+            status_narrative = (
+                f"You are currently in {status_text.get('location', 'Town Square')}. "
+                f"From here, you can see {' and '.join(status_text.get('nearby_locations', []))}. "
+                "The entire area is part of the Town Square region."
+            )
+
+        # Update the block
+        client.update_block(status_block_id, status_narrative)  # No JSON encoding needed
+        
+    except Exception as e:
+        print(f"Error updating status block: {str(e)}")
+        raise
 
 def create_or_update_tool(client, tool_name: str, tool_func, verbose: bool = True) -> Any:
     """Create a new tool or update if it exists.
