@@ -625,13 +625,23 @@ def test_echo(message: str) -> str:
     return f"[TEST_ECHO_V3] {message} (echo...Echo...ECHO!)"
 
 def group_memory_append(agent_state: "AgentState", player_name: str, note: str) -> Optional[str]:
-    """Add a note about a player to the group memory."""
+    """Add a note about a player to the group memory.
+    
+    Args:
+        agent_state (AgentState): Current agent state containing memory
+        player_name (str): Name of the player to add note for
+        note (str): Note text to append to player's existing notes
+        
+    Returns:
+        Optional[str]: Error message if failed, None if successful
+    """
     import json
+    from datetime import datetime
+    
     try:
-        # Parse the block value as JSON
         block = json.loads(agent_state.memory.get_block("group_members").value)
         
-        # Find player by name in members
+        # Find player by exact name match
         player_id = None
         for id, info in block["members"].items():
             if info["name"].lower() == player_name.lower():
@@ -641,13 +651,10 @@ def group_memory_append(agent_state: "AgentState", player_name: str, note: str) 
         if not player_id:
             return f"Player {player_name} not found"
             
-        # Add note
-        current_notes = block["members"][player_id]["notes"]
-        block["members"][player_id]["notes"] = f"{current_notes}; {note}" if current_notes else note
-        
+        # Update notes
+        block["members"][player_id]["notes"] = note
         block["last_updated"] = datetime.now().isoformat()
         
-        # Convert back to JSON string
         agent_state.memory.update_block_value(
             label="group_members",
             value=json.dumps(block)
@@ -655,29 +662,34 @@ def group_memory_append(agent_state: "AgentState", player_name: str, note: str) 
         return None
             
     except Exception as e:
+        print(f"Error in group_memory_append: {e}")
         return f"Failed to append note: {str(e)}"
 
 def group_memory_replace(agent_state: "AgentState", player_name: str, old_note: str, new_note: str) -> Optional[str]:
-    """
-    Replace a specific note about a player.
+    """Replace a specific note about a player.
     
     Args:
-        agent_state (AgentState): Current agent state
-        player_name (str): Name of the player
-        old_note (str): Existing note to replace
-        new_note (str): New note to use instead
-    
+        agent_state (AgentState): Current agent state containing memory
+        player_name (str): Name of the player to update note for
+        old_note (str): Existing note text to replace
+        new_note (str): New note text to use instead
+        
     Returns:
         Optional[str]: Error message if failed, None if successful
     """
     import json
+    from datetime import datetime
+    
     try:
         block = json.loads(agent_state.memory.get_block("group_members").value)
         
-        # Find player entry
-        player_id = next((id for id, info in block["members"].items() 
-                         if player_name.lower() in info["description"].lower()), None)
-                         
+        # Find player - use same lookup as group_memory_append
+        player_id = None
+        for id, info in block["members"].items():
+            if info["name"] == player_name:
+                player_id = id
+                break
+                
         if not player_id:
             return f"Player {player_name} not found"
             
@@ -687,8 +699,7 @@ def group_memory_replace(agent_state: "AgentState", player_name: str, old_note: 
             
         block["members"][player_id]["notes"] = block["members"][player_id]["notes"].replace(old_note, new_note)
         
-        # Add to updates
-        block["updates"].append(f"Updated note about {player_name}")
+        # Update timestamp
         block["last_updated"] = datetime.now().isoformat()
         
         agent_state.memory.update_block_value(
@@ -759,12 +770,12 @@ TOOL_REGISTRY: Dict[str, Dict] = {
     },
     "group_memory_append": {
         "function": group_memory_append,
-        "version": "1.0.0",
+        "version": "1.0.1",
         "supports_state": True
     },
     "group_memory_replace": {
         "function": group_memory_replace,
-        "version": "1.0.0",
+        "version": "1.0.1",
         "supports_state": True
     },
     "examine_object": {
@@ -872,4 +883,20 @@ def update_tool(client, tool_name: str, tool_func, verbose: bool = True) -> str:
     except Exception as e:
         print(f"Error updating tool {tool_name}: {e}")
         raise
+
+def update_tools(client):
+    """Force update all tools with latest versions"""
+    print("\nUpdating tools...")
+    
+    # Delete existing tools
+    tools = client.list_tools()
+    for tool in tools:
+        if tool.name in ["group_memory_append", "group_memory_replace"]:
+            print(f"Deleting {tool.name}...")
+            client.delete_tool(tool.id)
+    
+    # Create new tools
+    print("\nCreating new tools...")
+    client.create_tool(group_memory_append, name="group_memory_append")
+    client.create_tool(group_memory_replace, name="group_memory_replace")
 

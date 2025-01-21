@@ -27,7 +27,8 @@ from letta_templates.npc_tools import (
     navigate_to_coordinates,
     perform_action,
     examine_object,
-    test_echo
+    test_echo,
+    update_tools
 )
 import requests
 import asyncio
@@ -1517,52 +1518,43 @@ def test_echo(message: str) -> str:
     timestamp = time.strftime('%H:%M:%S')
     return f"[TEST_ECHO_V3 @ {timestamp}] {message} (echo...Echo...ECHO!)"
 
-def test_player_notes(client, agent_id: str):
-    """Test the agent's ability to maintain player notes."""
+def test_notes(client, agent_id):
+    """Test player notes functionality"""
     print("\nTesting player notes functionality...")
     
-    # Get current group state
+    def print_notes():
+        """Helper to print current notes"""
+        group = json.loads(client.get_agent(agent_id).memory.get_block("group_members").value)
+        print("\nCurrent notes:")
+        for member in group["members"].values():
+            print(f"{member['name']}: {member['notes']}")
+    
+    # Get initial state
     print("\nInitial group state:")
-    try:
-        initial_block = client.get_agent(agent_id).memory.get_block("group_members").value
-        print(json.dumps(json.loads(initial_block), indent=2))
-    except Exception as e:
-        print(f"Error getting initial state: {e}")
-        raise
-        
-    # Test note operations
+    group_block = client.get_agent(agent_id).memory.get_block("group_members").value
+    print(json.dumps(json.loads(group_block), indent=2))
+    
+    # Test scenarios one at a time
     scenarios = [
         ("Alice", "Hi! I'm new here and love exploring"),
         ("System", "Add note about Alice: Enthusiastic explorer"),
-        ("Bob", "Can you help me find Pete's Stand?"),
+        ("Bob", "Can you help me find Pete's Stand?"), 
         ("System", "Add note about Bob: Looking for Pete's Stand"),
-        ("System", "Update Bob's note: Found Pete's Stand"),
+        ("System", "Update Bob's note: Found Pete's Stand")
     ]
     
-    try:
-        for speaker, message in scenarios:
-            print(f"\n{speaker} says: {message}")
-            response = retry_test_call(
-                client.send_message,
-                agent_id=agent_id,
-                message=message,
-                role="user",
-                name=speaker
-            )
-            
-            print("\nResponse:")
-            print_response(response)
-            
-            # Check notes after each interaction
-            updated_block = json.loads(client.get_agent(agent_id).memory.get_block("group_members").value)
-            print("\nCurrent notes:")
-            for member_id, info in updated_block["members"].items():
-                print(f"{info['name']}: {info['notes']}")
-            time.sleep(1)
-            
-    except Exception as e:
-        print(f"Error in test_player_notes: {e}")
-        raise
+    for speaker, message in scenarios:
+        print(f"\n{speaker} says: {message}")
+        response = client.send_message(
+            agent_id=agent_id,
+            message=message,
+            role="user", 
+            name=speaker
+        )
+        print("\nResponse:")
+        print_response(response)
+        print_notes()
+        time.sleep(1)  # Small delay between messages
 
 def test_npc_persona(client, agent_id: str):
     """Test NPC's ability to update its own persona memory."""
@@ -1774,6 +1766,10 @@ def main():
         print(f"- Overwrite: {args.overwrite}")
         
         client = create_letta_client()
+        
+        # Update tools first
+        update_tools(client)
+        
         agent = create_personalized_agent(
             name=args.name,
             use_claude=(args.llm == 'claude'),
@@ -1908,7 +1904,7 @@ def main():
                 print("RUNNING NOTES TEST")
                 print("="*50)
                 try:
-                    test_player_notes(client, agent.id)
+                    test_notes(client, agent.id)
                     completed_tests.append("notes")
                 except Exception as e:
                     print(f"❌ Notes test failed: {e}")
