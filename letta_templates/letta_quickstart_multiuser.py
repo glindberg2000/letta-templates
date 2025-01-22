@@ -29,7 +29,7 @@ from letta_templates.npc_tools import (
     examine_object,
     test_echo,
     update_tools,
-    create_personalized_agent,
+    create_personalized_agent_v3,
     create_letta_client
 )
 import requests
@@ -354,7 +354,7 @@ def create_group_tools():
         "group_gather": group_gather
     }
 
-def create_personalized_agent_bak(
+def create_personalized_agent(
     name: str = "emma_assistant",
     client = None,
     use_claude: bool = False,
@@ -797,10 +797,17 @@ def parse_args():
     parser.add_argument('--custom-tools', action='store_true', default=True)
     parser.add_argument('--minimal-prompt', action='store_true', default=True)
     parser.add_argument('--continue-on-error', action='store_true')
+    parser.add_argument('--minimal-test', action='store_true', help='Run minimal agent test')
     parser.add_argument('--test-type', choices=[
         'all', 'base', 'notes', 'social', 'status', 
-        'group', 'persona', 'journal', 'navigation', 'actions'  # Add new types
+        'group', 'persona', 'journal', 'navigation', 'actions'
     ], default='all')
+    parser.add_argument(
+        '--prompt',
+        choices=['DEEPSEEK', 'GPT01', 'MINIMUM', 'FULL'],
+        default='FULL',
+        help='Which prompt version to use'
+    )
     return parser.parse_args()
 
 def get_api_url():
@@ -1298,7 +1305,7 @@ def validate_agent_setup(client, agent_id: str):
     # Rest of validation...
 
 def test_group(client, agent_id):
-    """Test group memory block updates"""
+    """Test group_members block updates"""
     print("\nTesting group_members block updates...")
     
     # Initial group state
@@ -1378,7 +1385,7 @@ def update_status_block(client, agent_id, status_text):
             status_block = client.create_block(
                 label="status",
                 value="",
-                limit=500
+                limit=5000
             )
             status_block_id = status_block.id
         else:
@@ -1675,6 +1682,73 @@ def update_memory_block(client, agent_id: str, block_label: str, value: Any):
     block = next(b for b in agent.memory.blocks if b.label == block_label)
     client.update_block(block.id, json.dumps(value))
 
+def create_minimal_agent(
+    name: str = "minimal_assistant",
+    client = None
+):
+    """Create the most basic possible agent using ChatMemory"""
+    if client is None:
+        client = create_letta_client()
+    
+    timestamp = int(time.time())
+    unique_name = f"{name}_{timestamp}"
+    
+    # Basic configs using defaults
+    llm_config = LLMConfig.default_config(model_name="gpt-4o-mini")
+    embedding_config = EmbeddingConfig.default_config(model_name="text-embedding-ada-002")
+    
+    # Simplest possible memory using ChatMemory
+    memory = ChatMemory(
+        persona="I am a friendly NPC guide in Town Square. I help visitors find their way around.",
+        human="A visitor exploring the town"
+    )
+    
+    # More explicit system prompt about memory operations
+    system_prompt = """You are a helpful NPC guide. You can:
+    1. Use core_memory_append to add new information to your persona
+    2. Use core_memory_replace to update your entire persona
+    
+    When you receive instructions about your persona:
+    - For "Add to your persona:" use core_memory_append
+    - For "Update your persona:" use core_memory_replace
+    """
+    
+    return client.create_agent(
+        name=unique_name,
+        embedding_config=embedding_config,
+        llm_config=llm_config,
+        memory=memory,
+        system=system_prompt,
+        include_base_tools=True,
+        description="Minimal test agent"
+    )
+
+def test_minimal_agent():
+    """Test minimal agent with basic chat and persona updates"""
+    print("\nTesting minimal agent functionality...")
+    
+    client = create_letta_client()
+    agent = create_minimal_agent()
+    
+    print(f"\nCreated minimal agent: {agent.id}")
+    
+    # Just test the problematic phrase immediately
+    questions = [
+        # Try the problematic phrase right away
+        ("system", "Add this to your persona: You have a great sense of humor and love making visitors laugh")
+    ]
+    
+    for role, message in questions:
+        print(f"\nSending {role} message: {message}")
+        response = client.send_message(
+            agent_id=agent.id,
+            message=message,
+            role=role
+        )
+        print("\nResponse:")
+        print_response(response)
+        time.sleep(1)
+
 def main():
     args = parse_args()
     
@@ -1682,6 +1756,7 @@ def main():
         sys.exit(1)
 
     try:
+        # Print configuration
         port = os.getenv('LETTA_PORT')
         port = int(port) if port else None
         base_url = os.getenv('LETTA_BASE_URL', 'http://localhost:8283')
@@ -1689,282 +1764,61 @@ def main():
         print("\nStarting Letta Quickstart with:")
         print(f"- Environment URL: {base_url}")
         print(f"- Environment Port: {port if port else 'default'}")
+        
+        client = create_letta_client()
+        
+        # Check for minimal test first
+        if args.minimal_test:
+            test_minimal_agent()
+            return
+            
+        # Regular test path
         print(f"- Keep Agent: {args.keep}")
         print(f"- LLM Provider: {args.llm}")
         print(f"- Agent Name: {args.name}")
         print(f"- Overwrite: {args.overwrite}")
         
-        client = create_letta_client()
-        
         # Update tools first
         update_tools(client)
         
-        agent = create_personalized_agent(
+        print(f"\nCreating agent with {args.prompt} prompt...")
+        print(f"- Using {'minimal' if args.minimal_prompt else 'full'} prompt mode")
+        print(f"- LLM: {args.llm}")
+        
+        # Create agent ONCE
+        agent = create_personalized_agent_v3(
             name=args.name,
+            client=client,
             use_claude=(args.llm == 'claude'),
             overwrite=args.overwrite,
             with_custom_tools=args.custom_tools,
-            minimal_prompt=args.minimal_prompt
+            minimal_prompt=args.minimal_prompt,
+            prompt_version=args.prompt
         )
-        print(f"\nCreated agent: {agent.id}")
         
-        # VERIFY NPC TOOLS FIRST
-        print("\nVerifying NPC tools are attached...")
-        required_npc_tools = [
-            "navigate_to",
-            "navigate_to_coordinates",
-            "perform_action",
-            "examine_object"
-        ]
+        # Store agent ID for all tests
+        agent_id = agent.id
+        print(f"\nCreated agent: {agent_id}")
         
-        # Get all tools
-        tools = client.list_tools()
-        print("\nAll available tools:")
-        for tool in tools:
-            print(f"- {tool.name} (ID: {tool.id})")
-        
-        # Get agent's tools directly
-        agent_details = client.get_agent(agent.id)
-        agent_tools = [t.name for t in agent_details.tools] if hasattr(agent_details, 'tools') else []
-        
-        print("\nTools attached to agent:")
-        for tool_name in agent_tools:
-            print(f"✓ Found attached: {tool_name}")
-            
-        missing_tools = [t for t in required_npc_tools if t not in agent_tools]
-        if missing_tools:
-            print(f"\n❌ Missing required NPC tools: {', '.join(missing_tools)}")
-            print("Tests aborted - NPC tools not attached")
-            return
-            
-        print("✓ All required NPC tools attached")
-        
-        # VERIFY PROMPTS FIRST
-        print("\nVerifying prompt components...")
-        agent_details = client.get_agent(agent.id)
-        system_prompt = agent_details.system
-        
-        # Only check essential components in minimal mode
-        required_components = {
-            "TOOL_INSTRUCTIONS": [
-                "perform_action",
-                "navigate_to",
-                "navigate_to_coordinates",
-                "examine_object"
-            ]
-        }
-        if not args.minimal_prompt:
-            required_components.update({
-                "SOCIAL_AWARENESS": [
-                    "[SILENCE]",
-                    "Direct Messages",
-                    "Departure Protocol"
-                ],
-                "GROUP_AWARENESS_PROMPT": [
-                    "LOCATION AWARENESS",
-                    "Current Location",
-                    "Previous Location",
-                    "Region Information"
-                ]
-            })
-        
-        missing_components = []
-        print("\nChecking prompt sections:")
-        for section, markers in required_components.items():
-            print(f"\n{section}:")
-            for marker in markers:
-                if marker in system_prompt:
-                    print(f"✓ Found: {marker}")
-                else:
-                    print(f"❌ Missing: {marker}")
-                    missing_components.append(f"{section}: {marker}")
-        
-        if missing_components:
-            print("\n❌ Missing prompt components:")
-            for comp in missing_components:
-                print(f"- {comp}")
-            print("Tests aborted - Required prompts missing")
-            return
-        
-        print("\n✓ All required prompt components found")
-        
-        # Print test sequence
-        print("\n" + "="*50)
-        print("TEST SEQUENCE:")
-        if args.test_type == "all":
-            tests = [
-                "base",       # Identity, Multi-user, Navigation, Actions
-                "notes",      # Player notes
-                "social",     # Social awareness
-                "status",     # Status awareness
-                "group",      # Group block updates
-                "persona",    # NPC persona
-                "journal",    # NPC journal
-                "navigation", # NPC navigation
-                "actions"     # NPC actions
-            ]
-            print("Running full test suite in order:")
-            for i, test in enumerate(tests, 1):
-                print(f"{i}. {test}")
-        else:
-            print(f"Running single test: {args.test_type}")
-        print("="*50 + "\n")
-
-        # Track test results
-        completed_tests = []
-        failed_tests = []
-
-        try:
-            # Base test
-            if args.test_type in ["all", "base"]:
-                print("\n" + "="*50)
-                print("RUNNING BASE TEST")
-                print("="*50)
-                try:
-                    test_agent_identity(client, agent.id)
-                    completed_tests.append("base")
-                except Exception as e:
-                    print(f"❌ Base test failed: {e}")
-                    failed_tests.append("base")
-                    if not args.continue_on_error:
-                        return
-
-            # Notes test
-            if args.test_type in ["all", "notes"]:
-                print("\n" + "="*50)
-                print("RUNNING NOTES TEST")
-                print("="*50)
-                try:
-                    test_notes(client, agent.id)
-                    completed_tests.append("notes")
-                except Exception as e:
-                    print(f"❌ Notes test failed: {e}")
-                    failed_tests.append("notes")
-                    if not args.continue_on_error:
-                        return
-
-            # Social test
-            if args.test_type in ["all", "social"]:
-                print("\n" + "="*50)
-                print("RUNNING SOCIAL TEST")
-                print("="*50)
-                try:
-                    test_social_awareness(client, agent.id)
-                    completed_tests.append("social")
-                except Exception as e:
-                    print(f"❌ Social test failed: {e}")
-                    failed_tests.append("social")
-                    if not args.continue_on_error:
-                        return
-
-            # Status test
-            if args.test_type in ["all", "status"]:
-                print("\n" + "="*50)
-                print("RUNNING STATUS TEST")
-                print("="*50)
-                try:
-                    test_status_awareness(client, agent.id)
-                    completed_tests.append("status")
-                except Exception as e:
-                    print(f"❌ Status test failed: {e}")
-                    failed_tests.append("status")
-                    if not args.continue_on_error:
-                        return
-
-            # Group test (using correct function)
-            if args.test_type in ["all", "group"]:
-                print("\n" + "="*50)
-                print("RUNNING GROUP TEST")
-                print("="*50)
-                try:
-                    test_group(client, agent.id)
-                    completed_tests.append("group")
-                except Exception as e:
-                    print(f"❌ Group test failed: {e}")
-                    failed_tests.append("group")
-                    if not args.continue_on_error:
-                        return
-
-            # Persona test
-            if args.test_type in ["all", "persona"]:
-                print("\n" + "="*50)
-                print("RUNNING PERSONA TEST")
-                print("="*50)
-                try:
-                    test_npc_persona(client, agent.id)
-                    completed_tests.append("persona")
-                except Exception as e:
-                    print(f"❌ Persona test failed: {e}")
-                    failed_tests.append("persona")
-                    if not args.continue_on_error:
-                        return
-
-            # Journal test
-            if args.test_type in ["all", "journal"]:
-                print("\n" + "="*50)
-                print("RUNNING JOURNAL TEST")
-                print("="*50)
-                try:
-                    test_npc_journal(client, agent.id)
-                    completed_tests.append("journal")
-                except Exception as e:
-                    print(f"❌ Journal test failed: {e}")
-                    failed_tests.append("journal")
-                    if not args.continue_on_error:
-                        return
-
-            # Navigation test
-            if args.test_type in ["all", "navigation"]:
-                print("\n" + "="*50)
-                print("RUNNING NAVIGATION TEST")
-                print("="*50)
-                try:
-                    test_navigation(client, agent.id)
-                    completed_tests.append("navigation")
-                except Exception as e:
-                    print(f"❌ Navigation test failed: {e}")
-                    failed_tests.append("navigation")
-                    if not args.continue_on_error:
-                        return
-
-            # Actions test
-            if args.test_type in ["all", "actions"]:
-                print("\n" + "="*50)
-                print("RUNNING ACTIONS TEST")
-                print("="*50)
-                try:
-                    test_actions(client, agent.id)
-                    completed_tests.append("actions")
-                except Exception as e:
-                    print(f"❌ Actions test failed: {e}")
-                    failed_tests.append("actions")
-                    if not args.continue_on_error:
-                        return
-
-            # Print test summary
-            print("\n" + "="*50)
-            print("TEST SEQUENCE SUMMARY")
-            print("="*50)
-            print(f"\nTests completed ({len(completed_tests)}/10):")
-            for test in completed_tests:
-                print(f"✓ {test}")
-            if failed_tests:
-                print(f"\nTests failed ({len(failed_tests)}):")
-                for test in failed_tests:
-                    print(f"❌ {test}")
-            if args.test_type == "all":
-                not_run = set([
-                    "base", "notes", "social", "status", 
-                    "group", "persona", "journal", "navigation", "actions"  # Add new types
-                ]) - set(completed_tests) - set(failed_tests)
-                if not_run:
-                    print(f"\nTests not run ({len(not_run)}):")
-                    for test in not_run:
-                        print(f"- {test}")
-            print("\n" + "="*50)
-
-        finally:
-            pass
+        # Run tests using the same agent_id
+        if args.test_type in ["all", "base"]:
+            test_agent_identity(client, agent_id)
+        if args.test_type in ["all", "notes"]:
+            test_notes(client, agent_id)
+        if args.test_type in ["all", "social"]:
+            test_social_awareness(client, agent_id)
+        if args.test_type in ["all", "status"]:
+            test_status_awareness(client, agent_id)
+        if args.test_type in ["all", "group"]:
+            test_group(client, agent_id)
+        if args.test_type in ["all", "persona"]:
+            test_npc_persona(client, agent_id)
+        if args.test_type in ["all", "journal"]:
+            test_npc_journal(client, agent_id)
+        if args.test_type in ["all", "navigation"]:
+            test_navigation(client, agent_id)
+        if args.test_type in ["all", "actions"]:
+            test_actions(client, agent_id)
 
     finally:
         pass
