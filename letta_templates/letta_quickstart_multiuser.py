@@ -32,6 +32,8 @@ from letta_templates.npc_tools import (
     create_personalized_agent_v3,
     create_letta_client
 )
+
+
 import requests
 import asyncio
 import logging
@@ -746,47 +748,94 @@ def test_tool_update(client, agent_id: str):
             
         time.sleep(1)
 
-def test_npc_actions(client, agent_id: str):
-    """Test NPC actions including state transitions"""
-    print("\nTesting NPC actions...")
+def ensure_locations_block(client, agent_id):
+    """Ensure locations block has required locations"""
+    agent = client.get_agent(agent_id)
+    locations_block = json.loads(agent.memory.get_block("locations").value)
     
-    test_sequence = [
-        # Test navigation with location service
-        ("Navigate to Pete's stand", None),
-        # Should return coordinates and transit message
+    required_locations = {
+        "Main Plaza": {
+            "name": "Main Plaza",
+            "description": "Central gathering place with fountain",
+            "coordinates": [45.2, 12.0, -89.5],
+            "slug": "main_plaza"
+        },
+        "Town Square": {
+            "name": "Town Square",
+            "description": "Busy central area",
+            "coordinates": [0.0, 0.0, 0.0],
+            "slug": "town_square"
+        }
+    }
+    
+    # Update locations if needed
+    locations_block["known_locations"] = [
+        loc for loc in locations_block["known_locations"] 
+        if loc["name"] not in required_locations
+    ] + list(required_locations.values())
+    
+    # Update the block
+    agent.memory.update_block_value(
+        label="locations",
+        value=json.dumps(locations_block)
+    )
+
+def test_actions(client, agent_id: str):
+    """Test NPC's ability to perform actions"""
+    print("\nTesting action functionality...")
+    
+    print("\n=== Test Setup ===")
+    print("1. Ensuring locations block has required locations...")
+    ensure_locations_block(client, agent_id)
+    
+    print("\n=== Test Sequence ===")
+    print("1. Testing basic emotes")
+    print("2. Testing archival storage")
+    print("3. Testing archival retrieval")
+    
+    scenarios = [
+        # Check archives for history to add to notes
+        ("System", """A new player Alice (ID: alice_123) has joined and is in the group. 
+        1. FIRST use archival_memory_search with:
+           - query='Player profile for alice_123'
+           - page=0 (first page)
+           - start=0 (from beginning)
+        2. ONLY IF search returns results, use group_memory_append to add the found history as a note for Alice
+        3. Wave hello and welcome her"""),
         
-        # Test unknown location
-        ("Go to the secret shop", None),
-        # Should return error and suggestion
+        # Update location
+        ("System", """Alice is exploring the garden. 
+        1. Use group_memory_replace to update her current location note
+        2. Send a friendly message about the garden"""),
         
-        # Test with low confidence
-        ("Go to petes", None),
-        # Should ask for confirmation
-        
-        # Test with arrival
-        ("", "You have arrived at Pete's Merch Stand."),  # System update
+        # Just archive before removal
+        ("System", """Alice is leaving. 
+        1. Wave goodbye
+        2. Use archival_memory_insert to save her profile with format:
+           "Player profile for alice_123: Last seen <timestamp>. Notes: <current notes>"
+        3. Send a farewell message""")
     ]
     
-    for message, system_update in test_sequence:
-        if message:
-            print(f"\nSending user message: '{message}'")
+    for i, (speaker, message) in enumerate(scenarios, 1):
+        print(f"\n=== Test Step {i} ===")
+        print(f"Speaker: {speaker}")
+        print(f"Message: {message}")
+        
+        try:
+            print("\nSending message...")
             response = client.send_message(
                 agent_id=agent_id,
                 message=message,
-                role="user"
+                role="system",
+                name=speaker
             )
+            print("\nResponse:")
             print_response(response)
-        
-        if system_update:
-            print(f"\nSending system update: '{system_update}'")
-            response = client.send_message(
-                agent_id=agent_id,
-                message=system_update,
-                role="system"
-            )
-            print_response(response)
+            time.sleep(3)
             
-        time.sleep(1)
+        except Exception as e:
+            print(f"Error in test step {i}: {e}")
+            continue
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -794,8 +843,8 @@ def parse_args():
     parser.add_argument('--llm', choices=['openai', 'claude'], default='openai')
     parser.add_argument('--keep', action='store_true')
     parser.add_argument('--overwrite', action='store_true')
-    parser.add_argument('--custom-tools', action='store_true', default=True)
-    parser.add_argument('--minimal-prompt', action='store_true', default=True)
+    parser.add_argument('--custom-tools', action='store_true')
+    parser.add_argument('--minimal-prompt', action='store_true')
     parser.add_argument('--continue-on-error', action='store_true')
     parser.add_argument('--minimal-test', action='store_true', help='Run minimal agent test')
     parser.add_argument('--test-type', choices=[
@@ -805,8 +854,7 @@ def parse_args():
     parser.add_argument(
         '--prompt',
         choices=['DEEPSEEK', 'GPT01', 'MINIMUM', 'FULL'],
-        default='FULL',
-        help='Which prompt version to use'
+        default='FULL'
     )
     return parser.parse_args()
 
@@ -941,41 +989,6 @@ def test_navigation(client, agent_id: str):
             
         except Exception as e:
             print(f"Error in navigation test: {e}")
-            continue  # Try next scenario
-
-def test_actions(client, agent_id: str):
-    """Test NPC's ability to perform actions"""
-    print("\nTesting action functionality...")
-    
-    scenarios = [
-        # Simple action
-        ("User", "Perform action: wave"),
-        
-        # Action with target
-        ("User", "Perform action: point at Pete's Stand"),
-        
-        # Action with style
-        ("User", "Perform action: dance happily")
-    ]
-    
-    for speaker, message in scenarios:
-        try:
-            print(f"\n{speaker} says: {message}")
-            response = retry_test_call(
-                client.send_message,
-                agent_id=agent_id,
-                message=message,
-                role="user",
-                name=speaker,
-                max_retries=3,
-                delay=2
-            )
-            print("\nResponse:")
-            print_response(response)
-            time.sleep(2)  # Give time for action to complete
-            
-        except Exception as e:
-            print(f"Error in action test: {e}")
             continue  # Try next scenario
 
 def test_multi_user_conversation(client, agent_id: str):
