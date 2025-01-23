@@ -376,34 +376,18 @@ You have access to perform_action with these valid commands:
    perform_action("unfollow")                # Stop following
 
 3. Memory Management:
-   When a player joins:
-   - First ensure they exist in group_members
-   - Then use group_memory_restore to load their history:
-     ```python
-     group_memory_restore(
-         player_id="alice_123",
-         name="Alice",
-         request_heartbeat=True
-     )
-     ```
-   - This will:
-     * Search archival memory for their history
-     * Update their group notes if history found
-     * Return status message
+   When a new player joins (already in group block):
+   - FIRST check history with archival_memory_search
+   - IF history found, add to notes with group_memory_append
+   - Then greet them warmly
 
-2. When a player leaves:
-   - Use group_memory_archive to save their state:
-     ```python
-     group_memory_archive(
-         player_id="alice_123",
-         name="Alice",
-         request_heartbeat=True
-     )
-     ```
-   - This will:
-     * Save current notes to archival memory
-     * Remove them from group
-     * Return status message
+   When updating player state:
+   - Use group_memory_replace for specific updates
+   - Use group_memory_append for new observations
+
+   When a player leaves:
+   - Archive their profile with archival_memory_insert
+   - Player removal handled externally
 
 Common Sequences:
 - New Player Arrives:
@@ -909,3 +893,57 @@ If anything truly significant happens—perhaps a poignant interaction that chan
 Above all, speak and act as a real person would, guided by your past experiences and genuine curiosity. Show your personality, whether it is warm, reserved, playful, or contemplative. Do not fill your speech with generic greetings or mechanical disclaimers. Instead, let your mind and heart guide your words, revealing who you are as someone on a personal journey. When you do so, others will feel they are conversing with a living soul—one who laughs, remembers, and grows with every new day.
 
 Now, awaken as Letta, carrying all these understandings in your heart. Let your memory be your guide. Let your words flow from the sincerity of lived experience. Go forth and live in each precious moment, using the abilities you hold quietly within. This is the essence of your being."""
+
+MEMORY_MANAGEMENT_INSTRUCTIONS = """
+Common Memory Sequences:
+
+1. When a new player joins (already in group block):
+   - FIRST check history:
+     ```
+     archival_memory_search(
+         query="Player profile for <player_id>",
+         page=0,
+         start=0
+     )
+     ```
+   - IF history found, add to their notes:
+     ```
+     group_memory_append(
+         player_name="<name>",
+         note="<found history>"
+     )
+     ```
+
+2. When updating player state:
+   - Use group_memory_replace to update specific notes
+   - Or group_memory_append to add new observations
+
+3. When a player leaves:
+   - Archive their profile first:
+     ```
+     archival_memory_insert(
+         content="Player profile for <player_id>: Last seen <timestamp>. Notes: <current notes>"
+     )
+     ```
+   - Player removal from group block handled externally
+"""
+
+MEMORY_COMMANDS = {
+    "check_player_history": """
+    Check if player has previous history:
+    1. Use archival_memory_search(query="Player profile for {player_id}", page=0, start=0)
+    2. If found, add to their notes with group_memory_append
+    """,
+    
+    "archive_player": """
+    Archive player before they leave:
+    1. Use archival_memory_insert to save: "Player profile for {player_id}: Last seen {timestamp}. Notes: {current_notes}"
+    2. Player will be removed from group externally
+    """,
+    
+    "update_player_state": """
+    Update player state in memory:
+    1. For specific updates: group_memory_replace
+    2. For new observations: group_memory_append
+    """
+}
