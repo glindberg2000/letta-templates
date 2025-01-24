@@ -166,76 +166,68 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
     elif action == "unfollow":
         return "Stopping follow action. Now stationary."
 
-def navigate_to(agent_state: "AgentState", destination_slug: str, request_heartbeat: bool = True) -> Optional[str]:
+def navigate_to(destination_slug: str, request_heartbeat: bool = True) -> dict:
     """Navigate to a known location by slug.
     
     Args:
-        agent_state: Current agent state containing memory
         destination_slug: Must exactly match a slug in locations memory block
         request_heartbeat: Always set True to maintain state awareness
         
     Returns:
-        Optional[str]: Error message if failed, None if successful
-        
-    Validation:
-        - Verify slug exists in locations memory before calling
-        - Unfollow any targets before navigation
-        - Complete any active examinations first
-        
-    Example:
-        ```python
-        # Verify location exists
-        if destination_slug in locations_memory:
-            # Unfollow if needed
-            perform_action("unfollow", request_heartbeat=True)
-            navigate_to(destination_slug, request_heartbeat=True)
-        ```
+        dict: Navigation result with format:
+            {
+                "status": str,           # "success" or "error" 
+                "message": str,          # Human readable message
+            }
     """
-    # Validate slug format (lowercase, no spaces, etc)
+    # Validate slug format (lowercase, no spaces, only alphanumeric + underscore)
     slug = destination_slug.lower().strip()
     if not slug.replace('_', '').isalnum():
-        return f"Invalid slug format: {destination_slug}"
-    
-    # Check if slug exists in locations memory
-    if slug not in agent_state.memory.get_block("locations").value["known_locations"]:
-        return f"Location slug '{slug}' not found in locations memory"
+        return {
+            "status": "error",
+            "message": "Please use a valid slug from your locations memory block. Slugs are lowercase with underscores (e.g. 'market_district', 'petes_stand')"
+        }
     
     return {
         "status": "success",
-        "message": f"Navigating to {destination_slug}",
-        "slug": destination_slug.lower()
+        "message": (
+            f"Beginning navigation to {destination_slug}. "
+            "Your status memory block will update with: "
+            "- Current GPS coordinates "
+            "- Next waypoint target "
+            "- Distance to next waypoint "
+            "- Total waypoints remaining "
+            "Current status: In Motion. Navigation system active."
+        )
     }
 
 def navigate_to_coordinates(x: float, y: float, z: float, request_heartbeat: bool = True) -> dict:
-    """
-    Navigate to specific XYZ coordinates.
+    """Navigate to specific XYZ coordinates.
     
     Args:
         x (float): X coordinate
         y (float): Y coordinate
         z (float): Z coordinate
-        request_heartbeat (bool, optional): Request heartbeat after execution. Defaults to True.
+        request_heartbeat (bool): Always set True to maintain state awareness
         
     Returns:
         dict: Navigation result with format:
             {
-                "status": str,           # "success" or "failure"
+                "status": str,           # "success" or "error" 
                 "message": str,          # Human readable message
-                "coordinates": dict      # {x: float, y: float, z: float}
             }
-    
-    Example:
-        >>> navigate_to_coordinates(15.5, 20.0, -110.8)
-        {
-            "status": "success",
-            "message": "Navigating to coordinates (15.5, 20.0, -110.8)",
-            "coordinates": {"x": 15.5, "y": 20.0, "z": -110.8}
-        }
     """
     return {
         "status": "success",
-        "message": f"Navigating to coordinates ({x}, {y}, {z})",
-        "coordinates": {"x": x, "y": y, "z": z}
+        "message": (
+            f"Beginning navigation to coordinates ({x}, {y}, {z}). "
+            "Your status memory block will update with: "
+            "- Current GPS coordinates "
+            "- Next waypoint target "
+            "- Distance to next waypoint "
+            "- Total waypoints remaining "
+            "Current status: In Motion. Navigation system active."
+        )
     }
 
 
@@ -511,32 +503,44 @@ def update_tool(client, tool_name: str, tool_func, verbose: bool = True) -> str:
         raise
 
 def update_tools(client):
-    """Update tool definitions"""
+    """Update tools, only recreating custom tools"""
     print("\nUpdating tools...")
-    
-    tools_to_update = {
-        "perform_action": perform_action,
-        "group_memory_append": group_memory_append,
-        "group_memory_replace": group_memory_replace
-    }
     
     # Get existing tools
     existing_tools = {t.name: t.id for t in client.list_tools()}
     
-    for tool_name, tool_func in tools_to_update.items():
+    # Base tools should never be touched
+    base_tools = {
+        "send_message",
+        "conversation_search",
+        "archival_memory_search",
+        "archival_memory_insert",
+        "core_memory_append",
+        "core_memory_replace"
+    }
+    
+    # Only delete and recreate custom tools from TOOL_REGISTRY
+    for tool_name in TOOL_REGISTRY:
         try:
+            # Skip if it's a base tool
+            if tool_name in base_tools:
+                print(f"Skipping base tool: {tool_name}")
+                continue
+                
+            # Delete existing custom tool
             if tool_name in existing_tools:
                 print(f"Deleting {tool_name}...")
                 client.delete_tool(existing_tools[tool_name])
-            
+                
+            # Create new custom tool
             print(f"Creating {tool_name}...")
-            new_tool = client.create_tool(tool_func, name=tool_name)
-            print(f"Created {tool_name} with ID: {new_tool.id}")
+            tool = client.create_tool(TOOL_REGISTRY[tool_name]["function"], name=tool_name)
+            print(f"Created {tool_name} with ID: {tool.id}")
             
         except Exception as e:
             print(f"Error updating {tool_name}: {e}")
             raise
-    
+            
     print("\nTool updates complete")
 
 def create_letta_client():
@@ -770,12 +774,15 @@ def create_personalized_agent_v3(
     )
     
     # Add selected base tools first
-    base_tools = [
+    # Base tools should never be touched
+    base_tools = {
         "send_message",
         "conversation_search",
-        "archival_memory_search",  # Read from memory
-        "archival_memory_insert"   # Write to memory
-    ]
+        "archival_memory_search",
+        "archival_memory_insert",
+        "core_memory_append",
+        "core_memory_replace"
+    }
     
     # Get existing tools
     existing_tools = {t.name: t.id for t in client.list_tools()}
@@ -967,6 +974,7 @@ def group_memory_archive(player_id: str, name: str, request_heartbeat: bool = Tr
 TOOL_REGISTRY: Dict[str, Dict] = {
     "navigate_to": {
         "function": navigate_to,
+        "description": "Navigate to a known location",
         "version": "2.0.0",
         "supports_state": True
     },
@@ -997,12 +1005,6 @@ TOOL_REGISTRY: Dict[str, Dict] = {
     }
 }
 
-# Production navigation tools
-NAVIGATION_TOOLS: Dict[str, Dict] = {
-    "navigate_to": TOOL_REGISTRY["navigate_to"],
-    "navigate_to_coordinates": TOOL_REGISTRY["navigate_to_coordinates"],
-    "perform_action": TOOL_REGISTRY["perform_action"]
-}
 
 def get_tool(name: str) -> Callable:
     """Get tool function from registry"""
