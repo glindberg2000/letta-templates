@@ -55,19 +55,17 @@ import time
 import logging
 import inspect
 
-from letta import (
-    EmbeddingConfig, 
-    LLMConfig, 
-    ChatMemory, 
-    BasicBlockMemory
-)
-
-from letta.schemas.tool import ToolUpdate, Tool
-from letta.schemas.message import (
+from letta_client import (
+    EmbeddingConfig,
+    LlmConfig as LLMConfig,  # Note the case change
+    Memory,  # Replaces ChatMemory and BasicBlockMemory
+    Block,
+    Tool,
     ToolCallMessage,
     ToolReturnMessage,
     ReasoningMessage,
-    Message
+    Message,
+    Letta
 )
 
 # Import prompts from npc_prompts
@@ -84,8 +82,6 @@ from letta_templates.npc_prompts import (
     GPT01_PROMPT_V3,
     SYSTEM_PROMPT_LIMNAL
 )
-
-from letta_client import Letta  # New client import
 
 # Configuration
 GAME_ID = int(os.getenv("LETTA_GAME_ID", "74"))
@@ -555,10 +551,10 @@ def create_personalized_agent_v3(
     
     # Create configs first
     llm_config = LLMConfig(
-        model="gpt-4o-mini",
-        model_endpoint_type="openai",
-        model_endpoint="https://api.openai.com/v1",
-        context_window=128000,
+        model=os.getenv("LETTA_MODEL", "gpt-4o-mini"),
+        model_endpoint_type=os.getenv("LETTA_ENDPOINT_TYPE", "openai"),
+        model_endpoint=os.getenv("LETTA_MODEL_ENDPOINT", "https://api.openai.com/v1"),
+        context_window=int(os.getenv("LETTA_CONTEXT_WINDOW", "128000")),
     )
     
     embedding_config = EmbeddingConfig(
@@ -569,54 +565,16 @@ def create_personalized_agent_v3(
         embedding_chunk_size=300,
     )
     
-    # Create memory blocks from provided data
-    print("\nCreating memory blocks...")
-    try:
-        blocks = []
-        for label, data in memory_blocks.items():
-            print(f"Creating {label} block...")
-            block = client.blocks.create(
-                label=label,
-                value=json.dumps(data),
-                limit=2500
-            )
-            blocks.append(block)
-            print(f"✓ {label} block created: {block.id}")
-            
-        memory = BasicBlockMemory(blocks=blocks)
-        print("\nMemory blocks created successfully")
-        
-        # Verify blocks
-        print("\nVerifying memory blocks:")
-        for block in memory.blocks:
-            print(f"- {block.label}: ID {block.id}, {len(block.value)} chars")
-            
-    except Exception as e:
-        print(f"Error creating memory blocks: {e}")
-        raise
-        
-    # Log params in a readable way
-    print("\nCreating agent with params:")
-    print(f"Name: {unique_name}")
-    print(f"System prompt length: {len(system_prompt)} chars")
-    print("Memory blocks:")
-    for block in memory.blocks:
-        print(f"- {block.label}: {len(block.value)} chars")
-    print("\nConfigs:")
-    print(f"LLM: {llm_config.model} via {llm_config.model_endpoint_type}")
-    print(f"Embeddings: {embedding_config.embedding_model}")
-    print(f"Include base tools: {False}")
-    
-    # Create agent first
+    # Create agent with new memory structure
     agent = client.agents.create(
         name=unique_name,
-        memory_blocks=[{  # Pass blocks as list of dicts
-            "label": block.label,
-            "value": block.value,
-            "limit": block.limit
-        } for block in memory.blocks],
         embedding_config=embedding_config,
         llm_config=llm_config,
+        memory_blocks=[{  # Pass blocks directly as list of dicts
+            "label": label,
+            "value": json.dumps(data) if isinstance(data, dict) else str(data),
+            "limit": 2500
+        } for label, data in memory_blocks.items()],
         system=system_prompt,
         include_base_tools=False,
         description="A Roblox development assistant"
