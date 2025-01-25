@@ -1,19 +1,54 @@
 import argparse
 import os
 from dotenv import load_dotenv
-from letta import EmbeddingConfig, LLMConfig, create_client as letta_create_client, ChatMemory
-from letta.prompts import gpt_system
+from letta_client import (
+    EmbeddingConfig,
+    LlmConfig as LLMConfig,  # Note case change
+    Memory,
+    Block,
+    Tool,
+    Letta
+)
 from letta_local_client import LocalAPIClient
 import time
 import json
 
-# Move to top of file, before argument parser setup
-load_dotenv(override=True)  # Add override=True to ensure env vars are loaded
+# Load environment variables from .env file
+print("\nChecking environment setup:")
+print(f"Current directory: {os.getcwd()}")
+print(f"Looking for .env file...")
+
+env_file = os.path.join(os.getcwd(), '.env')
+letta_v2_env = os.path.join(os.getcwd(), 'letta-v2', '.env')
+
+if os.path.exists(env_file):
+    print(f"Found .env file at: {env_file}")
+elif os.path.exists(letta_v2_env):
+    print(f"Found .env file in letta-v2: {letta_v2_env}")
+    load_dotenv(letta_v2_env, override=True)
+else:
+    print("Warning: No .env file found in current directory")
+    # Try parent directory
+    parent_env = os.path.join(os.path.dirname(os.getcwd()), '.env')
+    if os.path.exists(parent_env):
+        print(f"Found .env file in parent directory: {parent_env}")
+        load_dotenv(parent_env, override=True)
+    else:
+        print("Warning: No .env file found in parent directory either")
+
+# Get required environment variables with defaults
+LETTA_BASE_URL = os.getenv('LETTA_BASE_URL')
+LETTA_API_KEY = os.getenv('LETTA_API_KEY')
+
+if not LETTA_BASE_URL:
+    print("Warning: LETTA_BASE_URL not found in environment")
+if not LETTA_API_KEY:
+    print("Warning: LETTA_API_KEY not found in environment")
 
 def list_all_agents(client):
     """List all available agents with their IDs, names, and memory blocks."""
     try:
-        agents = client.list_agents()
+        agents = client.agents.list()
         print("\nAvailable Agents:")
         for agent in agents:
             print(f"\nAgent ID: {agent.id}")
@@ -21,7 +56,8 @@ def list_all_agents(client):
             
             # Get memory blocks for each agent
             try:
-                memory = client.get_in_context_memory(agent.id)
+                agent = client.agents.retrieve(agent.id)  # Use retrieve() instead of get_by_id()
+                memory = agent.memory
                 print("\nMemory Blocks:")
                 for block in memory.blocks:
                     print(f"  • {block.label}")
@@ -112,7 +148,7 @@ def create_test_agent(client, name="TestAgent", description="A test agent"):
         Includes default human and persona memory blocks
     """
     try:
-        agent = client.create_agent(
+        agent = client.agents.create(
             name=name,
             embedding_config=EmbeddingConfig(
                 embedding_endpoint_type="openai",
@@ -122,16 +158,21 @@ def create_test_agent(client, name="TestAgent", description="A test agent"):
                 embedding_chunk_size=300,
             ),
             llm_config=LLMConfig(
-                model="gpt-4o-mini",
-                model_endpoint_type="openai",
-                model_endpoint="https://api.openai.com/v1",
-                context_window=8000,
+                model=os.getenv("LETTA_MODEL", "gpt-4o-mini"),
+                model_endpoint_type=os.getenv("LETTA_ENDPOINT_TYPE", "openai"),
+                model_endpoint=os.getenv("LETTA_MODEL_ENDPOINT", "https://api.openai.com/v1"),
+                context_window=int(os.getenv("LETTA_CONTEXT_WINDOW", "128000")),
             ),
-            memory=ChatMemory(
-                human="Name: User\nRole: A helpful user seeking assistance.",
-                persona="You are a helpful AI assistant that provides clear and concise answers."
-            ),
-            system=gpt_system.get_system_text("memgpt_chat"),
+            memory_blocks=[{
+                "label": "human",
+                "value": "Name: User\nRole: A helpful user seeking assistance.",
+                "limit": 2500
+            }, {
+                "label": "persona", 
+                "value": "You are a helpful AI assistant that provides clear and concise answers.",
+                "limit": 2500
+            }],
+            system="You are a helpful AI assistant that provides clear and concise answers.",
             tools=None,
             include_base_tools=True,
             metadata={
@@ -270,14 +311,14 @@ def create_letta_client(base_url=None, port=None):
     """Create a client for direct Letta server communication."""
     if base_url == "memory://":
         print("Using in-memory Letta server")
-        return letta_create_client()  # Use renamed import
+        return Letta(token=LETTA_API_KEY)
     else:
         if port:
             from urllib.parse import urlparse, urlunparse
             parsed = urlparse(base_url)
             base_url = urlunparse(parsed._replace(netloc=f"{parsed.hostname}:{port}"))
         print(f"Connecting to Letta server at: {base_url}")
-        return letta_create_client(base_url=base_url)  # Use renamed import
+        return Letta(base_url=base_url, token=LETTA_API_KEY)
 
 def is_legacy_agent(agent_name: str) -> bool:
     """Check if this is a legacy NPC agent."""
@@ -818,17 +859,16 @@ def main():
         dest='tools_command',
         help='Tool command to execute')
       
-    # Add existing tool commands
+    # Add tool commands
     tools_subparsers.add_parser('list',
         help='List all tools')
     tools_subparsers.add_parser('get',
         help='Get tool details')
-    tools_subparsers.add_parser('delete',
-        help='Delete all tools')
-    
-    # Add delete subcommand
-    delete_parser = tools_subparsers.add_parser('delete', help='Delete tools')
-    delete_parser.add_argument('name', help='Name of tool to delete')
+    # Add delete subcommand with name argument
+    delete_parser = tools_subparsers.add_parser('delete', 
+        help='Delete a specific tool')
+    delete_parser.add_argument('name', 
+        help='Name of tool to delete')
     
     args = parser.parse_args()
     
@@ -905,15 +945,6 @@ def main():
                     break
             if not deleted:
                 print(f"Tool '{args.name}' not found")
-    elif args.command == 'delete-tools':
-        tools = client.list_tools()
-        if not tools:
-            print("No tools found")
-            return
-        print(f"Found {len(tools)} tools. Deleting...")
-        for tool in tools:
-            client.delete_tool(tool.id)
-            print(f"Deleted tool: {tool.name}")
     else:
         parser.print_help()
 
