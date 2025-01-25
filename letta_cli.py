@@ -351,7 +351,7 @@ def delete_all_agents(client):
     """Delete all agents from the server."""
     print("\nFound the following agents:")
     try:
-        agents = client.list_agents()
+        agents = client.agents.list()
         if not agents:
             print("No agents found.")
             return
@@ -384,7 +384,7 @@ def delete_all_agents(client):
         for agent in agents:
             try:
                 print(f"\nDeleting {agent.name}...")
-                client.delete_agent(agent.id)
+                client.agents.delete(agent.id)
                 print(f"Successfully deleted {agent.name}")
                 success_count += 1
             except Exception as e:
