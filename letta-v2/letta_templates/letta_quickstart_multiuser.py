@@ -1,20 +1,10 @@
 import os
 from dotenv import load_dotenv
-from letta import EmbeddingConfig, LLMConfig, ChatMemory, BasicBlockMemory
-from letta.schemas.tool_rule import ToolRule, TerminalToolRule, InitToolRule
-from letta.prompts import gpt_system
 import json
 import time
 import argparse
 from typing import Optional, Any
 import sys
-from letta.schemas.tool import ToolUpdate, Tool
-from letta.schemas.message import (
-    ToolCallMessage, 
-    ToolReturnMessage, 
-    ReasoningMessage, 
-    Message
-)
 from letta_templates.npc_tools import (
     TOOL_REGISTRY,
     MINIMUM_PROMPT,
@@ -32,7 +22,7 @@ from letta_templates.npc_tools import (
     create_personalized_agent_v3,
     create_letta_client
 )
-from letta_templates.npc_test_data import DEMO_BLOCKS  # Add import
+from letta_templates.npc_test_data import DEMO_BLOCKS
 from letta_templates.npc_utils_v2 import (
     print_response,
     extract_message_from_response,
@@ -44,7 +34,19 @@ import asyncio
 import logging
 import inspect
 from textwrap import dedent
-from letta_client import Letta, MessageCreate  # Add MessageCreate import
+from letta_client import (
+    EmbeddingConfig,
+    LlmConfig as LLMConfig,
+    Memory,
+    Block,
+    Tool,
+    ToolCallMessage,
+    ToolReturnMessage,
+    ReasoningMessage,
+    Message,
+    MessageCreate,
+    Letta
+)
 
 # Load environment variables (keeps your custom server URL)
 load_dotenv()
@@ -105,89 +107,6 @@ def print_agent_details(client, agent_id, stage=""):
         print(f"Value: {block.value}")
         print(f"Limit: {block.limit}")
         print("-" * 50)
-
-# def create_roblox_agent(client, name: str, persona: str = None):
-#     """
-#     Create a Letta agent configured for Roblox development assistance.
-    
-#     Args:
-#         client: Letta client instance
-#         name (str): Name for the new agent
-#         persona (str, optional): Custom persona text. If not provided, uses default Roblox expert persona
-    
-#     Returns:
-#         Agent: Created agent object
-    
-#     Example:
-#         >>> agent = create_roblox_agent(
-#         ...     client,
-#         ...     "RobloxHelper",
-#         ...     "You are a Lua optimization expert..."
-#         ... )
-    
-#     Note:
-#         Configures agent with:
-#         - OpenAI embeddings
-#         - GPT-4 model
-#         - Roblox-specific memory configuration
-#         - Base tools enabled
-#     """
-#     # Add timestamp to name to avoid conflicts
-#     timestamp = int(time.time())
-#     unique_name = f"{name}_{timestamp}"
-    
-#     return client.create_agent(
-#         name=unique_name,
-#         embedding_config=EmbeddingConfig(
-#             embedding_endpoint_type="openai",
-#             embedding_endpoint="https://api.openai.com/v1",
-#             embedding_model="text-embedding-ada-002",
-#             embedding_dim=1536,
-#             embedding_chunk_size=300,
-#         ),
-#         llm_config=LLMConfig(
-#             model="gpt-3.5-turbo",
-#             model_endpoint_type="openai",
-#             model_endpoint="https://api.openai.com/v1",
-#             context_window=4000,
-#         ),
-#         memory=ChatMemory(
-#             persona="A helpful NPC guide",
-#             human="A Roblox player exploring the game",
-#             locations={
-#                 "known_locations": [
-#                     {
-#                         "name": "Pete's Stand",
-#                         "description": "A friendly food stand run by Pete",
-#                         "coordinates": [-12.0, 18.9, -127.0],
-#                         "slug": "petes_stand"
-#                     },
-#                     {
-#                         "name": "Town Square",
-#                         "description": "Central gathering place with fountain", 
-#                         "coordinates": [45.2, 12.0, -89.5],
-#                         "slug": "town_square"
-#                     },
-#                     {
-#                         "name": "Market District",
-#                         "description": "Busy shopping area with many vendors",
-#                         "coordinates": [-28.4, 15.0, -95.2],
-#                         "slug": "market_district"
-#                     },
-#                     {
-#                         "name": "Secret Garden",
-#                         "description": "A hidden garden with rare flowers",
-#                         "coordinates": [15.5, 20.0, -110.8]
-#                         # No slug - agent should use coordinates
-#                     }
-#                 ]
-#             }
-#         ),
-#         system=gpt_system.get_system_text("memgpt_chat"),
-#         include_base_tools=True,  # Keep base tools enabled
-#         tools=None,
-#         description="A Roblox development assistant"
-#     )
 
 def update_agent_persona(client, agent_id: str, blocks: dict):
     """Update an agent's memory blocks using new API."""
