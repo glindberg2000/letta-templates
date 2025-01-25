@@ -166,68 +166,76 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
     elif action == "unfollow":
         return "Stopping follow action. Now stationary."
 
-def navigate_to(destination_slug: str, request_heartbeat: bool = True) -> dict:
+def navigate_to(agent_state: "AgentState", destination_slug: str, request_heartbeat: bool = True) -> Optional[str]:
     """Navigate to a known location by slug.
     
     Args:
+        agent_state: Current agent state containing memory
         destination_slug: Must exactly match a slug in locations memory block
         request_heartbeat: Always set True to maintain state awareness
         
     Returns:
-        dict: Navigation result with format:
-            {
-                "status": str,           # "success" or "error" 
-                "message": str,          # Human readable message
-            }
+        Optional[str]: Error message if failed, None if successful
+        
+    Validation:
+        - Verify slug exists in locations memory before calling
+        - Unfollow any targets before navigation
+        - Complete any active examinations first
+        
+    Example:
+        ```python
+        # Verify location exists
+        if destination_slug in locations_memory:
+            # Unfollow if needed
+            perform_action("unfollow", request_heartbeat=True)
+            navigate_to(destination_slug, request_heartbeat=True)
+        ```
     """
-    # Validate slug format (lowercase, no spaces, only alphanumeric + underscore)
+    # Validate slug format (lowercase, no spaces, etc)
     slug = destination_slug.lower().strip()
     if not slug.replace('_', '').isalnum():
-        return {
-            "status": "error",
-            "message": "Please use a valid slug from your locations memory block. Slugs are lowercase with underscores (e.g. 'market_district', 'petes_stand')"
-        }
+        return f"Invalid slug format: {destination_slug}"
+    
+    # Check if slug exists in locations memory
+    if slug not in agent_state.memory.get_block("locations").value["known_locations"]:
+        return f"Location slug '{slug}' not found in locations memory"
     
     return {
         "status": "success",
-        "message": (
-            f"Beginning navigation to {destination_slug}. "
-            "Your status memory block will update with: "
-            "- Current GPS coordinates "
-            "- Next waypoint target "
-            "- Distance to next waypoint "
-            "- Total waypoints remaining "
-            "Current status: In Motion. Navigation system active."
-        )
+        "message": f"Navigating to {destination_slug}",
+        "slug": destination_slug.lower()
     }
 
 def navigate_to_coordinates(x: float, y: float, z: float, request_heartbeat: bool = True) -> dict:
-    """Navigate to specific XYZ coordinates.
+    """
+    Navigate to specific XYZ coordinates.
     
     Args:
         x (float): X coordinate
         y (float): Y coordinate
         z (float): Z coordinate
-        request_heartbeat (bool): Always set True to maintain state awareness
+        request_heartbeat (bool, optional): Request heartbeat after execution. Defaults to True.
         
     Returns:
         dict: Navigation result with format:
             {
-                "status": str,           # "success" or "error" 
+                "status": str,           # "success" or "failure"
                 "message": str,          # Human readable message
+                "coordinates": dict      # {x: float, y: float, z: float}
             }
+    
+    Example:
+        >>> navigate_to_coordinates(15.5, 20.0, -110.8)
+        {
+            "status": "success",
+            "message": "Navigating to coordinates (15.5, 20.0, -110.8)",
+            "coordinates": {"x": 15.5, "y": 20.0, "z": -110.8}
+        }
     """
     return {
         "status": "success",
-        "message": (
-            f"Beginning navigation to coordinates ({x}, {y}, {z}). "
-            "Your status memory block will update with: "
-            "- Current GPS coordinates "
-            "- Next waypoint target "
-            "- Distance to next waypoint "
-            "- Total waypoints remaining "
-            "Current status: In Motion. Navigation system active."
-        )
+        "message": f"Navigating to coordinates ({x}, {y}, {z})",
+        "coordinates": {"x": x, "y": y, "z": z}
     }
 
 
@@ -503,44 +511,32 @@ def update_tool(client, tool_name: str, tool_func, verbose: bool = True) -> str:
         raise
 
 def update_tools(client):
-    """Update tools, only recreating custom tools"""
+    """Update tool definitions"""
     print("\nUpdating tools...")
+    
+    tools_to_update = {
+        "perform_action": perform_action,
+        "group_memory_append": group_memory_append,
+        "group_memory_replace": group_memory_replace
+    }
     
     # Get existing tools
     existing_tools = {t.name: t.id for t in client.list_tools()}
     
-    # Base tools should never be touched
-    base_tools = {
-        "send_message",
-        "conversation_search",
-        "archival_memory_search",
-        "archival_memory_insert",
-        "core_memory_append",
-        "core_memory_replace"
-    }
-    
-    # Only delete and recreate custom tools from TOOL_REGISTRY
-    for tool_name in TOOL_REGISTRY:
+    for tool_name, tool_func in tools_to_update.items():
         try:
-            # Skip if it's a base tool
-            if tool_name in base_tools:
-                print(f"Skipping base tool: {tool_name}")
-                continue
-                
-            # Delete existing custom tool
             if tool_name in existing_tools:
                 print(f"Deleting {tool_name}...")
                 client.delete_tool(existing_tools[tool_name])
-                
-            # Create new custom tool
+            
             print(f"Creating {tool_name}...")
-            tool = client.create_tool(TOOL_REGISTRY[tool_name]["function"], name=tool_name)
-            print(f"Created {tool_name} with ID: {tool.id}")
+            new_tool = client.create_tool(tool_func, name=tool_name)
+            print(f"Created {tool_name} with ID: {new_tool.id}")
             
         except Exception as e:
             print(f"Error updating {tool_name}: {e}")
             raise
-            
+    
     print("\nTool updates complete")
 
 def create_letta_client():
@@ -553,8 +549,7 @@ def create_letta_client():
     )
 
 def create_personalized_agent_v3(
-    name: str,
-    memory_blocks: dict,  # New parameter
+    name: str = "emma_assistant",
     client = None,
     use_claude: bool = False,
     overwrite: bool = False,
@@ -562,20 +557,12 @@ def create_personalized_agent_v3(
     custom_registry = None,
     minimal_prompt: bool = True,
     system_prompt: str = None,
-    prompt_version: str = "DEEPSEEK"
+    prompt_version: str = "DEEPSEEK"  # Add prompt version parameter
 ):
-    """Create agent with provided memory blocks and config
+    """Create a personalized agent with memory and tools using specified prompt version
     
     Args:
-        name: Base name for the agent
-        memory_blocks: Dict of memory block data to initialize agent with:
-            {
-                "persona": {...},
-                "group_members": {...},
-                "locations": {...},
-                "status": {...}
-            }
-        ... (rest of existing args)
+        prompt_version: One of ["DEEPSEEK", "GPT01", "MINIMUM", "FULL"]
     """
     logger = logging.getLogger('letta_test')
     
@@ -637,20 +624,116 @@ def create_personalized_agent_v3(
         embedding_chunk_size=300,
     )
     
-    # Create memory blocks from provided data
     print("\nCreating memory blocks...")
     try:
+        # Create memory blocks with consistent identity
         blocks = []
-        for label, data in memory_blocks.items():
-            print(f"Creating {label} block...")
-            block = client.create_block(
-                label=label,
-                value=json.dumps(data),
-                limit=2500
-            )
-            blocks.append(block)
-            print(f"✓ {label} block created: {block.id}")
-            
+        
+        # Persona block
+        print("Creating persona block...")
+        persona_block = client.create_block(
+            label="persona", 
+            value=f"I am {name}, a friendly and helpful NPC guide. I know this world well and patiently help players explore. I love meeting new players, sharing my knowledge, and helping others in any way I can.",
+            limit=2500
+        )
+        blocks.append(persona_block)
+        print(f"✓ Persona block created: {persona_block.id}")
+        
+        # Group members block
+        print("Creating group_members block...")
+        group_block = client.create_block(
+            label="group_members",
+            value=json.dumps({
+                "members": {
+                    "player123": {
+                        "name": "Alice",
+                        "appearance": "Wearing a red hat and blue shirt", 
+                        "last_location": "Main Plaza",
+                        "last_seen": "2024-01-06T22:30:45Z",
+                        "notes": "Interested in exploring the garden"
+                    },
+                    "bob123": {  # Match the ID we use in test
+                        "name": "Bob",
+                        "appearance": "Tall with green jacket",
+                        "last_location": "Cafe",
+                        "last_seen": "2024-01-06T22:35:00Z", 
+                        "notes": "Looking for Pete's Stand"
+                    },
+                    "charlie123": {
+                        "name": "Charlie",
+                        "appearance": "Wearing a blue cap",
+                        "last_location": "Main Plaza",
+                        "last_seen": "2024-01-06T22:35:00Z",
+                        "notes": "New to the area"
+                    }
+                },
+                "summary": "Alice and Charlie are in Main Plaza, with Alice interested in the garden. Bob is at the Cafe looking for Pete's Stand. Charlie is new and exploring the area.",
+                "updates": ["Alice arrived at Main Plaza", "Bob moved to Cafe searching for Pete's Stand", "Charlie joined and is exploring Main Plaza"],
+                "last_updated": "2024-01-06T22:35:00Z"
+            }),
+            limit=2000
+        )
+        blocks.append(group_block)
+        print(f"✓ Group block created: {group_block.id}")
+        
+        # Locations block
+        print("Creating locations block...")
+        locations_block = client.create_block(
+            label="locations",
+            value=json.dumps({
+                "known_locations": [
+                    {
+                        "name": "Pete's Stand",
+                        "description": "A friendly food stand run by Pete",
+                        "coordinates": [-12.0, 18.9, -127.0],
+                        "slug": "petes_stand"
+                    },
+                    {
+                        "name": "Town Square",
+                        "description": "Central gathering place with fountain", 
+                        "coordinates": [45.2, 12.0, -89.5],
+                        "slug": "town_square"
+                    },
+                    {
+                        "name": "Market District",
+                        "description": "Busy shopping area with many vendors",
+                        "coordinates": [-28.4, 15.0, -95.2],
+                        "slug": "market_district"
+                    },
+                    {
+                        "name": "Secret Garden",
+                        "description": "A hidden garden with rare flowers",
+                        "coordinates": [15.5, 20.0, -110.8],
+                        "slug": "secret_garden"
+                    }
+                ]
+            }),
+            limit=1500
+        )
+        blocks.append(locations_block)
+        print(f"✓ Locations block created: {locations_block.id}")
+        
+        # Status block
+        print("Creating status block...")
+        status_block = client.create_block(
+            label="status",
+            value="You are currently standing idle in the Town Square. You previously haven't moved from this spot. From here, You can see both the bustling Market District and Pete's friendly food stand in the distance. The entire area is part of the Town Square region.",
+            limit=500
+        )
+        blocks.append(status_block)
+        print(f"✓ Status block created: {status_block.id}")
+        
+        # Journal block
+        print("Creating journal block...")
+        journal_block = client.create_block(
+            label="journal",
+            value="",  # Empty string to start
+            limit=2500
+        )
+        blocks.append(journal_block)
+        print(f"✓ Journal block created: {journal_block.id}")
+        
+        # Create memory with blocks
         memory = BasicBlockMemory(blocks=blocks)
         print("\nMemory blocks created successfully")
         
@@ -687,15 +770,12 @@ def create_personalized_agent_v3(
     )
     
     # Add selected base tools first
-    # Base tools should never be touched
-    base_tools = {
+    base_tools = [
         "send_message",
         "conversation_search",
-        "archival_memory_search",
-        "archival_memory_insert",
-        "core_memory_append",
-        "core_memory_replace"
-    }
+        "archival_memory_search",  # Read from memory
+        "archival_memory_insert"   # Write to memory
+    ]
     
     # Get existing tools
     existing_tools = {t.name: t.id for t in client.list_tools()}
@@ -887,7 +967,6 @@ def group_memory_archive(player_id: str, name: str, request_heartbeat: bool = Tr
 TOOL_REGISTRY: Dict[str, Dict] = {
     "navigate_to": {
         "function": navigate_to,
-        "description": "Navigate to a known location",
         "version": "2.0.0",
         "supports_state": True
     },
@@ -918,6 +997,12 @@ TOOL_REGISTRY: Dict[str, Dict] = {
     }
 }
 
+# Production navigation tools
+NAVIGATION_TOOLS: Dict[str, Dict] = {
+    "navigate_to": TOOL_REGISTRY["navigate_to"],
+    "navigate_to_coordinates": TOOL_REGISTRY["navigate_to_coordinates"],
+    "perform_action": TOOL_REGISTRY["perform_action"]
+}
 
 def get_tool(name: str) -> Callable:
     """Get tool function from registry"""

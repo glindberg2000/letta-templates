@@ -32,6 +32,7 @@ from letta_templates.npc_tools import (
     create_personalized_agent_v3,
     create_letta_client
 )
+from letta_templates.npc_test_data import DEMO_BLOCKS  # Add import
 
 
 import requests
@@ -218,20 +219,14 @@ def update_agent_persona(client, agent_id: str, blocks: dict):
             )
 
 def extract_message_from_response(response) -> str:
-    """
-    Extract the actual message content from a LettaResponse object.
-    """
+    """Extract the actual message content from a LettaResponse object."""
     try:
-        if hasattr(response, 'messages'):
-            for message in response.messages:
-                # Look for function calls to send_message
-                if isinstance(message, ToolCallMessage):
-                    function_call = message.tool_call
-                    if function_call and function_call.name == 'send_message':
-                        # Parse the arguments JSON string
-                        import json
-                        args = json.loads(function_call.arguments)
-                        return args.get('message', '')
+        for message in response.messages:
+            if message.message_type == "assistant_message":
+                if isinstance(message.content, str):
+                    return message.content
+                elif isinstance(message.content, list):
+                    return message.content[0].text
         return ''
     except Exception as e:
         print(f"Error extracting message: {e}")
@@ -1798,9 +1793,10 @@ def main():
         print(f"- Using {'minimal' if args.minimal_prompt else 'full'} prompt mode")
         print(f"- LLM: {args.llm}")
         
-        # Create agent ONCE
+        # Create agent ONCE - just update to use DEMO_BLOCKS
         agent = create_personalized_agent_v3(
             name=args.name,
+            memory_blocks=DEMO_BLOCKS,  # Add demo blocks
             client=client,
             use_claude=(args.llm == 'claude'),
             overwrite=args.overwrite,
