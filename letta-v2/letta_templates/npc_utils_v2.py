@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import json
 from datetime import datetime
 import time
@@ -205,3 +205,104 @@ def retry_test_call(func, *args, max_retries=3, delay=2, **kwargs):
             time.sleep(delay)
             delay *= 2  # Exponential backoff
     raise last_error 
+
+def update_location_status(
+    client,
+    agent_id: str,
+    current_location: str,
+    current_action: str = "idle",
+    max_history: int = 5
+) -> Dict:
+    """Update agent's location status with history tracking.
+    
+    Args:
+        client: Letta client instance
+        agent_id: ID of agent to update
+        current_location: Name/slug of current location
+        current_action: Current action (default: "idle")
+        max_history: Max number of previous locations to track
+    """
+    # Get current status
+    status_block = get_memory_block(client, agent_id, "status")
+    
+    # Create new status with history
+    new_status = {
+        "current_location": current_location,
+        "previous_location": status_block.get("current_location"),
+        "current_action": current_action,
+        "movement_state": "stationary" if current_action == "idle" else "moving",
+        "location_history": (
+            [status_block.get("current_location")] + 
+            status_block.get("location_history", [])
+        )[:max_history]
+    }
+    
+    # Update status block
+    update_memory_block(client, agent_id, "status", new_status)
+    return new_status
+
+def update_group_members_v2(
+    client,
+    agent_id: str,
+    players: List[Dict],
+    max_updates: int = 10
+) -> Dict:
+    """Enhanced group member tracking with history.
+    
+    Args:
+        client: Letta client instance
+        agent_id: ID of agent to update
+        players: List of player dicts with:
+            - id: Player ID
+            - name: Player name
+            - appearance: (optional) Description
+            - location: (optional) Current location
+            - notes: (optional) Additional notes
+        max_updates: Max number of group changes to track
+    """
+    # Get current group data
+    group = get_memory_block(client, agent_id, "group_members")
+    current_members = set(group.get("members", {}).keys())
+    new_members = set(p["id"] for p in players)
+    
+    # Track changes
+    joined = new_members - current_members
+    left = current_members - new_members
+    
+    # Build updates list
+    timestamp = datetime.utcnow().isoformat()
+    updates = group.get("updates", [])
+    
+    if joined:
+        updates.insert(0, f"{', '.join(sorted(joined))} joined the group at {timestamp}")
+    if left:
+        updates.insert(0, f"{', '.join(sorted(left))} left the group at {timestamp}")
+    
+    # Update group data
+    new_group = {
+        "members": {
+            p["id"]: {
+                "name": p["name"],
+                "appearance": p.get("appearance", ""),
+                "last_location": p.get("location", "unknown"),
+                "last_seen": timestamp,
+                "notes": p.get("notes", "")
+            } for p in players
+        },
+        "summary": f"Current members: {', '.join(p['name'] for p in players)}",
+        "updates": updates[:max_updates],
+        "last_updated": timestamp
+    }
+    
+    update_memory_block(client, agent_id, "group_members", new_group)
+    return new_group
+
+def get_location_history(client, agent_id: str) -> List[str]:
+    """Get agent's location history."""
+    status = get_memory_block(client, agent_id, "status")
+    return status.get("location_history", [])
+
+def get_group_history(client, agent_id: str) -> List[str]:
+    """Get recent group membership changes."""
+    group = get_memory_block(client, agent_id, "group_members")
+    return group.get("updates", []) 
