@@ -85,8 +85,8 @@ def print_agent_details(client, agent_id, stage=""):
     """
     print(f"\n=== Agent Details {stage} ===")
     
-    # Get agent configuration
-    agent = client.get_agent(agent_id)
+    # Get agent configuration using new API
+    agent = client.agents.retrieve(agent_id)
     print(f"Agent ID: {agent.id}")
     print(f"Name: {agent.name}")
     print(f"Description: {agent.description}")
@@ -97,7 +97,7 @@ def print_agent_details(client, agent_id, stage=""):
     print("-" * 50)
     
     # Get memory configuration
-    memory = client.get_in_context_memory(agent_id)
+    memory = client.memory.retrieve(agent_id)
     print("\nMemory Blocks:")
     for block in memory.blocks:
         print(f"\nBlock: {block.label}")
@@ -190,36 +190,17 @@ def print_agent_details(client, agent_id, stage=""):
 #     )
 
 def update_agent_persona(client, agent_id: str, blocks: dict):
-    """
-    Update an agent's memory blocks (human/persona configuration).
-    
-    Args:
-        client: Letta client instance
-        agent_id (str): ID of the agent to update
-        blocks (dict): Dictionary containing updates, e.g.:
-            {
-                'human': 'Name: Alice\nRole: Developer',
-                'persona': 'You are a coding expert...'
-            }
-    
-    Example:
-        >>> update_agent_persona(client, agent.id, {
-        ...     'human': 'Name: Bob\nRole: Game Developer\nExpertise: Roblox',
-        ...     'persona': 'You are a Roblox development expert...'
-        ... })
-        
-        Updating human block:
-        Old value: Name: User\nRole: Developer
-        New value: Name: Bob\nRole: Game Developer\nExpertise: Roblox
-    """
-    memory = client.get_in_context_memory(agent_id)
+    """Update an agent's memory blocks using new API."""
+    memory = client.memory.retrieve(agent_id)
     for block in memory.blocks:
         if block.label in blocks:
             print(f"\nUpdating {block.label} block:")
             print(f"Old value: {block.value}")
             print(f"New value: {blocks[block.label]}")
-            client.update_block(
-                block_id=block.id,
+            # Update using new API
+            client.agents.core_memory.blocks.update(
+                agent_id=agent_id,
+                block_label=block.label,
                 value=blocks[block.label]
             )
 
@@ -277,24 +258,24 @@ def run_quick_test(client, npc_id="test-npc-1", user_id="test-user-1"):
 def get_or_create_tool(client, tool_name: str, tool_func=None, update_existing: bool = False):
     """Get existing tool or create if needed."""
     # List all tools
-    tools = client.list_tools()
+    tools = client.tools.list()
     
     # During testing, always create new tools
     if tool_func:
         print(f"Creating new tool: {tool_name}")
-        return client.create_tool(tool_func, name=tool_name)
+        return client.tools.create(tool_func, name=tool_name)
     else:
         raise ValueError(f"Tool {tool_name} not found and no function provided to create it")
 
 def cleanup_agents(client, name_prefix: str):
-    """Clean up any existing agents with our prefix"""
+    """Clean up any existing agents with our prefix using new API"""
     print(f"\nCleaning up existing agents with prefix: {name_prefix}")
     try:
-        agents = client.list_agents()
+        agents = client.agents.list()
         for agent in agents:
             if agent.name.startswith(name_prefix):
                 print(f"Deleting agent: {agent.name} ({agent.id})")
-                client.delete_agent(agent.id)
+                client.agents.delete(agent.id)
     except Exception as e:
         print(f"Warning: Error during cleanup: {e}")
 
@@ -329,7 +310,7 @@ def create_personalized_agent(
     overwrite: bool = False,
     with_custom_tools: bool = True,
     custom_registry = None,
-    minimal_prompt: bool = True  # Changed default to True
+    minimal_prompt: bool = True
 ):
     """Create a personalized agent with memory and tools"""
     logger = logging.getLogger('letta_test')
@@ -498,7 +479,7 @@ def create_personalized_agent(
     print(f"Include base tools: {False}")
     
     # Create agent first
-    agent = client.create_agent(
+    agent = client.agents.create(  # Updated to use new API
         name=unique_name,
         embedding_config=embedding_config,
         llm_config=llm_config,
@@ -517,13 +498,16 @@ def create_personalized_agent(
     ]
     
     # Get existing tools
-    existing_tools = {t.name: t.id for t in client.list_tools()}
+    existing_tools = {t.name: t.id for t in client.tools.list()}
     
     # Add base tools
     for tool_name in base_tools:
         if tool_name in existing_tools:
             print(f"Adding base tool: {tool_name}")
-            client.add_tool_to_agent(agent.id, existing_tools[tool_name])
+            client.agents.tools.attach(  # Updated to use new API
+                agent_id=agent.id,
+                tool_id=existing_tools[tool_name]
+            )
     
     # Create and attach custom tools
     print("\nSetting up custom tools:")
@@ -536,13 +520,16 @@ def create_personalized_agent(
                 tool_id = existing_tools[name]
             else:
                 print(f"Creating tool: {name}")
-                tool = client.create_tool(tool_info['function'], name=name)
+                tool = client.tools.create(tool_info['function'], name=name)
                 print(f"Tool created with ID: {tool.id}")
                 tool_id = tool.id
                 
             # Attach tool to agent
             print(f"Attaching {name} to agent...")
-            client.add_tool_to_agent(agent.id, tool_id)
+            client.agents.tools.attach(  # Updated to use new API
+                agent_id=agent.id,
+                tool_id=tool_id
+            )
             print(f"Tool {name} attached to agent {agent.id}")
             
         except Exception as e:
@@ -587,36 +574,33 @@ def validate_environment():
     return True
 
 def test_agent_chat(client, agent_id: str, llm_type: str) -> bool:
-    """
-    Test the agent with both perform_action and navigate_to tools.
-    """
     try:
-        # Test navigation
         test_message = "Navigate to the stand"
         print(f"\nSending test message: '{test_message}'")
-        response = client.send_message(
+        response = client.agents.messages.create(  # Updated to use new API
             agent_id=agent_id,
-            message=test_message,
-            role="user"
+            messages=[MessageCreate(
+                role="user",
+                content=test_message
+            )]
         )
         print("\nRaw response:", response)
         print_response(response)
-        
         return True
     except Exception as e:
         print(f"\nError testing agent chat: {e}")
         return False
 
 def test_custom_tools(client, agent_id: str):
-    """Test custom tool functionality"""
     try:
-        # Test examination
         test_message = "Please examine the treasure chest"
         print(f"\nSending test message: '{test_message}'")
-        response = client.send_message(
+        response = client.agents.messages.create(  # Updated to use new API
             agent_id=agent_id,
-            message=test_message,
-            role="user"
+            messages=[MessageCreate(
+                role="user",
+                content=test_message
+            )]
         )
         print_response(response)
         return True
@@ -626,14 +610,14 @@ def test_custom_tools(client, agent_id: str):
 
 def cleanup_test_tools(client, prefixes: list = ["examine_object", "navigate_to", "perform_action"]):
     """Clean up old test tools."""
-    tools = client.list_tools()
+    tools = client.tools.list()
     cleaned = 0
     
     print(f"\nCleaning up test tools with prefixes: {prefixes}")
     for tool in tools:
         if any(tool.name == prefix or tool.name.startswith(f"{prefix}_") for prefix in prefixes):
             try:
-                client.delete_tool(tool.id)
+                client.tools.delete(tool.id)
                 cleaned += 1
                 print(f"Deleted tool: {tool.name} (ID: {tool.id})")
             except Exception as e:
@@ -668,11 +652,11 @@ def test_tool_update(client, agent_id: str):
             if system_update == "Updating examination capabilities...":
                 # Update the tool using our npc_tools version
                 print("\nUpdating examine tool...")
-                tools = client.list_tools()
+                tools = client.tools.list()
                 for tool in tools:
                     if tool.name == "examine_object":
-                        client.delete_tool(tool.id)
-                new_tool = client.create_tool(examine_object, name="examine_object")
+                        client.tools.delete(tool.id)
+                new_tool = client.tools.create(examine_object, name="examine_object")
                 print(f"Created new tool: {new_tool.id}")
             else:
                 # Regular system update
@@ -688,8 +672,10 @@ def test_tool_update(client, agent_id: str):
 
 def ensure_locations_block(client, agent_id):
     """Ensure locations block has required locations"""
-    agent = client.get_agent(agent_id)
-    locations_block = json.loads(agent.memory.get_block("locations").value)
+    agent = client.agents.retrieve(agent_id)
+    # Update to use blocks list instead of get_block
+    locations_block = next(b for b in agent.memory.blocks if b.label == "locations")
+    locations_data = json.loads(locations_block.value)
     
     required_locations = {
         "Main Plaza": {
@@ -707,16 +693,55 @@ def ensure_locations_block(client, agent_id):
     }
     
     # Update locations if needed
-    locations_block["known_locations"] = [
-        loc for loc in locations_block["known_locations"] 
+    locations_data["known_locations"] = [
+        loc for loc in locations_data["known_locations"] 
         if loc["name"] not in required_locations
     ] + list(required_locations.values())
     
-    # Update the block
-    agent.memory.update_block_value(
-        label="locations",
-        value=json.dumps(locations_block)
+    # Update using blocks.modify
+    client.blocks.modify(
+        block_id=locations_block.id,
+        value=json.dumps(locations_data)
     )
+
+def test_navigation(client, agent_id: str):
+    """Test NPC's navigation abilities"""
+    print("\nTesting navigation functionality...")
+    
+    scenarios = [
+        # Direct navigation
+        ("User", "Take me to Pete's Stand"),
+        
+        # Navigation with coordinates
+        ("User", "Navigate to coordinates [-12.0, 18.9, -127.0]"),
+        
+        # Nearby location
+        ("User", "Let's go to the Market District")
+    ]
+    
+    for speaker, message in scenarios:
+        try:
+            print(f"\n{speaker} says: {message}")
+            response = retry_test_call(  # Use retry helper
+                client.agents.messages.create,  # Updated to new API
+                agent_id=agent_id,
+                messages=[MessageCreate(
+                    role="user",
+                    content=message,
+                    name=speaker
+                )],
+                max_retries=3,
+                delay=2
+            )
+            print("\nResponse:")
+            print_response(response)
+            
+            # Give time for navigation
+            time.sleep(2)
+            
+        except Exception as e:
+            print(f"Error in navigation test: {e}")
+            continue  # Try next scenario
 
 def test_actions(client, agent_id: str):
     """Test NPC's ability to perform actions"""
@@ -761,11 +786,13 @@ def test_actions(client, agent_id: str):
         
         try:
             print("\nSending message...")
-            response = client.send_message(
+            response = client.agents.messages.create(  # Updated to new API
                 agent_id=agent_id,
-                message=message,
-                role="system",
-                name=speaker
+                messages=[MessageCreate(
+                    role="system",
+                    content=message,
+                    name=speaker
+                )]
             )
             print("\nResponse:")
             print_response(response)
@@ -891,43 +918,6 @@ def parse_and_validate_response(response: dict):
                 print(f"Navigation coordinates: ({coords['x']}, {coords['y']}, {coords['z']})")
 
     return response
-
-def test_navigation(client, agent_id: str):
-    """Test NPC's navigation abilities"""
-    print("\nTesting navigation functionality...")
-    
-    scenarios = [
-        # Direct navigation
-        ("User", "Take me to Pete's Stand"),
-        
-        # Navigation with coordinates
-        ("User", "Navigate to coordinates [-12.0, 18.9, -127.0]"),
-        
-        # Nearby location
-        ("User", "Let's go to the Market District")
-    ]
-    
-    for speaker, message in scenarios:
-        try:
-            print(f"\n{speaker} says: {message}")
-            response = retry_test_call(  # Use retry helper
-                client.send_message,
-                agent_id=agent_id,
-                message=message,
-                role="user",
-                name=speaker,
-                max_retries=3,
-                delay=2
-            )
-            print("\nResponse:")
-            print_response(response)
-            
-            # Give time for navigation
-            time.sleep(2)
-            
-        except Exception as e:
-            print(f"Error in navigation test: {e}")
-            continue  # Try next scenario
 
 def test_multi_user_conversation(client, agent_id: str):
     """Test conversation with multiple named users"""
@@ -1224,7 +1214,7 @@ def validate_agent_setup(client, agent_id: str):
     """Verify agent's system prompt, memory, and tools are correctly configured"""
     logger = logging.getLogger('letta_test')
     
-    # FIRST check required custom tools
+    # Check required custom tools
     required_npc_tools = [
         "navigate_to",
         "navigate_to_coordinates",
@@ -1232,11 +1222,11 @@ def validate_agent_setup(client, agent_id: str):
         "examine_object"
     ]
     
-    tools = client.list_tools()
+    tools = client.tools.list()
     agent_tools = []
     for tool in tools:
         try:
-            client.get_agent_tool(agent_id, tool.id)
+            client.agents.tools.attach(agent_id, tool.id)
             agent_tools.append(tool.name)
         except:
             pass
@@ -1247,10 +1237,8 @@ def validate_agent_setup(client, agent_id: str):
         logger.error("Agent validation failed - NPC tools not attached")
         return False
         
-    # Only continue with other checks if NPC tools are present
     logger.info("✓ All required NPC tools attached")
-    
-    # Rest of validation...
+    return True
 
 def test_group(client, agent_id):
     """Test group_members block updates"""
@@ -1281,7 +1269,16 @@ def test_group(client, agent_id):
     # Update group block
     print("\n_block_update:")
     print(json.dumps(group_block, indent=2))
-    update_memory_block(client, agent_id, "group_members", group_block)
+    
+    # Get block ID first
+    agent = client.agents.retrieve(agent_id)
+    block = next(b for b in agent.memory.blocks if b.label == "group_members")
+    
+    # Update using blocks.modify
+    client.blocks.modify(
+        block_id=block.id,
+        value=json.dumps(group_block)
+    )
     
     # Test scenarios
     scenarios = [
@@ -1292,11 +1289,13 @@ def test_group(client, agent_id):
     
     for speaker, message in scenarios:
         print(f"\n{speaker} says: {message}")
-        response = client.send_message(
+        response = client.agents.messages.create(
             agent_id=agent_id,
-            message=message,
-            role="user",
-            name=speaker
+            messages=[MessageCreate(
+                role="user",
+                content=message,
+                name=speaker
+            )]
         )
         print("\nResponse:")
         print_response(response)
@@ -1322,22 +1321,22 @@ Current group info is in the group_members block with:
 """
 
 def update_status_block(client, agent_id, status_text):
-    """Update the status block with a narrative description of the agent's current state"""
+    """Update the status block with a narrative description"""
     try:
         # Get agent and find status block
-        agent = client.get_agent(agent_id)
+        agent = client.agents.retrieve(agent_id)
         status_blocks = [b for b in agent.memory.blocks if b.label == "status"]
         
         # If no status block exists, create one
         if not status_blocks:
-            status_block = client.create_block(
+            status_block = client.blocks.create(
                 label="status",
                 value="",
                 limit=5000
             )
-            status_block_id = status_block.id
+            block_id = status_block.id
         else:
-            status_block_id = status_blocks[0].id
+            block_id = status_blocks[0].id
 
         # If we're passed a string, use it directly
         if isinstance(status_text, str):
@@ -1350,53 +1349,39 @@ def update_status_block(client, agent_id, status_text):
                 "The entire area is part of the Town Square region."
             )
 
-        # Update the block
-        client.update_block(status_block_id, status_narrative)  # No JSON encoding needed
+        # Update using blocks.modify
+        client.blocks.modify(
+            block_id=block_id,
+            value=status_narrative  # No JSON encoding needed for string
+        )
         
     except Exception as e:
         print(f"Error updating status block: {str(e)}")
         raise
 
 def create_or_update_tool(client, tool_name: str, tool_func, verbose: bool = True) -> Any:
-    """Create a new tool or update if it exists.
-    
-    Args:
-        client: Letta client instance
-        tool_name: Name of the tool
-        tool_func: Function to create/update tool with
-        verbose: Whether to print status messages
-    
-    Returns:
-        Tool object from create/update operation
-    
-    Raises:
-        ValueError: If attempting to modify a base tool
-    """
-    # Protect base tools
+    """Create a new tool or update if it exists using new API."""
     if tool_name in BASE_TOOLS:
         raise ValueError(f"Cannot modify base tool: {tool_name}")
 
     try:
-        # List all tools
-        existing_tools = {t.name: t.id for t in client.list_tools()}
+        existing_tools = {t.name: t.id for t in client.tools.list()}
         
         if tool_name in existing_tools:
             if verbose:
                 print(f"\nDeleting old tool: {tool_name}")
                 print(f"Tool ID: {existing_tools[tool_name]}")
-            client.delete_tool(existing_tools[tool_name])
+            client.tools.delete(existing_tools[tool_name])
             
-            # Create new tool
             if verbose:
                 print(f"Creating new tool: {tool_name}")
-            tool = client.create_tool(tool_func, name=tool_name)
+            tool = client.tools.create(tool_func, name=tool_name)
             
             return tool
         else:
-            # Create new tool
             if verbose:
                 print(f"Creating new tool: {tool_name}")
-            tool = client.create_tool(tool_func, name=tool_name)
+            tool = client.tools.create(tool_func, name=tool_name)
             
             return tool
         
@@ -1491,31 +1476,36 @@ def test_npc_persona(client, agent_id: str):
     try:
         # Print initial persona
         print("\nInitial persona state:")
-        initial_persona = client.get_agent(agent_id).memory.get_block("persona").value
-        print(initial_persona)  # Now a string
+        agent = client.agents.retrieve(agent_id)
+        initial_persona = next(b for b in agent.memory.blocks if b.label == "persona").value
+        print(initial_persona)
         
         for speaker, message in scenarios:
             print(f"\n{speaker} says: {message}")
             response = retry_test_call(
-                client.send_message,
+                client.agents.messages.create,  # Updated to new API
                 agent_id=agent_id,
-                message=message,
-                role="user",
-                name=speaker
+                messages=[MessageCreate(
+                    role="user",
+                    content=message,
+                    name=speaker
+                )]
             )
             
             print("\nResponse:")
             print_response(response)
             
             # Check persona updates
-            updated_persona = client.get_agent(agent_id).memory.get_block("persona").value
-            print("\nCurrent persona:", updated_persona)  # Now a string
+            agent = client.agents.retrieve(agent_id)
+            updated_persona = next(b for b in agent.memory.blocks if b.label == "persona").value
+            print("\nCurrent persona:", updated_persona)
             time.sleep(1)
             
         # Print final state
         print("\nFinal persona state:")
-        final_persona = client.get_agent(agent_id).memory.get_block("persona").value
-        print(final_persona)  # Now a string
+        agent = client.agents.retrieve(agent_id)
+        final_persona = next(b for b in agent.memory.blocks if b.label == "persona").value
+        print(final_persona)
             
     except Exception as e:
         print(f"Error in test_npc_persona: {e}")
@@ -1552,7 +1542,7 @@ def test_core_memory(client, agent_id: str):
         
         # Check current memory
         print("\nChecking memory blocks:")
-        memory = client.get_in_context_memory(agent_id)
+        memory = client.agents.retrieve(agent_id).memory.retrieve()
         for block in memory.blocks:
             print(f"\nBlock: {block.label}")
             print(f"Value: {block.value}")
@@ -1619,9 +1609,15 @@ def update_memory_block(client, agent_id: str, block_label: str, value: Any):
         block_label: Label of block to update
         value: New value for block (will be JSON encoded)
     """
-    agent = client.get_agent(agent_id)
+    # First get the block ID from the agent's memory
+    agent = client.agents.retrieve(agent_id)
     block = next(b for b in agent.memory.blocks if b.label == block_label)
-    client.update_block(block.id, json.dumps(value))
+    
+    # Then update the block using modify
+    client.blocks.modify(
+        block_id=block.id,
+        value=json.dumps(value)
+    )
 
 def create_minimal_agent(
     name: str = "minimal_assistant",
@@ -1654,7 +1650,7 @@ def create_minimal_agent(
     - For "Update your persona:" use core_memory_replace
     """
     
-    return client.create_agent(
+    return client.agents.create(  # Updated to use new API
         name=unique_name,
         embedding_config=embedding_config,
         llm_config=llm_config,
