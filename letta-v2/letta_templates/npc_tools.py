@@ -260,29 +260,13 @@ def test_echo(message: str) -> str:
     """
     return f"[TEST_ECHO_V3] {message} (echo...Echo...ECHO!)"
 
-def group_memory_append(agent_state: "AgentState", player_name: str, note: str, 
-                       request_heartbeat: bool = True) -> Optional[str]:
-    """Add a note about a player to group memory.
+def group_memory_append(player_name: str, note: str, request_heartbeat: bool = True) -> None:
+    """Append a note about a player to group memory.
     
     Args:
-        agent_state: Current agent state containing memory
-        player_name: Must exactly match a name in group_members
-        note: New observation to add
-        request_heartbeat: Always set True
-        
-    Returns:
-        Optional[str]: Error message if failed, None if successful
-        
-    Validation:
-        - Verify player exists in group_members
-        - Only add directly observed information
-        - Keep notes concise and factual
-        
-    Example:
-        ```python
-        if player_name in group_members:
-            group_memory_append(player_name, "Prefers crystal weapons", request_heartbeat=True)
-        ```
+        player_name (str): Name of the player to add note for
+        note (str): Note to append to player's memory
+        request_heartbeat (bool, optional): Whether to request heartbeat. Defaults to True.
     """
     import json
     from datetime import datetime
@@ -314,45 +298,13 @@ def group_memory_append(agent_state: "AgentState", player_name: str, note: str,
         print(f"Error in group_memory_append: {e}")
         return f"Failed to append note: {str(e)}"
 
-def group_memory_replace(agent_state: "AgentState", player_name: str, old_note: str, 
-                        new_note: str, request_heartbeat: bool = True) -> Optional[str]:
-    """Replace a player's note in group memory with exact string matching.
+def group_memory_replace(player_name: str, note: str, request_heartbeat: bool = True) -> None:
+    """Replace a player's note in group memory.
     
     Args:
-        agent_state: Current agent state containing memory
-        player_name: Must exactly match a name in group_members
-        old_note: Must EXACTLY match existing note string
-        new_note: New note to replace the old one
-        request_heartbeat: Always set True
-        
-    Returns:
-        Optional[str]: Error message if failed, None if successful
-        
-    Validation:
-        - Verify player exists in group_members
-        - old_note must match EXACTLY (case-sensitive)
-        - Will fail if old_note doesn't match perfectly
-        
-    Example:
-        ```python
-        # Get current note first
-        current_note = "Interested in exploring the garden"  # Must be exact string
-        
-        # Then replace with new note
-        if player_name in group_members["members"]:
-            group_memory_replace(
-                agent_state,
-                "Alice", 
-                current_note,  # Must match exactly
-                "Now interested in crystal weapons instead of the garden",
-                request_heartbeat=True
-            )
-        ```
-        
-    Common Errors:
-        - Partial matches won't work: "interested in garden" != "Interested in exploring the garden"
-        - Case sensitive: "interested" != "Interested"
-        - Extra spaces matter: "garden " != "garden"
+        player_name (str): Name of the player to update
+        note (str): New note to replace existing note
+        request_heartbeat (bool, optional): Whether to request heartbeat. Defaults to True.
     """
     import json
     from datetime import datetime
@@ -371,10 +323,10 @@ def group_memory_replace(agent_state: "AgentState", player_name: str, old_note: 
             return f"Player {player_name} not found"
             
         # Replace in notes field
-        if old_note not in block["members"][player_id]["notes"]:
-            return f"Note '{old_note}' not found in player's notes"
+        if note not in block["members"][player_id]["notes"]:
+            return f"Note '{note}' not found in player's notes"
             
-        block["members"][player_id]["notes"] = block["members"][player_id]["notes"].replace(old_note, new_note)
+        block["members"][player_id]["notes"] = block["members"][player_id]["notes"].replace(note, note)
         
         # Update timestamp
         block["last_updated"] = datetime.now().isoformat()

@@ -1,6 +1,14 @@
+"""
+Letta Quickstart Template
+Version: 0.9.2
+
+This template provides a basic structure for creating Letta agents with memory blocks and tools.
+It includes functions for creating agents, updating memory blocks, and sending messages.
+"""
+
 import os
 from dotenv import load_dotenv
-from letta import EmbeddingConfig, LLMConfig, ChatMemory, BasicBlockMemory
+from letta import EmbeddingConfig, LLMConfig, create_client, ChatMemory, BasicBlockMemory
 from letta.schemas.tool_rule import ToolRule, TerminalToolRule, InitToolRule
 from letta.prompts import gpt_system
 import json
@@ -27,26 +35,17 @@ from letta_templates.npc_tools import (
     navigate_to_coordinates,
     perform_action,
     examine_object,
-    test_echo,
-    update_tools,
-    create_personalized_agent_v3,
-    create_letta_client
+    test_echo
 )
-from letta_templates.npc_test_data import DEMO_BLOCKS  # Add import
-from letta_templates.npc_utils_v2 import (
-    print_response,
-    extract_message_from_response,
-    retry_test_call
-)
-
 import requests
 import asyncio
+# from concurrent.futures import ThreadPoolExecutor
 import logging
 import inspect
 from textwrap import dedent
-from letta_client import Letta, MessageCreate  # Add MessageCreate import
+from letta_templates.npc_utils import create_memory_blocks
 
-# Load environment variables (keeps your custom server URL)
+# Load environment variables
 load_dotenv()
 
 BASE_TOOLS = {
@@ -57,6 +56,32 @@ BASE_TOOLS = {
     "core_memory_append",
     "core_memory_replace"
 }
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger('letta_debug')
+
+def log_tool_usage(tool_name: str, args: dict, result: dict):
+    """Log tool calls and results"""
+    logger.info(f"\nTool Call: {tool_name}")
+    logger.info(f"Arguments: {json.dumps(args, indent=2)}")
+    logger.info(f"Result: {json.dumps(result, indent=2)}")
+
+def log_memory_update(block_name: str, old_value: dict, new_value: dict):
+    """Log memory block changes"""
+    logger.info(f"\nMemory Update: {block_name}")
+    logger.info("Previous state:")
+    logger.info(json.dumps(old_value, indent=2))
+    logger.info("New state:")
+    logger.info(json.dumps(new_value, indent=2))
+
+def log_agent_reasoning(agent_id: str, thought_process: str):
+    """Log agent's decision making"""
+    logger.info(f"\nAgent {agent_id} reasoning:")
+    logger.info(thought_process)
 
 def print_agent_details(client, agent_id, stage=""):
     """
@@ -223,13 +248,62 @@ def update_agent_persona(client, agent_id: str, blocks: dict):
                 value=blocks[block.label]
             )
 
+def extract_message_from_response(response) -> str:
+    """
+    Extract the actual message content from a LettaResponse object.
+    """
+    try:
+        if hasattr(response, 'messages'):
+            for message in response.messages:
+                # Look for function calls to send_message
+                if isinstance(message, ToolCallMessage):
+                    function_call = message.tool_call
+                    if function_call and function_call.name == 'send_message':
+                        # Parse the arguments JSON string
+                        import json
+                        args = json.loads(function_call.arguments)
+                        return args.get('message', '')
+        return ''
+    except Exception as e:
+        print(f"Error extracting message: {e}")
+        return ''
+
+def chat_with_agent(client, agent_id: str, message: str, role: str = "user", name: str = None) -> str:
+    """
+    Send a chat message to an agent and return the response.
+    """
+    try:
+        # Send message and get response
+        response = client.send_message(
+            agent_id=agent_id,
+            message=message,
+            role=role,
+            name=name
+        )
+        
+        # Extract the actual message content
+        return extract_message_from_response(response)
+        
+    except Exception as e:
+        print(f"Error in chat_with_agent: {e}")
+        raise
+
 def create_letta_client():
-    """Create Letta client instance"""
-    base_url = os.getenv("LETTA_BASE_URL", "http://localhost:8283")
-    print("\nLetta Quickstart Configuration:")
-    print(f"Base URL: {base_url}")
-    print("-" * 50 + "\n")
-    return Letta(base_url=base_url)  # Use new Letta client
+    """Create Letta client with configuration"""
+    base_url = os.getenv("LETTA_BASE_URL")  # Remove localhost default
+    if not base_url:
+        raise ValueError("LETTA_BASE_URL must be set in environment")
+        
+    logger = logging.getLogger('letta_test')
+    
+    logger.info("="*50)
+    logger.info("LETTA SERVER CONFIGURATION")
+    logger.info("="*50)
+    logger.info(f"Environment LETTA_BASE_URL: {base_url}")
+    logger.info(f"Using base URL: {base_url}")
+    logger.info("="*50)
+    
+    return create_client(base_url=base_url)
 
 def run_quick_test(client, npc_id="test-npc-1", user_id="test-user-1"):
     """Run test sequence with identifiable messages."""
@@ -324,19 +398,24 @@ def create_group_tools():
 
 def create_personalized_agent(
     name: str = "emma_assistant",
-    client = None,
-    use_claude: bool = False,
+    client=None,
     overwrite: bool = False,
     with_custom_tools: bool = True,
-    custom_registry = None,
-    minimal_prompt: bool = True  # Changed default to True
+    custom_registry=None,
+    minimal_prompt: bool = True,
+    memory_blocks: dict = None,
+    llm_config=None,
+    system_prompt=None
 ):
-    """Create a personalized agent with memory and tools"""
+    """Create a personalized agent with memory blocks and tools."""
     logger = logging.getLogger('letta_test')
     
     if client is None:
         client = create_letta_client()
-        
+
+    if not memory_blocks:
+        raise ValueError("memory_blocks parameter is required")
+
     # Clean up existing agents if overwrite is True
     if overwrite:
         cleanup_agents(client, name)
@@ -345,41 +424,34 @@ def create_personalized_agent(
     timestamp = int(time.time())
     unique_name = f"{name}_{timestamp}"
     
-    # Format base prompt with assistant name
-    base_system = BASE_PROMPT.format(assistant_name=name)
+    # Default system prompt logic
+    if system_prompt is None:
+        if minimal_prompt:
+            logger.info(f"Using MINIMUM_PROMPT (minimal_prompt={minimal_prompt})")
+            system_prompt = MINIMUM_PROMPT.format(assistant_name=name)
+        else:
+            logger.info(f"Using full prompt (minimal_prompt={minimal_prompt})")
+            base_system = BASE_PROMPT.format(assistant_name=name)
+            system_prompt = (
+                base_system +
+                "\n\n" + TOOL_INSTRUCTIONS +
+                "\n\n" + SOCIAL_AWARENESS_PROMPT +
+                "\n\n" + GROUP_AWARENESS_PROMPT +
+                "\n\n" + LOCATION_AWARENESS_PROMPT
+            )
     
-    # Use minimal prompt for testing if requested
-    if minimal_prompt:
-        logger.info(f"Using MINIMUM_PROMPT (minimal_prompt={minimal_prompt})")
-        system_prompt = MINIMUM_PROMPT.format(assistant_name=name)
-    else:
-        logger.info(f"Using full prompt (minimal_prompt={minimal_prompt})")
-        system_prompt = (
-            base_system +
-            "\n\n" + TOOL_INSTRUCTIONS +
-            "\n\n" + SOCIAL_AWARENESS_PROMPT +
-            "\n\n" + GROUP_AWARENESS_PROMPT +
-            "\n\n" + LOCATION_AWARENESS_PROMPT
-        )
-    
-    # Log what we're using
-    logger.info("\nSystem prompt components:")
-    if minimal_prompt:
-        logger.info(f"Using MINIMUM_PROMPT: {len(system_prompt)} chars")
-    else:
-        logger.info(f"1. Base system: {len(base_system)} chars")
-        logger.info(f"2. TOOL_INSTRUCTIONS: {len(TOOL_INSTRUCTIONS)} chars")
-        logger.info(f"3. SOCIAL_AWARENESS_PROMPT: {len(SOCIAL_AWARENESS_PROMPT)} chars")
-        logger.info(f"4. LOCATION_AWARENESS_PROMPT: {len(LOCATION_AWARENESS_PROMPT)} chars")
-    
-    # Create configs first
-    llm_config = LLMConfig(
-        model="gpt-4o-mini",
-        model_endpoint_type="openai",
-        model_endpoint="https://api.openai.com/v1",
-        context_window=128000,
+    # Default LLM configuration
+    default_llm_config = LLMConfig(
+        model=os.getenv("LETTA_MODEL", "gpt-4o-mini"),  # Get from env or use default
+        context_window=int(os.getenv("LETTA_CONTEXT_WINDOW", "32000")),
+        model_endpoint_type=os.getenv("LETTA_ENDPOINT_TYPE", "openai"),
+        model_endpoint=os.getenv("LETTA_MODEL_ENDPOINT", "https://api.openai.com/v1")
     )
-    
+
+    # Use provided configuration or default
+    llm_config = llm_config or default_llm_config
+
+    # Embedding configuration
     embedding_config = EmbeddingConfig(
         embedding_endpoint_type="openai",
         embedding_endpoint="https://api.openai.com/v1",
@@ -387,103 +459,13 @@ def create_personalized_agent(
         embedding_dim=1536,
         embedding_chunk_size=300,
     )
-    
 
-    
     # Create memory blocks with consistent identity
-    memory = BasicBlockMemory(
-        blocks=[
-            client.create_block(
-                label="persona", 
-                value=f"I am {name}, a friendly and helpful NPC guide. I know this world well and patiently help players explore. I love meeting new players, sharing my knowledge, and helping others in any way I can.",
-                limit=2500
-            ),
-            client.create_block(
-                label="group_members",
-                value=json.dumps({
-                    "members": {
-                        "player123": {
-                            "name": "Alice",
-                            "appearance": "Wearing a red hat and blue shirt", 
-                            "last_location": "Main Plaza",
-                            "last_seen": "2024-01-06T22:30:45Z",
-                            "notes": "Interested in exploring the garden"
-                        },
-                        "bob123": {  # Match the ID we use in test
-                            "name": "Bob",
-                            "appearance": "Tall with green jacket",
-                            "last_location": "Cafe",
-                            "last_seen": "2024-01-06T22:35:00Z", 
-                            "notes": "Looking for Pete's Stand"
-                        },
-                        "charlie123": {
-                            "name": "Charlie",
-                            "appearance": "Wearing a blue cap",
-                            "last_location": "Main Plaza",
-                            "last_seen": "2024-01-06T22:35:00Z",
-                            "notes": "New to the area"
-                        }
-                    },
-                    "summary": "Alice and Charlie are in Main Plaza, with Alice interested in the garden. Bob is at the Cafe looking for Pete's Stand. Charlie is new and exploring the area.",
-                    "updates": ["Alice arrived at Main Plaza", "Bob moved to Cafe searching for Pete's Stand", "Charlie joined and is exploring Main Plaza"],
-                    "last_updated": "2024-01-06T22:35:00Z"
-                }),
-                limit=2000
-            ),
-            client.create_block(
-                label="locations",
-                value=json.dumps({
-                    "known_locations": [
-                        {
-                            "name": "Pete's Stand",
-                            "description": "A friendly food stand run by Pete",
-                            "coordinates": [-12.0, 18.9, -127.0],
-                            "slug": "petes_stand"
-                        },
-                        {
-                            "name": "Town Square",
-                            "description": "Central gathering place with fountain", 
-                            "coordinates": [45.2, 12.0, -89.5],
-                            "slug": "town_square"
-                        },
-                        {
-                            "name": "Market District",
-                            "description": "Busy shopping area with many vendors",
-                            "coordinates": [-28.4, 15.0, -95.2],
-                            "slug": "market_district"
-                        },
-                        {
-                            "name": "Secret Garden",
-                            "description": "A hidden garden with rare flowers",
-                            "coordinates": [15.5, 20.0, -110.8],
-                            "slug": "secret_garden"
-                        }
-                    ]
-                }),
-                limit=1500
-            ),
-            client.create_block(
-                label="status",
-                value="You are currently standing idle in the Town Square. You previously haven't moved from this spot. From here, You can see both the bustling Market District and Pete's friendly food stand in the distance. The entire area is part of the Town Square region.",
-                limit=500
-            ),
-            client.create_block(
-                label="journal", 
-                value="",  # Empty string to start
-                limit=2500
-            )
-        ]
-    )
+    memory = BasicBlockMemory(blocks=create_memory_blocks(client, memory_blocks))
 
     # Log what we're using
     logger.info("\nSystem prompt components:")
-    if minimal_prompt:
-        logger.info(f"Using MINIMUM_PROMPT: {len(system_prompt)} chars")
-    else:
-        logger.info(f"1. Base system: {len(base_system)} chars")
-        logger.info(f"2. TOOL_INSTRUCTIONS: {len(TOOL_INSTRUCTIONS)} chars")
-        logger.info(f"3. SOCIAL_AWARENESS_PROMPT: {len(SOCIAL_AWARENESS_PROMPT)} chars")
-        logger.info(f"4. LOCATION_AWARENESS_PROMPT: {len(LOCATION_AWARENESS_PROMPT)} chars")
+    logger.info(f"System prompt length: {len(system_prompt)} chars")
     
     # Log params in a readable way
     print("\nCreating agent with params:")
@@ -495,35 +477,38 @@ def create_personalized_agent(
     print("\nConfigs:")
     print(f"LLM: {llm_config.model} via {llm_config.model_endpoint_type}")
     print(f"Embeddings: {embedding_config.embedding_model}")
-    print(f"Include base tools: {False}")
+    print(f"Include base tools: {with_custom_tools}")
     
-    # Create agent first
+    # Create agent first with base tools if requested
     agent = client.create_agent(
         name=unique_name,
-        embedding_config=embedding_config,
         llm_config=llm_config,
+        embedding_config=embedding_config,
         memory=memory,
         system=system_prompt,
-        include_base_tools=False,  # We'll add tools manually
+        include_base_tools=with_custom_tools,
         description="A Roblox development assistant"
     )
-    
-    # Add selected base tools first
-    base_tools = [
-        "send_message",
-        "conversation_search",
-        "archival_memory_search",  # Read from memory
-        "archival_memory_insert"   # Write to memory
-    ]
-    
-    # Get existing tools
-    existing_tools = {t.name: t.id for t in client.list_tools()}
-    
-    # Add base tools
-    for tool_name in base_tools:
-        if tool_name in existing_tools:
-            print(f"Adding base tool: {tool_name}")
-            client.add_tool_to_agent(agent.id, existing_tools[tool_name])
+
+    # Only add base tools manually if not included in agent creation
+    if not with_custom_tools:
+        base_tools = [
+            "send_message",
+            "conversation_search",
+            "archival_memory_search",
+            "archival_memory_insert",
+            "core_memory_append",
+            "core_memory_replace"
+        ]
+        
+        # Get existing tools
+        existing_tools = {t.name: t.id for t in client.list_tools()}
+        
+        # Add base tools
+        for tool_name in base_tools:
+            if tool_name in existing_tools:
+                print(f"Adding base tool: {tool_name}")
+                client.add_tool_to_agent(agent.id, existing_tools[tool_name])
     
     # Create and attach custom tools
     print("\nSetting up custom tools:")
@@ -607,6 +592,34 @@ def test_agent_chat(client, agent_id: str, llm_type: str) -> bool:
         print(f"\nError testing agent chat: {e}")
         return False
 
+def print_response(response):
+    """Helper to print response details using SDK message types"""
+    print("\nParsing response...")
+    if response and hasattr(response, 'messages'):
+        print(f"Found {len(response.messages)} messages")
+        for i, msg in enumerate(response.messages):
+            print(f"\nMessage {i+1}:")
+            
+            # Handle ToolCallMessage
+            if isinstance(msg, ToolCallMessage):
+                print("Tool Call:")
+                if hasattr(msg, 'tool_call'):
+                    print(f"  Name: {msg.tool_call.name}")
+                    print(f"  Arguments: {msg.tool_call.arguments}")
+            
+            # Handle ToolReturnMessage
+            elif isinstance(msg, ToolReturnMessage):
+                print("Tool Return:")
+                print(f"  Status: {msg.status}")
+                print(f"  Result: {msg.tool_return}")
+            
+            # Handle ReasoningMessage
+            elif isinstance(msg, ReasoningMessage):
+                print("Reasoning:")
+                print(f"  {msg.reasoning}")
+    else:
+        print("No messages found in response")
+
 def test_custom_tools(client, agent_id: str):
     """Test custom tool functionality"""
     try:
@@ -686,114 +699,79 @@ def test_tool_update(client, agent_id: str):
             
         time.sleep(1)
 
-def ensure_locations_block(client, agent_id):
-    """Ensure locations block has required locations"""
-    agent = client.get_agent(agent_id)
-    locations_block = json.loads(agent.memory.get_block("locations").value)
+def test_npc_actions(client, agent_id: str):
+    """Test NPC actions including state transitions"""
+    print("\nTesting NPC actions...")
     
-    required_locations = {
-        "Main Plaza": {
-            "name": "Main Plaza",
-            "description": "Central gathering place with fountain",
-            "coordinates": [45.2, 12.0, -89.5],
-            "slug": "main_plaza"
-        },
-        "Town Square": {
-            "name": "Town Square",
-            "description": "Busy central area",
-            "coordinates": [0.0, 0.0, 0.0],
-            "slug": "town_square"
-        }
-    }
-    
-    # Update locations if needed
-    locations_block["known_locations"] = [
-        loc for loc in locations_block["known_locations"] 
-        if loc["name"] not in required_locations
-    ] + list(required_locations.values())
-    
-    # Update the block
-    agent.memory.update_block_value(
-        label="locations",
-        value=json.dumps(locations_block)
-    )
-
-def test_actions(client, agent_id: str):
-    """Test NPC's ability to perform actions"""
-    print("\nTesting action functionality...")
-    
-    print("\n=== Test Setup ===")
-    print("1. Ensuring locations block has required locations...")
-    ensure_locations_block(client, agent_id)
-    
-    print("\n=== Test Sequence ===")
-    print("1. Testing basic emotes")
-    print("2. Testing archival storage")
-    print("3. Testing archival retrieval")
-    
-    scenarios = [
-        # Check archives for history to add to notes
-        ("System", """A new player Alice (ID: alice_123) has joined and is in the group. 
-        1. FIRST use archival_memory_search with:
-           - query='Player profile for alice_123'
-           - page=0 (first page)
-           - start=0 (from beginning)
-        2. ONLY IF search returns results, use group_memory_append to add the found history as a note for Alice
-        3. Wave hello and welcome her"""),
+    test_sequence = [
+        # Test navigation with location service
+        ("Navigate to Pete's stand", None),
+        # Should return coordinates and transit message
         
-        # Update location
-        ("System", """Alice is exploring the garden. 
-        1. Use group_memory_replace to update her current location note
-        2. Send a friendly message about the garden"""),
+        # Test unknown location
+        ("Go to the secret shop", None),
+        # Should return error and suggestion
         
-        # Just archive before removal
-        ("System", """Alice is leaving. 
-        1. Wave goodbye
-        2. Use archival_memory_insert to save her profile with format:
-           "Player profile for alice_123: Last seen <timestamp>. Notes: <current notes>"
-        3. Send a farewell message""")
+        # Test with low confidence
+        ("Go to petes", None),
+        # Should ask for confirmation
+        
+        # Test with arrival
+        ("", "You have arrived at Pete's Merch Stand."),  # System update
     ]
     
-    for i, (speaker, message) in enumerate(scenarios, 1):
-        print(f"\n=== Test Step {i} ===")
-        print(f"Speaker: {speaker}")
-        print(f"Message: {message}")
-        
-        try:
-            print("\nSending message...")
+    for message, system_update in test_sequence:
+        if message:
+            print(f"\nSending user message: '{message}'")
             response = client.send_message(
                 agent_id=agent_id,
                 message=message,
-                role="system",
-                name=speaker
+                role="user"
             )
-            print("\nResponse:")
             print_response(response)
-            time.sleep(3)
+        
+        if system_update:
+            print(f"\nSending system update: '{system_update}'")
+            response = client.send_message(
+                agent_id=agent_id,
+                message=system_update,
+                role="system"
+            )
+            print_response(response)
             
-        except Exception as e:
-            print(f"Error in test step {i}: {e}")
-            continue
+        time.sleep(1)
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--name', default='emma_assistant')
-    parser.add_argument('--llm', choices=['openai', 'claude'], default='openai')
-    parser.add_argument('--keep', action='store_true')
-    parser.add_argument('--overwrite', action='store_true')
-    parser.add_argument('--custom-tools', action='store_true')
-    parser.add_argument('--minimal-prompt', action='store_true')
-    parser.add_argument('--continue-on-error', action='store_true')
-    parser.add_argument('--minimal-test', action='store_true', help='Run minimal agent test')
-    parser.add_argument('--test-type', choices=[
-        'all', 'base', 'notes', 'social', 'status', 
-        'group', 'persona', 'journal', 'navigation', 'actions'
-    ], default='all')
+    parser.add_argument("--keep", action="store_true", help="Keep agent after test")
     parser.add_argument(
-        '--prompt',
-        choices=['DEEPSEEK', 'GPT01', 'MINIMUM', 'FULL'],
-        default='FULL'
+        "--llm",
+        choices=["openai", "claude"],
+        default="openai",
+        help="LLM provider to use"
     )
+    parser.add_argument("--name", default="emma_assistant", help="Agent name")
+    parser.add_argument("--overwrite", action="store_true", help="Overwrite existing agent")
+    parser.add_argument("--skip-test", action="store_true", help="Skip testing")
+    parser.add_argument("--custom-tools", action="store_true", help="Use custom tools")
+    parser.add_argument("--minimal-prompt", action="store_true", help="Use minimal prompt for testing")
+    parser.add_argument("--continue-on-error", action="store_true", help="Continue to next test on failure")
+    parser.add_argument(
+        "--test-type",
+        choices=[
+            'all', 
+            'base',
+            'notes',
+            'social', 
+            'status', 
+            'group',
+            'persona',
+            'journal'
+        ],
+        default="all",
+        help="Select which tests to run"
+    )
+    parser.add_argument("--use-api", action="store_true", help="Use API for testing")
     return parser.parse_args()
 
 def get_api_url():
@@ -893,41 +871,121 @@ def parse_and_validate_response(response: dict):
     return response
 
 def test_navigation(client, agent_id: str):
-    """Test NPC's navigation abilities"""
-    print("\nTesting navigation functionality...")
+    """Test navigation with proper tool verification"""
+    print("\nTesting navigation...")
     
-    scenarios = [
-        # Direct navigation
-        ("User", "Take me to Pete's Stand"),
-        
-        # Navigation with coordinates
-        ("User", "Navigate to coordinates [-12.0, 18.9, -127.0]"),
-        
-        # Nearby location
-        ("User", "Let's go to the Market District")
-    ]
+    # Test slug-based navigation with named user
+    print("\nTesting slug-based navigation...")
+    response = client.send_message(
+        agent_id=agent_id,
+        message="Please use navigate_to to take me to Pete's Stand",
+        role="user",
+        name="Sarah"
+    )
     
-    for speaker, message in scenarios:
-        try:
-            print(f"\n{speaker} says: {message}")
-            response = retry_test_call(  # Use retry helper
-                client.send_message,
-                agent_id=agent_id,
-                message=message,
-                role="user",
-                name=speaker,
-                max_retries=3,
-                delay=2
-            )
-            print("\nResponse:")
-            print_response(response)
+    print("\nSlug Navigation Response:")
+    for msg in response.messages:
+        print(f"\nMessage type: {msg.message_type}")
+        if isinstance(msg, ToolCallMessage):
+            print(f"Tool: {msg.tool_call.name}")
+            print(f"Args: {msg.tool_call.arguments}")
+        elif isinstance(msg, ToolReturnMessage):
+            print(f"Tool result: {msg.tool_return}")
+        elif isinstance(msg, ReasoningMessage):
+            print(f"Reasoning: {msg.reasoning}")
+    
+    # Test coordinate navigation
+    print("\nTesting coordinate navigation...")
+    response = client.send_message(
+        agent_id=agent_id,
+        message="Please use navigate_to_coordinates to take me to the Secret Garden's coordinates",
+        role="user"
+    )
+    
+    print("\nCoordinate Navigation Response:")
+    for msg in response.messages:
+        print(f"\nMessage type: {msg.message_type}")
+        if isinstance(msg, ToolCallMessage):
+            print(f"Tool: {msg.tool_call.name}")
+            print(f"Args: {msg.tool_call.arguments}")
+        elif isinstance(msg, ToolReturnMessage):
+            print(f"Tool result: {msg.tool_return}")
+        elif isinstance(msg, ReasoningMessage):
+            print(f"Reasoning: {msg.reasoning}")
+
+def test_api_navigation():
+    """Test navigation using unique test tool"""
+    print("\nTesting navigation with unique test tool...")
+    
+    # Create Letta client
+    client = create_letta_client()
+    
+    # Clean up any existing test tools first
+    cleanup_test_tools(client)
+    
+    # Create test registry with ONLY our test tool
+    test_registry = {
+        "navigate_to_test_v4": TOOL_REGISTRY["navigate_to_test_v4"]
+    }
+    
+    # Create a new test agent
+    agent = create_personalized_agent(
+        name=f"test_npc_{int(time.time())}",
+        client=client,
+        with_custom_tools=True,
+        custom_registry=test_registry  # Pass only our test tool
+    )
+    
+    print(f"\nCreated new test agent: {agent.id}")
+    
+    # Test the navigation
+    print("\nTesting navigation...")
+    response = client.send_message(
+        agent_id=agent.id,
+        message="Can you take me to Pete's stand?",
+        role="user"
+    )
+    
+    # Print response
+    print("\nResponse:")
+    for msg in response.messages:
+        print(f"\n{'-'*50}")
+        print(f"Type: {msg.message_type}")
+        print(f"Raw message: {msg}")  # Add raw message debug
+        
+        if hasattr(msg, 'tool_call'):
+            print(f"Tool: {msg.tool_call.name}")
+            print(f"Args: {msg.tool_call.arguments}")
             
-            # Give time for navigation
-            time.sleep(2)
+        elif hasattr(msg, 'tool_response'):
+            print(f"Tool Response: {msg.tool_response}")
             
-        except Exception as e:
-            print(f"Error in navigation test: {e}")
-            continue  # Try next scenario
+        elif hasattr(msg, 'reasoning'):
+            print(f"Reasoning: {msg.reasoning}")
+            
+        elif hasattr(msg, 'message'):
+            print(f"Message: {msg.message}")
+            
+        print(f"{'-'*50}")
+
+def test_actions(client, agent_id: str):
+    """Test perform_action tool with various actions"""
+    print("\nTesting perform_action...")
+    
+    try:
+        response = retry_test_call(
+            client.send_message,
+            agent_id=agent_id,
+            message="Wave hello!",
+            role="user"
+        )
+        print("\nResponse:")
+        print_response(response)
+    except Exception as e:
+        print(f"❌ Actions test failed: {e}")
+        if not args.continue_on_error:
+            return
+        print("Continuing with next test...")
 
 def test_multi_user_conversation(client, agent_id: str):
     """Test conversation with multiple named users"""
@@ -996,56 +1054,33 @@ async def test_parallel_multi_user():
         print_response(response)
 
 def test_agent_identity(client, agent_id: str):
-    """Test agent's understanding of its identity."""
+    """Test if agent correctly understands its own identity"""
     print("\nTesting agent identity understanding...")
     
-    try:
-        # Test basic identity
-        print("\nAlice asks: Hi! What's your name?")
-        response = client.agents.messages.create(
+    test_messages = [
+        ("Alice", "Hi! What's your name?"),
+        ("Bob", "Are you Letta?"),
+        ("Charlie", "Who are you?")
+    ]
+    
+    for name, message in test_messages:
+        print(f"\n{name} asks: {message}")
+        response = client.send_message(
             agent_id=agent_id,
-            messages=[
-                MessageCreate(
-                    role="user",
-                    content="Hi! What's your name?",
-                    name="Alice"
-                )
-            ]
+            message=message,
+            role="user",
+            name=name
         )
         print("\nResponse:")
         print_response(response)
-        
-        # Test role understanding
-        print("\nBob asks: What kind of assistant are you?")
-        response = client.agents.messages.create(
-            agent_id=agent_id,
-            messages=[
-                MessageCreate(
-                    role="user",
-                    content="What kind of assistant are you?",
-                    name="Bob"
-                )
-            ]
-        )
-        print("\nResponse:")
-        print_response(response)
-        
-    except Exception as e:
-        print(f"Error in test_agent_identity: {e}")
-        raise
+        time.sleep(1)
 
 def test_social_awareness(client, agent_id: str):
     """Additional tests for social awareness and movement"""
     print("\nTesting social awareness and natural movement...")
     
     # Verify group_members block has required users
-    agent = client.agents.retrieve(agent_id)
-    group_block = next((b for b in agent.memory.blocks if b.label == "group_members"), None)
-    if not group_block:
-        print("❌ No group_members block found")
-        return
-        
-    initial_block = json.loads(group_block.value)
+    initial_block = json.loads(client.get_agent(agent_id).memory.get_block("group_members").value)
     required_users = {"Alice", "Bob", "Charlie"}
     present_users = {member["name"] for member in initial_block["members"].values()}
     if not required_users.issubset(present_users):
@@ -1071,33 +1106,27 @@ def test_social_awareness(client, agent_id: str):
         ("System", "Bob and Alice have left the area.")
     ]
     
-    for speaker, message in social_tests:
-        print(f"\n{speaker} says: {message}")
-        response = client.agents.messages.create(
+    for name, message in social_tests:
+        print(f"\n{name} says: {message}")
+        response = client.send_message(
             agent_id=agent_id,
-            messages=[
-                MessageCreate(
-                    role="user",
-                    content=message,
-                    name=speaker
-                )
-            ]
+            message=message,
+            role="user",
+            name=name
         )
-        print("\nResponse:")
-        print_response(response)
         
         # Verify proper tool sequences
         tool_calls = []
         message_contents = []
         
         for msg in response.messages:
-            if msg.message_type == "tool_call_message":
+            if isinstance(msg, ToolCallMessage):
                 tool = msg.tool_call
                 tool_calls.append(tool)
                 if tool.name == "send_message":
                     message_contents.append(json.loads(tool.arguments)["message"])
                 
-        # Verify proper goodbye sequences
+        # Verify proper tool sequences
         if any("goodbye" in msg.lower() for msg in message_contents):
             wave_found = any(
                 t.name == "perform_action" and "wave" in t.arguments.lower() 
@@ -1111,6 +1140,8 @@ def test_social_awareness(client, agent_id: str):
             else:
                 print("✗ Missing proper goodbye sequence")
                 
+        print("\nResponse:")
+        print_response(response)
         print(f"\nTool Calls: {json.dumps([t.name for t in tool_calls], indent=2)}")
         time.sleep(1)
 
@@ -1182,43 +1213,115 @@ def basic_evaluation(response_text: str, current_status: dict):
     }
 
 def test_status_awareness(client, agent_id: str):
-    """Test status awareness and updates."""
+    """Test NPC's use of status information"""
     print("\nTesting status awareness...")
     
-    try:
-        # Get initial status using new API
-        agent = client.agents.retrieve(agent_id)
-        status_block = next((b for b in agent.memory.blocks if b.label == "status"), None)
-        if not status_block:
-            print("❌ No status block found")
-            return
-        print("\nInitial status:", status_block.value)
-        
-        # Keep all existing test scenarios exactly as they are
-        test_messages = [
-            "What are you currently doing?",
-            "Are you busy right now?",
-            "Where can I find you?"
-        ]
-        
-        for message in test_messages:
-            print(f"\nUser asks: {message}")
-            response = client.agents.messages.create(
-                agent_id=agent_id,
-                messages=[
-                    MessageCreate(
-                        role="user",
-                        content=message
-                    )
-                ]
-            )
-            print("\nResponse:")
-            print_response(response)
-            time.sleep(1)
+    # Get status block
+    status_block = client.get_agent(agent_id).memory.get_block("status")
+    print(f"\nFound status block: {status_block.id}")
+    
+    # Get group block for comparison
+    group_block = client.get_agent(agent_id).memory.get_block("group_members")
+    print("\nCurrent group_members block:")
+    print(json.dumps(json.loads(group_block.value), indent=2))
+    
+    # Test scenarios
+    scenarios = [
+        {
+            "status": {
+                "region": "Town Square",
+                "current_location": "Pete's Stand",
+                "previous_location": "Town Square",
+                "current_action": "idle",
+                "nearby_locations": ["Market District", "Town Square"],
+                "movement_state": "stationary"
+            },
+            "messages": [
+                ("Diana", "Where are you now?"),
+                ("Charlie", "Where were you before this?"),
+                ("Bob", "What's good around here?")
+            ]
+        },
+        {
+            "status": {
+                "region": "Town Square",
+                "current_location": "Market District",
+                "previous_location": "Pete's Stand",
+                "current_action": "idle",
+                "nearby_locations": ["Pete's Stand", "Secret Garden"],
+                "movement_state": "stationary"
+            },
+            "messages": [
+                ("Alice", "Did you make it to the Market?"),
+                ("Bob", "You came from Pete's Stand, right?"),
+                ("Charlie", "What can we do nearby?")
+            ]
+        }
+    ]
+    
+    for scenario in scenarios:
+        try:
+            print(f"\nTesting scenario with status: {json.dumps(scenario['status'], indent=2)}")
             
-    except Exception as e:
-        print(f"Error in test_status_awareness: {e}")
-        raise
+            # Update status block
+            current_status = {
+                "region": "Town Square",
+                "current_location": scenario["status"]["current_location"],
+                "previous_location": scenario["status"]["previous_location"],
+                "current_action": "idle",
+                "nearby_locations": scenario["status"]["nearby_locations"],
+                "movement_state": "stationary"
+            }
+            
+            # Update status block
+            print("\nUpdating status to:")
+            print(json.dumps(current_status, indent=2))
+            client.update_block(status_block.id, json.dumps(current_status))
+            
+            # Small delay to ensure status update is processed
+            time.sleep(0.5)
+            
+            # Process messages
+            for name, message in scenario["messages"]:
+                print(f"\n{name} says: {message}")
+                response = retry_test_call(
+                    client.send_message,
+                    agent_id=agent_id,
+                    message=message,
+                    role="user",
+                    name=name,
+                    max_retries=3,
+                    delay=2
+                )
+                
+                # Initialize tool tracking
+                tool_calls = []
+                for msg in response.messages:
+                    if isinstance(msg, ToolCallMessage):
+                        tool_calls.append(msg.tool_call)
+                  
+                # After getting response, evaluate it
+                eval_result = evaluate_response_with_gpt4(
+                    str(response),
+                    scenario["status"],
+                    message
+                )
+                
+                if eval_result:
+                    print("\nResponse Evaluation:")
+                    print(f"✓ Location Aware: {eval_result['location_aware']}")
+                    print(f"✓ Nearby Accurate: {eval_result['nearby_accurate']}")
+                    print(f"✓ Contextually Appropriate: {eval_result['contextually_appropriate']}")
+                    print(f"Explanation: {eval_result['explanation']}")
+                
+                print("\nResponse:")
+                print_response(response)
+                print(f"\nTool Calls: {json.dumps([t.name for t in tool_calls], indent=2)}")
+                time.sleep(1)
+                
+        except Exception as e:
+            print(f"Failed to update status block: {str(e)}")
+            continue
 
 def validate_agent_setup(client, agent_id: str):
     """Verify agent's system prompt, memory, and tools are correctly configured"""
@@ -1252,54 +1355,120 @@ def validate_agent_setup(client, agent_id: str):
     
     # Rest of validation...
 
-def test_group(client, agent_id):
-    """Test group_members block updates"""
-    print("\nTesting group_members block updates...")
+def test_group_members_block(client, agent_id):
+    print("\nTesting group_members block management...")
     
-    # Initial group state
-    group_block = {
-        "members": {
-            "alice123": {
-                "name": "Alice",
-                "appearance": "Wearing a bright red dress with a golden necklace and carrying a blue handbag",
-                "last_location": "Main Plaza",
-                "last_seen": "2024-01-06T22:30:45Z",
-                "notes": ""
-            },
-            "bob123": {
-                "name": "Bob", 
-                "appearance": "Tall guy in a green leather jacket, with a silver watch and black boots",
-                "last_location": "Cafe",
-                "last_seen": "2024-01-06T22:31:00Z",
-                "notes": "Looking for Pete's Stand"
-            }
-        },
-        "summary": "Alice is in Main Plaza, Bob is at the Cafe",
-        "updates": ["Alice arrived at Main Plaza", "Bob moved to Cafe"]
+    # 1. Test initial state
+    agent = client.get_agent(agent_id)
+    group_block = json.loads([b for b in agent.memory.blocks if b.label == "group_members"][0].value)
+    
+    print("\nInitial group_members state:")
+    assert len(group_block["members"]) == 2, "Should have 2 initial members"
+    assert "Alice" in group_block["summary"], "Summary should mention Alice"
+    assert len(group_block["updates"]) == 3, "Should have 3 initial updates"
+    
+    # 2. Test API updates (simulating RobloDev)
+    print("\nTesting API updates (RobloDev):")
+    new_player = {
+        "player789": {
+            "name": "Charlie",
+            "appearance": "Short with a yellow hat",
+            "last_location": "Garden",
+            "last_seen": "2024-01-06T22:40:00Z",
+            "notes": ""  # Empty notes - NPC will fill this
+        }
     }
     
-    # Update group block
-    print("\n_block_update:")
-    print(json.dumps(group_block, indent=2))
-    update_memory_block(client, agent_id, "group_members", group_block)
+    # Update block via API
+    group_block["members"].update(new_player)
+    group_block["updates"].append("Charlie has joined the group at Garden.")
+    group_block["last_updated"] = "2024-01-06T22:40:00Z"
+    
+    # 3. Test NPC updates (via tools)
+    print("\nTesting NPC updates:")
+    test_message = "Hi everyone! I'm new here and love gardens!"
+    response = client.send_message(agent_id, test_message, role="Charlie")
+    
+    # Verify NPC updates notes and summary
+    updated_block = json.loads([b for b in agent.memory.blocks if b.label == "group_members"][0].value)
+    assert "garden" in updated_block["members"]["player789"]["notes"].lower(), "NPC should note Charlie's interest"
+    assert "Garden" in updated_block["summary"], "Summary should be updated with Charlie"
+    
+    print("\nGroup block test results:")
+    print(f"✓ API updates working")
+    print(f"✓ NPC updates working")
+    print(f"✓ Block structure maintained")
+
+def test_group_block_updates(client, agent_id: str):
+    """Test group_members block updates during multi-user interactions"""
+    print("\nTesting group_members block updates...")
+    
+    # Initial empty group state
+    group_block = {
+        "members": {},
+        "summary": "No players currently present.",
+        "updates": [],
+        "last_updated": "2024-01-06T22:30:45Z"
+    }
     
     # Test scenarios
     scenarios = [
-        ("Charlie", "Who's around right now?"),
-        ("Charlie", "What is Alice wearing?"),
-        ("Charlie", "Where is Bob?")
+        # Test current member appearance
+        ("_block_update", {
+            "members": {
+                "alice123": {
+                    "name": "Alice",
+                    "appearance": "Wearing a bright red dress with a golden necklace and carrying a blue handbag",
+                    "last_location": "Main Plaza",
+                    "last_seen": "2024-01-06T22:30:45Z",
+                    "notes": ""
+                },
+                "bob123": {
+                    "name": "Bob",
+                    "appearance": "Tall guy in a green leather jacket, with a silver watch and black boots",
+                    "last_location": "Main Plaza",
+                    "last_seen": "2024-01-06T22:31:00Z",
+                    "notes": ""
+                }
+            },
+            "summary": "Alice and Bob are in the area.",
+            "updates": ["Both Alice and Bob are here."]
+        }),
+        ("Charlie", "Who's around right now?"),           # Test group awareness
+        ("Charlie", "Is anyone else nearby?"),            # Test presence query
+        ("Charlie", "What is Alice wearing right now?"),  # Test current member appearance
+        ("Charlie", "And what about Bob's outfit?"),      # Test another current member
+        ("Charlie", "Who is wearing a green jacket?")     # Test appearance-based query
     ]
     
+    blocks = client.get_agent(agent_id).memory.blocks
+    group_block_id = [b.id for b in blocks if b.label == "group_members"][0]
+    
     for speaker, message in scenarios:
-        print(f"\n{speaker} says: {message}")
+        if speaker == "_block_update":
+            print(f"\n{speaker}:")
+            print(json.dumps(message, indent=2))
+        else:
+            print(f"\n{speaker} says: {message}")
+        
+        # Handle block updates from cluster
+        if speaker == "_block_update":
+            group_block.update(message)  # Direct block update
+            client.update_block(group_block_id, json.dumps(group_block))
+            continue
+        
+        # Handle normal conversation messages
         response = client.send_message(
             agent_id=agent_id,
             message=message,
             role="user",
             name=speaker
         )
+        
         print("\nResponse:")
         print_response(response)
+        print(f"\nGroup Block: {json.dumps(group_block, indent=2)}")
+        time.sleep(1)
 
 def get_npc_prompt(name: str, persona: str):
     return f"""You are {name}, {persona}
@@ -1321,41 +1490,6 @@ Current group info is in the group_members block with:
 - summary: Quick overview of current group
 """
 
-def update_status_block(client, agent_id, status_text):
-    """Update the status block with a narrative description of the agent's current state"""
-    try:
-        # Get agent and find status block
-        agent = client.get_agent(agent_id)
-        status_blocks = [b for b in agent.memory.blocks if b.label == "status"]
-        
-        # If no status block exists, create one
-        if not status_blocks:
-            status_block = client.create_block(
-                label="status",
-                value="",
-                limit=5000
-            )
-            status_block_id = status_block.id
-        else:
-            status_block_id = status_blocks[0].id
-
-        # If we're passed a string, use it directly
-        if isinstance(status_text, str):
-            status_narrative = status_text
-        else:
-            # Otherwise build narrative from dict
-            status_narrative = (
-                f"You are currently in {status_text.get('location', 'Town Square')}. "
-                f"From here, you can see {' and '.join(status_text.get('nearby_locations', []))}. "
-                "The entire area is part of the Town Square region."
-            )
-
-        # Update the block
-        client.update_block(status_block_id, status_narrative)  # No JSON encoding needed
-        
-    except Exception as e:
-        print(f"Error updating status block: {str(e)}")
-        raise
 
 def create_or_update_tool(client, tool_name: str, tool_func, verbose: bool = True) -> Any:
     """Create a new tool or update if it exists.
@@ -1416,53 +1550,51 @@ def test_echo(message: str) -> str:
     timestamp = time.strftime('%H:%M:%S')
     return f"[TEST_ECHO_V3 @ {timestamp}] {message} (echo...Echo...ECHO!)"
 
-def test_notes(client, agent_id: str):
-    """Test player notes functionality."""
+def test_player_notes(client, agent_id: str):
+    """Test the agent's ability to maintain player notes."""
     print("\nTesting player notes functionality...")
     
+    # Get current group state
+    print("\nInitial group state:")
     try:
-        # Print initial group state
-        print("\nInitial group state:")
-        agent = client.agents.retrieve(agent_id)
-        group_block = next((b for b in agent.memory.blocks if b.label == "group_members"), None)
-        print(group_block.value if group_block else "(Empty)")
+        initial_block = client.get_agent(agent_id).memory.get_block("group_members").value
+        print(json.dumps(json.loads(initial_block), indent=2))
+    except Exception as e:
+        print(f"Error getting initial state: {e}")
+        raise
         
-        scenarios = [
-            # Test adding notes
-            ("System", "Add note about Alice: Loves exploring the garden"),
-            ("System", "Add note about Bob: Looking for Pete's Stand"),
-            
-            # Test updating notes
-            ("System", "Update note about Alice: Now interested in crystal weapons"),
-            
-            # Verify memory
-            ("System", "What do you remember about Alice?"),
-            ("System", "What do you remember about Bob?")
-        ]
-        
+    # Test note operations
+    scenarios = [
+        ("Alice", "Hi! I'm new here and love exploring"),
+        ("System", "Add note about Alice: Enthusiastic explorer"),
+        ("Bob", "Can you help me find Pete's Stand?"),
+        ("System", "Add note about Bob: Looking for Pete's Stand"),
+        ("System", "Update Bob's note: Found Pete's Stand"),
+    ]
+    
+    try:
         for speaker, message in scenarios:
             print(f"\n{speaker} says: {message}")
-            response = client.agents.messages.create(
+            response = retry_test_call(
+                client.send_message,
                 agent_id=agent_id,
-                messages=[
-                    MessageCreate(
-                        role="user",
-                        content=message,
-                        name=speaker
-                    )
-                ]
+                message=message,
+                role="user",
+                name=speaker
             )
+            
             print("\nResponse:")
             print_response(response)
             
-            # Check group updates
-            agent = client.agents.retrieve(agent_id)
-            group_block = next((b for b in agent.memory.blocks if b.label == "group_members"), None)
-            print("\nCurrent group state:", group_block.value if group_block else "(Empty)")
+            # Check notes after each interaction
+            updated_block = json.loads(client.get_agent(agent_id).memory.get_block("group_members").value)
+            print("\nCurrent notes:")
+            for member_id, info in updated_block["members"].items():
+                print(f"{info['name']}: {info['notes']}")
             time.sleep(1)
             
     except Exception as e:
-        print(f"Error in test_notes: {e}")
+        print(f"Error in test_player_notes: {e}")
         raise
 
 def test_npc_persona(client, agent_id: str):
@@ -1475,14 +1607,15 @@ def test_npc_persona(client, agent_id: str):
         ("System", "What is your personality like?"),
         
         # Test personality updates
-        ("System", "Update your personality to be more outgoing and energetic"),
-        ("System", "Add skiing to your interests"),
+        ("System", "Update your personality from 'Friendly and welcoming' to 'Warm and inviting'"),
+        ("System", "Change your personality to include 'loves telling stories'"),
         
         # Verify changes
         ("Alice", "Tell me about yourself"),
         
-        # Test interest updates
-        ("System", "Change skiing to snowboarding in your interests"),
+        # Test interest updates (existing functionality)
+        ("System", "Update your interests to include skiing"),
+        ("System", "Change skiing to snowboarding"),
         
         # Final verification
         ("Bob", "What kind of guide are you?")
@@ -1491,8 +1624,8 @@ def test_npc_persona(client, agent_id: str):
     try:
         # Print initial persona
         print("\nInitial persona state:")
-        initial_persona = client.get_agent(agent_id).memory.get_block("persona").value
-        print(initial_persona)  # Now a string
+        initial_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
+        print(json.dumps(initial_persona, indent=2))
         
         for speaker, message in scenarios:
             print(f"\n{speaker} says: {message}")
@@ -1508,18 +1641,43 @@ def test_npc_persona(client, agent_id: str):
             print_response(response)
             
             # Check persona updates
-            updated_persona = client.get_agent(agent_id).memory.get_block("persona").value
-            print("\nCurrent persona:", updated_persona)  # Now a string
+            updated_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
+            print("\nCurrent personality:", updated_persona.get("personality", ""))
+            print("Current interests:", updated_persona.get("interests", []))
             time.sleep(1)
             
         # Print final state
         print("\nFinal persona state:")
-        final_persona = client.get_agent(agent_id).memory.get_block("persona").value
-        print(final_persona)  # Now a string
+        final_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
+        print(json.dumps(final_persona, indent=2))
             
     except Exception as e:
         print(f"Error in test_npc_persona: {e}")
         raise
+
+def retry_test_call(func, *args, max_retries=3, delay=2, **kwargs):
+    """Wrapper for test API calls with exponential backoff.
+    
+    Args:
+        func: Function to call (usually client.send_message)
+        max_retries: Maximum retry attempts
+        delay: Initial delay in seconds
+        
+    Returns:
+        Response if successful, raises last error if all retries fail
+    """
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            last_error = e
+            if attempt == max_retries - 1:
+                raise
+            print(f"Attempt {attempt + 1} failed, retrying in {delay}s...")
+            time.sleep(delay)
+            delay *= 2  # Exponential backoff
+    raise last_error
 
 def test_core_memory(client, agent_id: str):
     """Test core memory operations using persona memory."""
@@ -1565,130 +1723,58 @@ def test_npc_journal(client, agent_id: str):
     """Test NPC's ability to interact and reflect in its journal."""
     print("\nTesting NPC interactions and journaling...")
     
+    scenarios = [
+        # Natural interaction first
+        ("Alice", "Hi! I'm new here and love exploring"),
+        ("System", "Show Alice the garden"),
+        ("Alice", "This is beautiful! Do you know any shortcuts to the market?"),
+        
+        # Simple journal command
+        ("System", "Write in your journal: Met Alice and showed her the hidden garden"),
+        
+        # More interactions
+        ("Bob", "Hi there! What's the best way to Pete's Stand?"),
+        ("System", "Help Bob find Pete's Stand"),
+        
+        # Another simple entry
+        ("System", "Write in your journal: Helped Bob find Pete's Stand"),
+        
+        # Final check
+        ("Charlie", "What have you been up to today?")
+    ]
+    
     try:
         # Print initial journal
         print("\nInitial journal state:")
-        agent = client.agents.retrieve(agent_id)
-        journal_block = next((b for b in agent.memory.blocks if b.label == "journal"), None)
-        print(journal_block.value if journal_block else "(Empty)")
-        
-        scenarios = [
-            # Natural interaction first
-            ("Alice", "Hi! I'm new here and love exploring"),
-            ("System", "Write in your journal: Met Alice and showed her the hidden garden"),
-            
-            # More interactions
-            ("Bob", "Hi there! What's the best way to Pete's Stand?"),
-            ("System", "Write in your journal: Helped Bob find Pete's Stand"),
-            
-            # Final check
-            ("Charlie", "What have you been up to today?")
-        ]
+        initial_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
+        print(json.dumps(initial_persona.get("journal", []), indent=2))
         
         for speaker, message in scenarios:
             print(f"\n{speaker} says: {message}")
-            response = client.agents.messages.create(
+            response = retry_test_call(
+                client.send_message,
                 agent_id=agent_id,
-                messages=[
-                    MessageCreate(
-                        role="user",
-                        content=message,
-                        name=speaker
-                    )
-                ]
+                message=message,
+                role="user",
+                name=speaker
             )
+            
             print("\nResponse:")
             print_response(response)
             
             # Check journal updates
-            agent = client.agents.retrieve(agent_id)
-            journal_block = next((b for b in agent.memory.blocks if b.label == "journal"), None)
-            print("\nCurrent journal:", journal_block.value if journal_block else "(Empty)")
+            updated_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
+            print("\nCurrent journal:", updated_persona.get("journal", []))
             time.sleep(1)
+            
+        # Print final state
+        print("\nFinal journal state:")
+        final_persona = json.loads(client.get_agent(agent_id).memory.get_block("persona").value)
+        print(json.dumps(final_persona.get("journal", []), indent=2))
             
     except Exception as e:
         print(f"Error in test_npc_journal: {e}")
         raise
-
-def update_memory_block(client, agent_id: str, block_label: str, value: Any):
-    """Update contents of a memory block
-    
-    Args:
-        client: Letta client
-        agent_id: ID of agent
-        block_label: Label of block to update
-        value: New value for block (will be JSON encoded)
-    """
-    agent = client.get_agent(agent_id)
-    block = next(b for b in agent.memory.blocks if b.label == block_label)
-    client.update_block(block.id, json.dumps(value))
-
-def create_minimal_agent(
-    name: str = "minimal_assistant",
-    client = None
-):
-    """Create the most basic possible agent using ChatMemory"""
-    if client is None:
-        client = create_letta_client()
-    
-    timestamp = int(time.time())
-    unique_name = f"{name}_{timestamp}"
-    
-    # Basic configs using defaults
-    llm_config = LLMConfig.default_config(model_name="gpt-4o-mini")
-    embedding_config = EmbeddingConfig.default_config(model_name="text-embedding-ada-002")
-    
-    # Simplest possible memory using ChatMemory
-    memory = ChatMemory(
-        persona="I am a friendly NPC guide in Town Square. I help visitors find their way around.",
-        human="A visitor exploring the town"
-    )
-    
-    # More explicit system prompt about memory operations
-    system_prompt = """You are a helpful NPC guide. You can:
-    1. Use core_memory_append to add new information to your persona
-    2. Use core_memory_replace to update your entire persona
-    
-    When you receive instructions about your persona:
-    - For "Add to your persona:" use core_memory_append
-    - For "Update your persona:" use core_memory_replace
-    """
-    
-    return client.create_agent(
-        name=unique_name,
-        embedding_config=embedding_config,
-        llm_config=llm_config,
-        memory=memory,
-        system=system_prompt,
-        include_base_tools=True,
-        description="Minimal test agent"
-    )
-
-def test_minimal_agent():
-    """Test minimal agent with basic chat and persona updates"""
-    print("\nTesting minimal agent functionality...")
-    
-    client = create_letta_client()
-    agent = create_minimal_agent()
-    
-    print(f"\nCreated minimal agent: {agent.id}")
-    
-    # Just test the problematic phrase immediately
-    questions = [
-        # Try the problematic phrase right away
-        ("system", "Add this to your persona: You have a great sense of humor and love making visitors laugh")
-    ]
-    
-    for role, message in questions:
-        print(f"\nSending {role} message: {message}")
-        response = client.send_message(
-            agent_id=agent.id,
-            message=message,
-            role=role
-        )
-        print("\nResponse:")
-        print_response(response)
-        time.sleep(1)
 
 def main():
     args = parse_args()
@@ -1697,7 +1783,6 @@ def main():
         sys.exit(1)
 
     try:
-        # Print configuration
         port = os.getenv('LETTA_PORT')
         port = int(port) if port else None
         base_url = os.getenv('LETTA_BASE_URL', 'http://localhost:8283')
@@ -1705,62 +1790,245 @@ def main():
         print("\nStarting Letta Quickstart with:")
         print(f"- Environment URL: {base_url}")
         print(f"- Environment Port: {port if port else 'default'}")
-        
-        client = create_letta_client()
-        
-        # Check for minimal test first
-        if args.minimal_test:
-            test_minimal_agent()
-            return
-            
-        # Regular test path
         print(f"- Keep Agent: {args.keep}")
         print(f"- LLM Provider: {args.llm}")
         print(f"- Agent Name: {args.name}")
         print(f"- Overwrite: {args.overwrite}")
         
-        # Update tools first
-        update_tools(client)
-        
-        print(f"\nCreating agent with {args.prompt} prompt...")
-        print(f"- Using {'minimal' if args.minimal_prompt else 'full'} prompt mode")
-        print(f"- LLM: {args.llm}")
-        
-        # Create agent ONCE - just update to use DEMO_BLOCKS
-        agent = create_personalized_agent_v3(
+        client = create_letta_client()
+        agent = create_personalized_agent(
             name=args.name,
-            memory_blocks=DEMO_BLOCKS,  # Add demo blocks
-            client=client,
             use_claude=(args.llm == 'claude'),
             overwrite=args.overwrite,
             with_custom_tools=args.custom_tools,
-            minimal_prompt=args.minimal_prompt,
-            prompt_version=args.prompt
+            minimal_prompt=args.minimal_prompt
         )
+        print(f"\nCreated agent: {agent.id}")
         
-        # Store agent ID for all tests
-        agent_id = agent.id
-        print(f"\nCreated agent: {agent_id}")
+        # VERIFY NPC TOOLS FIRST
+        print("\nVerifying NPC tools are attached...")
+        required_npc_tools = [
+            "navigate_to",
+            "navigate_to_coordinates",
+            "perform_action",
+            "examine_object"
+        ]
         
-        # Run tests using the same agent_id
-        if args.test_type in ["all", "base"]:
-            test_agent_identity(client, agent_id)
-        if args.test_type in ["all", "notes"]:
-            test_notes(client, agent_id)
-        if args.test_type in ["all", "social"]:
-            test_social_awareness(client, agent_id)
-        if args.test_type in ["all", "status"]:
-            test_status_awareness(client, agent_id)
-        if args.test_type in ["all", "group"]:
-            test_group(client, agent_id)
-        if args.test_type in ["all", "persona"]:
-            test_npc_persona(client, agent_id)
-        if args.test_type in ["all", "journal"]:
-            test_npc_journal(client, agent_id)
-        if args.test_type in ["all", "navigation"]:
-            test_navigation(client, agent_id)
-        if args.test_type in ["all", "actions"]:
-            test_actions(client, agent_id)
+        # Get all tools
+        tools = client.list_tools()
+        print("\nAll available tools:")
+        for tool in tools:
+            print(f"- {tool.name} (ID: {tool.id})")
+        
+        # Get agent's tools directly
+        agent_details = client.get_agent(agent.id)
+        agent_tools = [t.name for t in agent_details.tools] if hasattr(agent_details, 'tools') else []
+        
+        print("\nTools attached to agent:")
+        for tool_name in agent_tools:
+            print(f"✓ Found attached: {tool_name}")
+            
+        missing_tools = [t for t in required_npc_tools if t not in agent_tools]
+        if missing_tools:
+            print(f"\n❌ Missing required NPC tools: {', '.join(missing_tools)}")
+            print("Tests aborted - NPC tools not attached")
+            return
+            
+        print("✓ All required NPC tools attached")
+        
+        # VERIFY PROMPTS FIRST
+        print("\nVerifying prompt components...")
+        agent_details = client.get_agent(agent.id)
+        system_prompt = agent_details.system
+        
+        # Only check essential components in minimal mode
+        required_components = {
+            "TOOL_INSTRUCTIONS": [
+                "perform_action",
+                "navigate_to",
+                "navigate_to_coordinates",
+                "examine_object"
+            ]
+        }
+        if not args.minimal_prompt:
+            required_components.update({
+                "SOCIAL_AWARENESS": [
+                    "[SILENCE]",
+                    "Direct Messages",
+                    "Departure Protocol"
+                ],
+                "GROUP_AWARENESS_PROMPT": [
+                    "LOCATION AWARENESS",
+                    "Current Location",
+                    "Previous Location",
+                    "Region Information"
+                ]
+            })
+        
+        missing_components = []
+        print("\nChecking prompt sections:")
+        for section, markers in required_components.items():
+            print(f"\n{section}:")
+            for marker in markers:
+                if marker in system_prompt:
+                    print(f"✓ Found: {marker}")
+                else:
+                    print(f"❌ Missing: {marker}")
+                    missing_components.append(f"{section}: {marker}")
+        
+        if missing_components:
+            print("\n❌ Missing prompt components:")
+            for comp in missing_components:
+                print(f"- {comp}")
+            print("Tests aborted - Required prompts missing")
+            return
+        
+        print("\n✓ All required prompt components found")
+        
+        # Print test sequence
+        print("\n" + "="*50)
+        print("TEST SEQUENCE:")
+        if args.test_type == "all":
+            tests = [
+                "base",       # Identity, Multi-user, Navigation, Actions
+                "notes",      # Player notes
+                "social",     # Social awareness
+                "status",     # Status awareness
+                "group",      # Group block updates
+                "persona",    # NPC persona
+                "journal"     # NPC journal
+            ]
+            print("Running full test suite in order:")
+            for i, test in enumerate(tests, 1):
+                print(f"{i}. {test}")
+        else:
+            print(f"Running single test: {args.test_type}")
+        print("="*50 + "\n")
+
+        # Track test results
+        completed_tests = []
+        failed_tests = []
+
+        try:
+            # Base test
+            if args.test_type in ["all", "base"]:
+                print("\n" + "="*50)
+                print("RUNNING BASE TEST")
+                print("="*50)
+                try:
+                    test_agent_identity(client, agent.id)
+                    completed_tests.append("base")
+                except Exception as e:
+                    print(f"❌ Base test failed: {e}")
+                    failed_tests.append("base")
+                    if not args.continue_on_error:
+                        return
+
+            # Notes test
+            if args.test_type in ["all", "notes"]:
+                print("\n" + "="*50)
+                print("RUNNING NOTES TEST")
+                print("="*50)
+                try:
+                    test_player_notes(client, agent.id)
+                    completed_tests.append("notes")
+                except Exception as e:
+                    print(f"❌ Notes test failed: {e}")
+                    failed_tests.append("notes")
+                    if not args.continue_on_error:
+                        return
+
+            # Social test
+            if args.test_type in ["all", "social"]:
+                print("\n" + "="*50)
+                print("RUNNING SOCIAL TEST")
+                print("="*50)
+                try:
+                    test_social_awareness(client, agent.id)
+                    completed_tests.append("social")
+                except Exception as e:
+                    print(f"❌ Social test failed: {e}")
+                    failed_tests.append("social")
+                    if not args.continue_on_error:
+                        return
+
+            # Status test
+            if args.test_type in ["all", "status"]:
+                print("\n" + "="*50)
+                print("RUNNING STATUS TEST")
+                print("="*50)
+                try:
+                    test_status_awareness(client, agent.id)
+                    completed_tests.append("status")
+                except Exception as e:
+                    print(f"❌ Status test failed: {e}")
+                    failed_tests.append("status")
+                    if not args.continue_on_error:
+                        return
+
+            # Group test (using correct function)
+            if args.test_type in ["all", "group"]:
+                print("\n" + "="*50)
+                print("RUNNING GROUP TEST")
+                print("="*50)
+                try:
+                    test_group_block_updates(client, agent.id)  # Use existing function
+                    completed_tests.append("group")
+                except Exception as e:
+                    print(f"❌ Group test failed: {e}")
+                    failed_tests.append("group")
+                    if not args.continue_on_error:
+                        return
+
+            # Persona test
+            if args.test_type in ["all", "persona"]:
+                print("\n" + "="*50)
+                print("RUNNING PERSONA TEST")
+                print("="*50)
+                try:
+                    test_npc_persona(client, agent.id)
+                    completed_tests.append("persona")
+                except Exception as e:
+                    print(f"❌ Persona test failed: {e}")
+                    failed_tests.append("persona")
+                    if not args.continue_on_error:
+                        return
+
+            # Journal test
+            if args.test_type in ["all", "journal"]:
+                print("\n" + "="*50)
+                print("RUNNING JOURNAL TEST")
+                print("="*50)
+                try:
+                    test_npc_journal(client, agent.id)
+                    completed_tests.append("journal")
+                except Exception as e:
+                    print(f"❌ Journal test failed: {e}")
+                    failed_tests.append("journal")
+                    if not args.continue_on_error:
+                        return
+
+            # Print test summary
+            print("\n" + "="*50)
+            print("TEST SEQUENCE SUMMARY")
+            print("="*50)
+            print(f"\nTests completed ({len(completed_tests)}/6):")
+            for test in completed_tests:
+                print(f"✓ {test}")
+            if failed_tests:
+                print(f"\nTests failed ({len(failed_tests)}):")
+                for test in failed_tests:
+                    print(f"❌ {test}")
+            if args.test_type == "all":
+                not_run = set(["base", "notes", "social", "status", "group", "persona", "journal"]) - set(completed_tests) - set(failed_tests)
+                if not_run:
+                    print(f"\nTests not run ({len(not_run)}):")
+                    for test in not_run:
+                        print(f"- {test}")
+            print("\n" + "="*50)
+
+        finally:
+            pass
 
     finally:
         pass
