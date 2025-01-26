@@ -26,7 +26,7 @@ def create_memory_blocks(client, blocks: Dict[str, Any]) -> list:
     
     # Create each block from provided data
     for label, data in blocks.items():
-        block = client.create_block(
+        block = client.blocks.create(
             label=label,
             value=data if isinstance(data, str) else json.dumps(data),
             limit=5000
@@ -43,7 +43,7 @@ def get_memory_block(client, agent_id: str, block_label: str) -> dict:
         agent_id: ID of agent
         block_label: Label of block to get
     """
-    agent = client.get_agent(agent_id)
+    agent = client.agents.get(agent_id)
     block = next(b for b in agent.memory.blocks if b.label == block_label)
     return json.loads(block.value)
 
@@ -56,9 +56,9 @@ def update_memory_block(client, agent_id: str, block_label: str, data: dict):
         block_label: Label of block to update
         data: New data for block
     """
-    agent = client.get_agent(agent_id)
+    agent = client.agents.get(agent_id)
     block = next(b for b in agent.memory.blocks if b.label == block_label)
-    client.update_block(
+    client.blocks.update(
         block_id=block.id,
         value=json.dumps(data)
     )
