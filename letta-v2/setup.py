@@ -7,6 +7,9 @@ setup(
     author="G. Lindberg",
     package_dir={"": "letta-v2"},
     packages=find_packages(where="letta-v2"),
+    package_data={
+        "letta_templates": ["docs/*.md"]
+    },
     install_requires=[
         "letta-client>=0.1.21",
         "python-dotenv",

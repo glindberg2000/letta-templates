@@ -26,7 +26,8 @@ from letta_templates.npc_test_data import DEMO_BLOCKS
 from letta_templates.npc_utils_v2 import (
     print_response,
     extract_message_from_response,
-    retry_test_call
+    retry_test_call,
+    extract_agent_response
 )
 
 import requests
@@ -560,7 +561,7 @@ def test_tool_update(client, agent_id: str):
     for message, system_update in test_sequence:
         if message:
             print(f"\nSending user message: '{message}'")
-            response = client.send_message(
+            response = client.agents.messages.create(
                 agent_id=agent_id,
                 message=message,
                 role="user"
@@ -580,7 +581,7 @@ def test_tool_update(client, agent_id: str):
             else:
                 # Regular system update
                 print(f"\nSending system update: '{system_update}'")
-                response = client.send_message(
+                response = client.agents.messages.create(
                     agent_id=agent_id,
                     message=system_update,
                     role="system"
@@ -653,7 +654,13 @@ def test_navigation(client, agent_id: str):
                 delay=2
             )
             print("\nResponse:")
-            print_response(response)
+            result = extract_agent_response(response)
+            print(f"\nFinal message: {result['message']}")
+            
+            # Handle navigation tool calls
+            for tool_call in result['tool_calls']:
+                if tool_call['tool'] == 'navigate_to':
+                    print(f"Navigation requested to: {tool_call['args']['destination_slug']}")
             
             # Give time for navigation
             time.sleep(2)
@@ -811,10 +818,10 @@ def send_chat_message(message: str, agent_id: str, use_api: bool = False, name: 
             raise
     else:
         print("\n=== Using Direct Letta Connection ===")
-        return client.send_message(
+        return client.agents.send_message(
             agent_id=agent_id,
-            message=message,
             role="user",
+            message=message,
             name=name
         )
 
@@ -857,7 +864,7 @@ def test_multi_user_conversation(client, agent_id: str):
     # Process each message in the conversation
     for name, message in conversation:
         print(f"\n{name} says: {message}")
-        response = client.send_message(
+        response = client.agents.messages.create(
             agent_id=agent_id,
             message=message,
             role="user",
@@ -875,7 +882,7 @@ async def handle_multi_user_requests(client, agent_id: str, requests: list):
         with ThreadPoolExecutor() as pool:
             response = await loop.run_in_executor(
                 pool,
-                client.send_message,
+                client.agents.messages.create,
                 agent_id,
                 message,
                 "user",
@@ -1439,7 +1446,7 @@ def test_core_memory(client, agent_id: str):
         append_msg = "Add to your journal: I am also very patient with beginners"
         print(f"\nTesting journal append with message: {append_msg}")
         response = retry_test_call(
-            client.send_message,
+            client.agents.messages.create,
             agent_id=agent_id,
             message=append_msg,
             role="system"
@@ -1451,7 +1458,7 @@ def test_core_memory(client, agent_id: str):
         replace_msg = "Update your journal: change 'patient' to 'helpful'"
         print(f"\nTesting journal update with message: {replace_msg}")
         response = retry_test_call(
-            client.send_message,
+            client.agents.messages.create,
             agent_id=agent_id,
             message=replace_msg,
             role="system"
@@ -1596,7 +1603,7 @@ def test_minimal_agent():
     
     for role, message in questions:
         print(f"\nSending {role} message: {message}")
-        response = client.send_message(
+        response = client.agents.messages.create(
             agent_id=agent.id,
             message=message,
             role=role

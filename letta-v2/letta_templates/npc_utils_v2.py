@@ -129,6 +129,56 @@ def update_group_status(client, agent_id: str, nearby_players: list,
         "and update_status() for status updates instead."
     )
 
+def extract_agent_response(response) -> dict:
+    """Extract structured data from an agent response.
+    
+    Args:
+        response: Response from client.agents.messages.create()
+        
+    Returns:
+        dict with:
+            message (str): Final response to user
+            tool_calls (list): List of tool calls with name and arguments
+            tool_results (list): Results from tool executions
+            reasoning (list): Agent's reasoning steps
+            
+    Example:
+        >>> response = client.agents.messages.create(agent_id, message="Go to the shop")
+        >>> result = extract_agent_response(response)
+        >>> print(f"Tool calls: {result['tool_calls']}")  # [{tool: 'navigate_to', args: {'destination': 'shop'}}]
+        >>> print(f"Final message: {result['message']}")  # "I'll head to the shop now!"
+    """
+    tool_calls = []
+    tool_results = []
+    reasoning = []
+    final_message = None
+
+    for msg in response.messages:
+        if msg.message_type == "tool_call_message":
+            tool_calls.append({
+                "tool": msg.tool_call.name,
+                "args": json.loads(msg.tool_call.arguments)
+            })
+            
+        elif msg.message_type == "tool_return_message":
+            tool_results.append({
+                "result": msg.tool_return,
+                "status": msg.status
+            })
+            
+        elif msg.message_type == "reasoning_message":
+            reasoning.append(msg.reasoning)
+            
+        elif msg.message_type == "assistant_message":
+            final_message = msg.content if isinstance(msg.content, str) else msg.content[0].text
+
+    return {
+        "message": final_message,
+        "tool_calls": tool_calls,
+        "tool_results": tool_results,
+        "reasoning": reasoning
+    }
+
 def print_response(response):
     """Print all messages from a Letta response."""
     print("\nParsing response...")
@@ -178,7 +228,7 @@ def print_response(response):
         print(f"Steps: {response.usage.step_count}")
 
 def extract_message_from_response(response) -> str:
-    """Extract the actual message content from a LettaResponse object."""
+    """DEPRECATED: Use extract_agent_response() instead for complete response handling."""
     try:
         for message in response.messages:
             if message.message_type == "assistant_message":
