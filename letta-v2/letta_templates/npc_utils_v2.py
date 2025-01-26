@@ -355,4 +355,33 @@ def get_location_history(client, agent_id: str) -> List[str]:
 def get_group_history(client, agent_id: str) -> List[str]:
     """Get recent group membership changes."""
     group = get_memory_block(client, agent_id, "group_members")
-    return group.get("updates", []) 
+    return group.get("updates", [])
+
+def print_client_info(client):
+    """Print debug info about the client's message API."""
+    try:
+        import inspect
+        
+        print("\nLetta Client API Debug Info:")
+        print("-" * 50)
+        
+        # Print version info
+        print(f"Client version: {getattr(client, '__version__', 'unknown')}")
+        
+        # Print message create signature
+        if hasattr(client.agents.messages, 'create'):
+            sig = inspect.signature(client.agents.messages.create)
+            print("\nMessage create signature:")
+            print(f"client.agents.messages.create{sig}")
+            
+            # Print parameter details
+            for name, param in sig.parameters.items():
+                print(f"\n{name}:")
+                print(f"  type: {param.annotation}")
+                print(f"  default: {param.default if param.default != param.empty else 'required'}")
+        
+        print("\nAvailable client methods:")
+        print(dir(client.agents.messages))
+        
+    except Exception as e:
+        print(f"Error inspecting client: {e}") 

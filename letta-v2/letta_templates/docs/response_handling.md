@@ -221,4 +221,12 @@ for tool_call in result["tool_calls"]:
 
 # 4. Show final message to user
 print(result["message"])
+```
+
+### Debugging Client Setup
+```python
+from letta_templates.npc_utils_v2 import print_client_info
+
+# Print API information
+print_client_info(client)
 ``` 
