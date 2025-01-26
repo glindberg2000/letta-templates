@@ -43,7 +43,7 @@ def get_memory_block(client, agent_id: str, block_label: str) -> dict:
         agent_id: ID of agent
         block_label: Label of block to get
     """
-    agent = client.agents.get(agent_id)
+    agent = client.agents.retrieve(agent_id)
     block = next(b for b in agent.memory.blocks if b.label == block_label)
     return json.loads(block.value)
 
@@ -56,7 +56,7 @@ def update_memory_block(client, agent_id: str, block_label: str, data: dict):
         block_label: Label of block to update
         data: New data for block
     """
-    agent = client.agents.get(agent_id)
+    agent = client.agents.retrieve(agent_id)
     block = next(b for b in agent.memory.blocks if b.label == block_label)
     client.blocks.update(
         block_id=block.id,
