@@ -1094,5 +1094,16 @@ FULL_PROMPT = f"""
 {TOOL_INSTRUCTIONS}
 """
 
+# Standard system messages for player events
+PLAYER_JOIN_MESSAGE = """Player {name} (ID: {player_id}) has joined.
+      If you don't recognize them from recent interactions,
+      check archival_memory_search for 'Player profile for {player_id}'"""
+
+
+PLAYER_LEAVE_MESSAGE = """{name} is leaving. 
+      If you have meaningful notes or interactions to record,
+      save to archival_memory_insert:
+      'Player profile for {player_id}: Last seen <timestamp>. Notes: <current notes>'"""
+
 
 

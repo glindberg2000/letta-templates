@@ -290,4 +290,39 @@ agent = create_personalized_agent_v3(
 # Dev setup - update tools as needed
 client = create_letta_client()
 update_tools(client)  # Recreates tools with latest code
-``` 
+```
+
+## Player Join/Leave Events
+
+Use optimized system messages to handle player events efficiently:
+
+```python
+from letta_templates.npc_prompts import PLAYER_JOIN_MESSAGE, PLAYER_LEAVE_MESSAGE
+
+# When a player joins
+# Only searches archival memory if player isn't recognized recently
+client.agents.messages.create(
+    agent_id=agent_id,
+    message=PLAYER_JOIN_MESSAGE.format(
+        name="Alice",
+        player_id="alice_123"
+    ),
+    role="system"
+)
+
+# When a player leaves
+# Only saves to archival memory if meaningful interactions occurred
+client.agents.messages.create(
+    agent_id=agent_id,
+    message=PLAYER_LEAVE_MESSAGE.format(
+        name="Alice",
+        player_id="alice_123"
+    ),
+    role="system"
+)
+```
+
+This ensures:
+- Efficient memory usage (only searches/saves when needed)
+- History tracking for meaningful interactions
+- Optimized for high-traffic scenarios 
