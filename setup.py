@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="letta_templates",
-    version="0.9.11",
+    version="0.9.12",
     description="Templates and tools for Letta AI agents",
     author="G. Lindberg",
     package_dir={"": "letta-v2"},
