@@ -730,14 +730,13 @@ def test_actions(client, agent_id: str):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--name', default='emma_assistant')
-    parser.add_argument('--llm', choices=['openai', 'claude'], default='openai')
+    parser.add_argument('--name', default='TestGuide')
+    parser.add_argument('--llm-type', choices=['openai'], default='openai')
     parser.add_argument('--keep', action='store_true')
     parser.add_argument('--overwrite', action='store_true')
     parser.add_argument('--custom-tools', action='store_true')
-    parser.add_argument('--minimal-prompt', action='store_true')
     parser.add_argument('--continue-on-error', action='store_true')
-    parser.add_argument('--minimal-test', action='store_true', help='Run minimal agent test')
+    parser.add_argument('--minimal-test', action='store_true')
     parser.add_argument('--test-type', choices=[
         'all', 'base', 'notes', 'social', 'status', 
         'group', 'persona', 'journal', 'navigation', 'actions'
@@ -1637,7 +1636,7 @@ def main():
             
         # Regular test path
         print(f"- Keep Agent: {args.keep}")
-        print(f"- LLM Provider: {args.llm}")
+        print(f"- LLM Type: {args.llm_type}")
         print(f"- Agent Name: {args.name}")
         print(f"- Overwrite: {args.overwrite}")
         
@@ -1645,18 +1644,17 @@ def main():
         update_tools(client)
         
         print(f"\nCreating agent with {args.prompt} prompt...")
-        print(f"- Using {'minimal' if args.minimal_prompt else 'full'} prompt mode")
-        print(f"- LLM: {args.llm}")
+        print(f"- Using {args.prompt} prompt mode")
+        print(f"- LLM: {args.llm_type}")
         
-        # Create agent ONCE - just update to use DEMO_BLOCKS
+        # Create agent with new signature
         agent = create_personalized_agent_v3(
             name=args.name,
-            memory_blocks=DEMO_BLOCKS,  # Add demo blocks
+            memory_blocks=DEMO_BLOCKS,
             client=client,
-            use_claude=(args.llm == 'claude'),
+            llm_type=args.llm_type,
             overwrite=args.overwrite,
             with_custom_tools=args.custom_tools,
-            minimal_prompt=args.minimal_prompt,
             prompt_version=args.prompt
         )
         

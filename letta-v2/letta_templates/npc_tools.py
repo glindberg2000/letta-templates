@@ -446,7 +446,7 @@ def update_tool(client, tool_name: str, tool_func, verbose: bool = True) -> str:
         raise
 
 def update_tools(client: Letta):
-    """Update tool registry with latest versions"""
+    """Update tool registry with latest versions (Development use)"""
     print("\nUpdating tools...")
     
     # Get existing tools using global tools API
@@ -475,6 +475,32 @@ def update_tools(client: Letta):
             print(f"Error updating {name}: {e}")
             raise
 
+def ensure_custom_tools_exist(client: Letta):
+    """Ensure all required NPC tools exist, creating only if missing (Production use).
+    
+    Args:
+        client: Letta client instance
+    
+    Returns:
+        list[str]: Names of available custom tools
+    """
+    print("\nChecking custom tools...")
+    
+    existing_tools = {t.name: t.id for t in client.tools.list()}
+    
+    for name, tool_info in TOOL_REGISTRY.items():
+        if name not in existing_tools:
+            print(f"Creating missing tool: {name}")
+            source_code = inspect.getsource(tool_info['function'])
+            client.tools.create(
+                name=name,
+                source_code=source_code
+            )
+        else:
+            print(f"Tool {name} already exists")
+            
+    return list(TOOL_REGISTRY.keys())
+
 def create_letta_client():
     """Create a configured Letta client"""
     base_url = os.getenv('LETTA_BASE_URL', 'http://localhost:8283')
@@ -484,26 +510,23 @@ def create_personalized_agent_v3(
     name: str,
     memory_blocks: dict,
     client = None,
-    use_claude: bool = False,
+    llm_type: str = "openai",
     overwrite: bool = False,
     with_custom_tools: bool = True,
     custom_registry = None,
-    minimal_prompt: bool = True,
     system_prompt: str = None,
-    prompt_version: str = "DEEPSEEK"
+    prompt_version: str = "FULL"
 ):
     """Create agent with provided memory blocks and config
     
     Args:
         name: Base name for the agent
-        memory_blocks: Dict of memory block data to initialize agent with:
-            {
-                "persona": {...},
-                "group_members": {...},
-                "locations": {...},
-                "status": {...}
-            }
-        ... (rest of existing args)
+        memory_blocks: Required memory blocks
+        client: Optional Letta client (will create if None)
+        llm_type: LLM provider to use (default: "openai")
+        overwrite: Replace existing agent if exists
+        with_custom_tools: Include NPC tools like navigation
+        prompt_version: Use "FULL" for production (default), "MINIMUM" for testing
     """
     logger = logging.getLogger('letta_test')
     
@@ -518,44 +541,40 @@ def create_personalized_agent_v3(
     timestamp = int(time.time())
     unique_name = f"{name}_{timestamp}"
     
-    # Select prompt based on version
-    if system_prompt:
-        selected_prompt = system_prompt
-        prompt_name = "CUSTOM"
-    else:
-        prompts = {
-            "DEEPSEEK": DEEPSEEK_PROMPT_V3,
-            "GPT01": GPT01_PROMPT_V3,
-            "MINIMUM": MINIMUM_PROMPT,
-            "FULL": (
-                BASE_PROMPT +
-                "\n\n" + TOOL_INSTRUCTIONS +
-                "\n\n" + SOCIAL_AWARENESS_PROMPT +
-                "\n\n" + GROUP_AWARENESS_PROMPT +
-                "\n\n" + LOCATION_AWARENESS_PROMPT
-            )
-        }
-        selected_prompt = prompts.get(prompt_version, DEEPSEEK_PROMPT_V3)
-        prompt_name = prompt_version
-        
-    # Format the prompt with assistant name
+    # Choose prompt based on version
     if prompt_version == "FULL":
-        system_prompt = selected_prompt.format(assistant_name=name)
+        prompt = (
+            BASE_PROMPT + 
+            SOCIAL_AWARENESS_PROMPT + 
+            GROUP_AWARENESS_PROMPT + 
+            LOCATION_AWARENESS_PROMPT + 
+            TOOL_INSTRUCTIONS
+        )
     else:
-        system_prompt = selected_prompt.format(assistant_name=name)
+        prompt = prompt_version  # Use whatever prompt version was passed
     
-    # Log what we're using
-    print(f"\nUsing {prompt_name} prompt")
+    # Format the prompt with assistant name
+    system_prompt = prompt.format(assistant_name=name)
+    
+    print(f"\nUsing {prompt_version} prompt")
     print(f"Prompt length: {len(system_prompt)} chars")
     print(f"First 100 chars: {system_prompt[:100]}...")
     
-    # Create configs first
-    llm_config = LLMConfig(
-        model=os.getenv("LETTA_MODEL", "gpt-4o-mini"),
-        model_endpoint_type=os.getenv("LETTA_ENDPOINT_TYPE", "openai"),
-        model_endpoint=os.getenv("LETTA_MODEL_ENDPOINT", "https://api.openai.com/v1"),
-        context_window=int(os.getenv("LETTA_CONTEXT_WINDOW", "128000")),
-    )
+    # Create configs based on llm_type
+    llm_configs = {
+        "openai": LLMConfig(
+            model=os.getenv("LETTA_MODEL", "gpt-4o-mini"),
+            model_endpoint_type="openai",
+            model_endpoint=os.getenv("LETTA_MODEL_ENDPOINT", "https://api.openai.com/v1"),
+            context_window=int(os.getenv("LETTA_CONTEXT_WINDOW", "128000")),
+        ),
+        # Add other providers here as needed
+    }
+    
+    try:
+        llm_config = llm_configs[llm_type]
+    except KeyError:
+        raise ValueError(f"Unsupported LLM type: {llm_type}")
     
     embedding_config = EmbeddingConfig(
         embedding_endpoint_type="openai",

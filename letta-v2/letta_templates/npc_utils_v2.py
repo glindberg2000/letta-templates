@@ -361,12 +361,21 @@ def print_client_info(client):
     """Print debug info about the client's message API."""
     try:
         import inspect
+        from importlib.metadata import version
         
         print("\nLetta Client API Debug Info:")
         print("-" * 50)
         
         # Print version info
-        print(f"Client version: {getattr(client, '__version__', 'unknown')}")
+        try:
+            letta_client_version = version('letta-client')
+            letta_templates_version = version('letta_templates')
+            print(f"letta-client version: {letta_client_version}")
+            print(f"letta_templates version: {letta_templates_version}")
+        except Exception as e:
+            print(f"Error getting package versions: {e}")
+        
+        print(f"\nClient instance version: {getattr(client, '__version__', 'unknown')}")
         
         # Print message create signature
         if hasattr(client.agents.messages, 'create'):
@@ -380,8 +389,19 @@ def print_client_info(client):
                 print(f"  type: {param.annotation}")
                 print(f"  default: {param.default if param.default != param.empty else 'required'}")
         
-        print("\nAvailable client methods:")
-        print(dir(client.agents.messages))
+        # Print full client structure
+        print("\nClient structure:")
+        print("client.agents methods:", dir(client.agents))
+        print("client.agents.messages methods:", dir(client.agents.messages))
+        
+        # Try to get source
+        try:
+            import inspect
+            source = inspect.getsource(client.agents.messages.create)
+            print("\nMessage create source:")
+            print(source)
+        except Exception as e:
+            print(f"\nCould not get source: {e}")
         
     except Exception as e:
         print(f"Error inspecting client: {e}") 

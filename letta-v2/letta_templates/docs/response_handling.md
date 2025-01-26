@@ -1,54 +1,77 @@
-# Letta v0.9.7 - Response Handling Guide
+# Letta v0.9.8 - Response Handling Guide
 
-The new version includes a simplified way to handle agent responses. Here's how to use it:
+## Message Sending - Keep It Simple
 
-## Basic Usage
+1. Send a message - this is all you need
 ```python
 from letta_templates.npc_utils_v2 import extract_agent_response
 
-# Send message and handle response
+# 1. Send a message - this is all you need
 response = client.agents.messages.create(
     agent_id=agent_id,
-    message="Go to the shop",
+    message="Hello!",              # The message text
+    role="user",                   # Optional: "user" (default), "system"
+    name="Player123"               # Optional: Speaker name
+)
+
+# 2. Get the response
+result = extract_agent_response(response)
+print(result["message"])           # Show the agent's reply
+```
+
+That's it! Letta handles everything else internally:
+- Message history
+- Context tracking
+- Tool processing
+
+## Common Use Cases
+
+### 1. Player Chat
+```python
+# When a player talks to the NPC
+response = client.agents.messages.create(
+    agent_id=npc_id,
+    message=player_message,
+    role="user",
+    name=player_name
+)
+
+# Show the NPC's response
+result = extract_agent_response(response)
+print(result["message"])
+```
+
+### 2. System Updates
+```python
+# Update the NPC about location changes
+response = client.agents.messages.create(
+    agent_id=npc_id,
+    message="You are now in Town Square",
+    role="system"
+)
+```
+
+### 3. Handling Tool Calls
+```python
+# Send player message
+response = client.agents.messages.create(
+    agent_id=npc_id,
+    message="Can you show me to the shop?",
     role="user",
     name="Player123"
 )
 
+# Check for navigation or other tool calls
 result = extract_agent_response(response)
 
-# Get final message to show player
-print(result["message"])  # "I'll head to the shop right away!"
-
-# Handle any tool calls (e.g. navigation)
+# Handle any tool calls first
 for tool_call in result["tool_calls"]:
     if tool_call["tool"] == "navigate_to":
         destination = tool_call["args"]["destination_slug"]
-        print(f"NPC is navigating to: {destination}")
-```
+        print(f"NPC is heading to: {destination}")
 
-## Common Tool Call Patterns
-
-1. Navigation:
-```python
-for tool_call in result["tool_calls"]:
-    if tool_call["tool"] == "navigate_to":
-        # Handle navigation
-        destination = tool_call["args"]["destination_slug"]
-        coordinates = tool_call["args"].get("coordinates")
-    
-    elif tool_call["tool"] == "perform_action":
-        # Handle actions like wave, sit, etc.
-        action = tool_call["args"]["action"]
-        target = tool_call["args"].get("target")
-```
-
-2. Group Management:
-```python
-for tool_call in result["tool_calls"]:
-    if tool_call["tool"] == "group_memory_append":
-        # Handle group updates
-        player = tool_call["args"]["player_name"]
-        note = tool_call["args"]["note"]
+# Then show the response
+print(result["message"])
 ```
 
 ## Response Structure
@@ -229,4 +252,42 @@ from letta_templates.npc_utils_v2 import print_client_info
 
 # Print API information
 print_client_info(client)
+```
+
+## Agent Setup
+
+### Production Setup
+```python
+# App startup - check tools once
+client = create_letta_client()
+custom_tools = ensure_custom_tools_exist(client)
+
+# Required memory blocks
+initial_blocks = {
+    "locations": { ... },
+    "status": "Ready to help",
+    "group_members": { ... },
+    "persona": { ... },
+    "journal": {           # Don't forget this one!
+        "entries": [],
+        "last_updated": ""
+    }
+}
+
+# Create agent with full prompt
+agent = create_personalized_agent_v3(
+    name="TownGuide",
+    memory_blocks=initial_blocks,
+    client=client,
+    llm_type="openai",     # Default LLM provider
+    with_custom_tools=True,  # Include navigation etc.
+    prompt_version="FULL"    # Use full NPC prompt
+)
+```
+
+### Development Setup
+```python
+# Dev setup - update tools as needed
+client = create_letta_client()
+update_tools(client)  # Recreates tools with latest code
 ``` 
