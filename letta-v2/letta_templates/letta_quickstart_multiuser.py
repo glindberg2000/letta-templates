@@ -27,7 +27,12 @@ from letta_templates.npc_utils_v2 import (
     print_response,
     extract_message_from_response,
     retry_test_call,
-    extract_agent_response
+    extract_agent_response,
+    update_status_block
+)
+from letta_templates.npc_prompts import (
+    STATUS_UPDATE_MESSAGE,
+    GROUP_UPDATE_MESSAGE
 )
 
 import requests
@@ -1098,39 +1103,91 @@ def basic_evaluation(response_text: str, current_status: dict):
 
 def test_status_awareness(client, agent_id: str):
     """Test status awareness and updates."""
-    print("\nTesting status awareness...")
+    print("\n=== Testing Status Awareness ===")
     
     try:
-        # Get initial status using new API
+        # 1. Check initial status
+        print("\n1. Initial Status Check:")
         agent = client.agents.retrieve(agent_id)
         status_block = next((b for b in agent.memory.blocks if b.label == "status"), None)
-        if not status_block:
-            print("❌ No status block found")
-            return
-        print("\nInitial status:", status_block.value)
+        print("Initial status:", status_block.value)
         
-        # Keep all existing test scenarios exactly as they are
-        test_messages = [
-            "What are you currently doing?",
-            "Are you busy right now?",
-            "Where can I find you?"
-        ]
+        # 2. Update to Town Square
+        print("\n2. Updating to Town Square:")
+        update_status_block(
+            client=client,
+            agent_id=agent_id,
+            status_text="Location: Town Square | Action: Greeting visitors"
+        )
+        print("Status after update:", status_block.value)
         
-        for message in test_messages:
-            print(f"\nUser asks: {message}")
-            response = client.agents.messages.create(
-                agent_id=agent_id,
-                messages=[
-                    MessageCreate(
-                        role="user",
-                        content=message
-                    )
-                ]
-            )
-            print("\nResponse:")
-            print_response(response)
-            time.sleep(1)
-            
+        # Send system message to notify of status update
+        print("\nSending status update notification...")
+        response = client.agents.messages.create(
+            agent_id=agent_id,
+            messages=[MessageCreate(
+                role="system",
+                content=STATUS_UPDATE_MESSAGE
+            )]
+        )
+        
+        # 3. Ask about current location
+        print("\n3. Asking about Town Square location:")
+        question = "What are you doing right now?"
+        print(f"Question: \"{question}\"")
+        response = client.agents.messages.create(
+            agent_id=agent_id,
+            messages=[MessageCreate(
+                role="user",
+                content=question
+            )]
+        )
+        print("NPC Response:")
+        print_response(response)
+        
+        # Verify status hasn't changed
+        agent = client.agents.retrieve(agent_id)
+        status_block = next((b for b in agent.memory.blocks if b.label == "status"), None)
+        print("Current status:", status_block.value)
+        
+        # 4. Update to Garden
+        print("\n4. Updating to Garden:")
+        update_status_block(
+            client=client,
+            agent_id=agent_id,
+            status_text="Location: Garden | Action: Showing new players around"
+        )
+        print("Status after garden update:", status_block.value)
+        
+        # Send system message to notify of status update
+        print("\nSending status update notification...")
+        response = client.agents.messages.create(
+            agent_id=agent_id,
+            messages=[MessageCreate(
+                role="system",
+                content=STATUS_UPDATE_MESSAGE
+            )]
+        )
+        
+        # 5. Ask about garden
+        print("\n5. Asking about Garden location:")
+        question = "Where are you and what are you doing?"
+        print(f"Question: \"{question}\"")
+        response = client.agents.messages.create(
+            agent_id=agent_id,
+            messages=[MessageCreate(
+                role="user",
+                content=question
+            )]
+        )
+        print("NPC Response:")
+        print_response(response)
+        
+        # Final status check
+        agent = client.agents.retrieve(agent_id)
+        status_block = next((b for b in agent.memory.blocks if b.label == "status"), None)
+        print("\nFinal status:", status_block.value)
+        
     except Exception as e:
         print(f"Error in test_status_awareness: {e}")
         raise
@@ -1165,51 +1222,51 @@ def validate_agent_setup(client, agent_id: str):
     logger.info("✓ All required NPC tools attached")
     return True
 
-def test_group(client, agent_id):
+def test_group(client, agent_id: str):
     """Test group_members block updates"""
     print("\nTesting group_members block updates...")
     
-    # Initial group state
+    # Initial group state with only current members
     group_block = {
         "members": {
             "alice123": {
                 "name": "Alice",
                 "appearance": "Wearing a bright red dress with a golden necklace and carrying a blue handbag",
-                "last_location": "Main Plaza",
                 "last_seen": "2024-01-06T22:30:45Z",
                 "notes": ""
-            },
-            "bob123": {
-                "name": "Bob", 
-                "appearance": "Tall guy in a green leather jacket, with a silver watch and black boots",
-                "last_location": "Cafe",
-                "last_seen": "2024-01-06T22:31:00Z",
-                "notes": "Looking for Pete's Stand"
             }
         },
-        "summary": "Alice is in Main Plaza, Bob is at the Cafe",
-        "updates": ["Alice arrived at Main Plaza", "Bob moved to Cafe"]
+        "summary": "Current members: Alice",
+        "updates": [
+            "Alice joined the group",
+        ]
     }
     
     # Update group block
-    print("\n_block_update:")
-    print(json.dumps(group_block, indent=2))
-    
-    # Get block ID first
+    print("\nUpdating group block...")
     agent = client.agents.retrieve(agent_id)
     block = next(b for b in agent.memory.blocks if b.label == "group_members")
-    
-    # Update using blocks.modify
     client.blocks.modify(
         block_id=block.id,
         value=json.dumps(group_block)
     )
     
+    # Send system message to notify of group update
+    print("\nSending group update notification...")
+    response = client.agents.messages.create(
+        agent_id=agent_id,
+        messages=[MessageCreate(
+            role="system",
+            content=GROUP_UPDATE_MESSAGE
+        )]
+    )
+
     # Test scenarios
+    print("\nTesting group awareness...")
     scenarios = [
         ("Charlie", "Who's around right now?"),
         ("Charlie", "What is Alice wearing?"),
-        ("Charlie", "Where is Bob?")
+        ("Charlie", "Is anyone else here?")
     ]
     
     for speaker, message in scenarios:
@@ -1224,6 +1281,11 @@ def test_group(client, agent_id):
         )
         print("\nResponse:")
         print_response(response)
+        
+        # Print current group state after each interaction
+        agent = client.agents.retrieve(agent_id)
+        group_block = next(b for b in agent.memory.blocks if b.label == "group_members")
+        print("\nCurrent group state:", group_block.value)
 
 def get_npc_prompt(name: str, persona: str):
     return f"""You are {name}, {persona}
@@ -1233,56 +1295,20 @@ Important guidelines:
 - Don't address or respond to players who aren't in the members list
 - If someone asks about a player who isn't nearby, mention that they're no longer in the area
 - Keep track of who enters and leaves through the updates list
+- ALWAYS check your status block for your current location and action
+- When asked about your location or activity, read directly from your status block
 
 Example:
 If Alice asks "Bob, what's your favorite food?" but Bob isn't in members:
 ✓ Say: "Alice, Bob isn't nearby at the moment."
 ✗ Don't: Pretend Bob is still there or ignore Alice's question
 
-Current group info is in the group_members block with:
-- members: Who is currently nearby
-- updates: Recent changes in who's around
-- summary: Quick overview of current group
+Example status check:
+If your status block says "Location: Garden | Action: Showing new players around":
+✓ Say: "I'm in the Garden, showing new players around"
+✗ Don't: Make up a different location or action
 """
 
-def update_status_block(client, agent_id, status_text):
-    """Update the status block with a narrative description"""
-    try:
-        # Get agent and find status block
-        agent = client.agents.retrieve(agent_id)
-        status_blocks = [b for b in agent.memory.blocks if b.label == "status"]
-        
-        # If no status block exists, create one
-        if not status_blocks:
-            status_block = client.blocks.create(
-                label="status",
-                value="",
-                limit=5000
-            )
-            block_id = status_block.id
-        else:
-            block_id = status_blocks[0].id
-
-        # If we're passed a string, use it directly
-        if isinstance(status_text, str):
-            status_narrative = status_text
-        else:
-            # Otherwise build narrative from dict
-            status_narrative = (
-                f"You are currently in {status_text.get('location', 'Town Square')}. "
-                f"From here, you can see {' and '.join(status_text.get('nearby_locations', []))}. "
-                "The entire area is part of the Town Square region."
-            )
-
-        # Update using blocks.modify
-        client.blocks.modify(
-            block_id=block_id,
-            value=status_narrative  # No JSON encoding needed for string
-        )
-        
-    except Exception as e:
-        print(f"Error updating status block: {str(e)}")
-        raise
 
 def create_or_update_tool(client, tool_name: str, tool_func, verbose: bool = True) -> Any:
     """Create a new tool or update if it exists using new API."""
@@ -1435,6 +1461,13 @@ def test_npc_persona(client, agent_id: str):
     except Exception as e:
         print(f"Error in test_npc_persona: {e}")
         raise
+
+    # Update status for persona test
+    update_status_block(
+        client=client,
+        agent_id=agent_id,
+        status_text="Location: Main Plaza | Action: Meeting new players"
+    )
 
 def test_core_memory(client, agent_id: str):
     """Test core memory operations using persona memory."""
@@ -1644,8 +1677,9 @@ def main():
         update_tools(client)
         
         print(f"\nCreating agent with {args.prompt} prompt...")
-        print(f"- Using {args.prompt} prompt mode")
-        print(f"- LLM: {args.llm_type}")
+        print("\nVerifying prompt components:")
+        print("BASE_PROMPT:", BASE_PROMPT[:100] + "...")
+        print("LOCATION_AWARENESS_PROMPT:", LOCATION_AWARENESS_PROMPT)
         
         # Create agent with new signature
         agent = create_personalized_agent_v3(
@@ -1655,7 +1689,7 @@ def main():
             llm_type=args.llm_type,
             overwrite=args.overwrite,
             with_custom_tools=args.custom_tools,
-            prompt_version=args.prompt
+            prompt_version="FULL"
         )
         
         # Store agent ID for all tests

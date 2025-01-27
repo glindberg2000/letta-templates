@@ -56,9 +56,10 @@ def update_memory_block(client, agent_id: str, block_label: str, data: dict):
         block_label: Label of block to update
         data: New data for block
     """
+    print(f"Updating block {block_label} with method: {client.blocks.update.__name__}")
     agent = client.agents.retrieve(agent_id)
     block = next(b for b in agent.memory.blocks if b.label == block_label)
-    client.blocks.update(
+    client.blocks.patch(
         block_id=block.id,
         value=json.dumps(data)
     )
@@ -256,40 +257,48 @@ def retry_test_call(func, *args, max_retries=3, delay=2, **kwargs):
             delay *= 2  # Exponential backoff
     raise last_error 
 
-def update_location_status(
-    client,
-    agent_id: str,
-    current_location: str,
-    current_action: str = "idle",
-    max_history: int = 5
-) -> Dict:
-    """Update agent's location status with history tracking.
+def update_status_block(client, agent_id: str, status_text: str):
+    """Update agent's status with simple text.
     
     Args:
         client: Letta client instance
         agent_id: ID of agent to update
-        current_location: Name/slug of current location
-        current_action: Current action (default: "idle")
-        max_history: Max number of previous locations to track
+        status_text: Simple status text (e.g. "Location: Town Square | Action: Greeting")
     """
-    # Get current status
-    status_block = get_memory_block(client, agent_id, "status")
-    
-    # Create new status with history
-    new_status = {
-        "current_location": current_location,
-        "previous_location": status_block.get("current_location"),
-        "current_action": current_action,
-        "movement_state": "stationary" if current_action == "idle" else "moving",
-        "location_history": (
-            [status_block.get("current_location")] + 
-            status_block.get("location_history", [])
-        )[:max_history]
-    }
-    
-    # Update status block
-    update_memory_block(client, agent_id, "status", new_status)
-    return new_status
+    try:
+        # Get agent and find status block
+        agent = client.agents.retrieve(agent_id)
+        status_blocks = [b for b in agent.memory.blocks if b.label == "status"]
+        
+        # If no status block exists, create one
+        if not status_blocks:
+            status_block = client.blocks.create(
+                label="status",
+                value="",
+                limit=5000
+            )
+            block_id = status_block.id
+        else:
+            block_id = status_blocks[0].id
+
+        # If we're passed a string, use it directly
+        if isinstance(status_text, str):
+            status_narrative = status_text
+        else:
+            # Otherwise build narrative from dict
+            status_narrative = (
+                f"You are currently in {status_text.get('location', 'Town Square')}. "
+                f"From here, you can see {' and '.join(status_text.get('nearby_locations', []))}. "
+                "The entire area is part of the Town Square region."
+            )
+
+        # Update using blocks.modify
+        client.blocks.modify(
+            block_id=block_id,
+            value=status_narrative  # No JSON encoding needed for string
+        )
+    except Exception as e:
+        print(f"Error updating status block: {e}")
 
 def update_group_members_v2(
     client,
