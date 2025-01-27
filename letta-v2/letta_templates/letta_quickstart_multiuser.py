@@ -28,7 +28,8 @@ from letta_templates.npc_utils_v2 import (
     extract_message_from_response,
     retry_test_call,
     extract_agent_response,
-    update_status_block
+    update_status_block,
+    update_group_block
 )
 from letta_templates.npc_prompts import (
     STATUS_UPDATE_MESSAGE,
@@ -1244,23 +1245,8 @@ def test_group(client, agent_id: str):
     
     # Update group block
     print("\nUpdating group block...")
-    agent = client.agents.retrieve(agent_id)
-    block = next(b for b in agent.memory.blocks if b.label == "group_members")
-    client.blocks.modify(
-        block_id=block.id,
-        value=json.dumps(group_block)
-    )
+    update_group_block(client, agent_id, group_block)
     
-    # Send system message to notify of group update
-    print("\nSending group update notification...")
-    response = client.agents.messages.create(
-        agent_id=agent_id,
-        messages=[MessageCreate(
-            role="system",
-            content=GROUP_UPDATE_MESSAGE
-        )]
-    )
-
     # Test scenarios
     print("\nTesting group awareness...")
     scenarios = [

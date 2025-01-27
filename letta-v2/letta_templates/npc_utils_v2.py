@@ -2,6 +2,11 @@ from typing import Dict, Any, Optional, List
 import json
 from datetime import datetime
 import time
+from letta_client import MessageCreate
+from letta_templates.npc_prompts import (
+    STATUS_UPDATE_MESSAGE,
+    GROUP_UPDATE_MESSAGE
+)
 
 """NPC utility functions for Letta templates.
 
@@ -257,48 +262,67 @@ def retry_test_call(func, *args, max_retries=3, delay=2, **kwargs):
             delay *= 2  # Exponential backoff
     raise last_error 
 
-def update_status_block(client, agent_id: str, status_text: str):
-    """Update agent's status with simple text.
+def update_status_block(client, agent_id: str, status_text: str, send_notification: bool = True):
+    """Update the agent's status block with new status.
     
     Args:
         client: Letta client instance
         agent_id: ID of agent to update
-        status_text: Simple status text (e.g. "Location: Town Square | Action: Greeting")
+        status_text: New status text
+        send_notification: Whether to send system message about update (default: True)
     """
-    try:
-        # Get agent and find status block
-        agent = client.agents.retrieve(agent_id)
-        status_blocks = [b for b in agent.memory.blocks if b.label == "status"]
-        
-        # If no status block exists, create one
-        if not status_blocks:
-            status_block = client.blocks.create(
-                label="status",
-                value="",
-                limit=5000
-            )
-            block_id = status_block.id
-        else:
-            block_id = status_blocks[0].id
-
-        # If we're passed a string, use it directly
-        if isinstance(status_text, str):
-            status_narrative = status_text
-        else:
-            # Otherwise build narrative from dict
-            status_narrative = (
-                f"You are currently in {status_text.get('location', 'Town Square')}. "
-                f"From here, you can see {' and '.join(status_text.get('nearby_locations', []))}. "
-                "The entire area is part of the Town Square region."
-            )
-
-        # Update using blocks.modify
-        client.blocks.modify(
-            block_id=block_id,
-            value=status_narrative  # No JSON encoding needed for string
+    agent = client.agents.retrieve(agent_id)
+    block = next(b for b in agent.memory.blocks if b.label == "status")
+    client.blocks.modify(
+        block_id=block.id,
+        value=status_text
+    )
+    
+    if send_notification:
+        client.agents.messages.create(
+            agent_id=agent_id,
+            messages=[MessageCreate(
+                role="system",
+                content=STATUS_UPDATE_MESSAGE
+            )]
         )
-    except Exception as e:
-        print(f"Error updating status block: {e}")
+
+def update_group_block(client, agent_id: str, group_data: dict, send_notification: bool = True):
+    """Update the agent's group_members block with new group data.
+    
+    Args:
+        client: Letta client instance
+        agent_id: ID of agent to update
+        group_data: Dictionary containing group data with format:
+            {
+                "members": {
+                    "player_id": {
+                        "name": str,
+                        "appearance": str,
+                        "last_seen": str,
+                        "notes": str
+                    }
+                },
+                "summary": str,
+                "updates": list[str]
+            }
+        send_notification: Whether to send system message about update (default: True)
+    """
+    agent = client.agents.retrieve(agent_id)
+    block = next(b for b in agent.memory.blocks if b.label == "group_members")
+    client.blocks.modify(
+        block_id=block.id,
+        value=json.dumps(group_data)
+    )
+    
+    if send_notification:
+        client.agents.messages.create(
+            agent_id=agent_id,
+            messages=[MessageCreate(
+                role="system",
+                content=GROUP_UPDATE_MESSAGE
+            )]
+        )
 
 def update_group_members_v2(
     client,
@@ -353,7 +377,7 @@ def update_group_members_v2(
         "last_updated": timestamp
     }
     
-    update_memory_block(client, agent_id, "group_members", new_group)
+    update_group_block(client, agent_id, new_group)
     return new_group
 
 def get_location_history(client, agent_id: str) -> List[str]:
