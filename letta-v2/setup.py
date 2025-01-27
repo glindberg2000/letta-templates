@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="letta-templates",
-    version="0.9.4",
+    version="0.9.5",
     description="Templates and tools for Letta AI agents",
     author="G. Lindberg",
     package_dir={"": "letta-v2"},
@@ -11,7 +11,7 @@ setup(
         "letta_templates": ["docs/*.md"]
     },
     install_requires=[
-        "letta-client>=0.9.2",
+        "letta-client>=0.1.21",
         "python-dotenv",
         "requests",
         "numpy>=1.17.0",

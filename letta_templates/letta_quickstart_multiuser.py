@@ -1,15 +1,15 @@
 import os
 from dotenv import load_dotenv
-from letta import EmbeddingConfig, LLMConfig, create_client, ChatMemory, BasicBlockMemory
-from letta.schemas.tool_rule import ToolRule, TerminalToolRule, InitToolRule
-from letta.prompts import gpt_system
+from letta_client import EmbeddingConfig, LLMConfig, ChatMemory, BasicBlockMemory
+from letta_client.schemas.tool_rule import ToolRule, TerminalToolRule, InitToolRule
+from letta_client.prompts import gpt_system
 import json
 import time
 import argparse
 from typing import Optional, Any
 import sys
-from letta.schemas.tool import ToolUpdate, Tool
-from letta.schemas.message import (
+from letta_client.schemas.tool import ToolUpdate, Tool
+from letta_client.schemas.message import (
     ToolCallMessage, 
     ToolReturnMessage, 
     ReasoningMessage, 
