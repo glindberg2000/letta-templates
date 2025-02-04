@@ -12,11 +12,13 @@ setup(
     },
     install_requires=[
         "letta-client==0.1.21",
+        "pydantic==2.10.6",
+        "httpx==0.28.1",
+        "anyio==4.8.0",
         "python-dotenv",
         "requests",
         "numpy>=1.17.0",
-        "typing-extensions",
-        "pydantic"
+        "typing-extensions"
     ],
     python_requires=">=3.8",
 ) 
