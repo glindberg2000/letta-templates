@@ -18,7 +18,7 @@ from .npc_tools import (
     examine_object
 )
 
-__version__ = "2.1.0"  # Match setup.py version
+__version__ = "0.9.6"  # Match setup.py version
 
 def view_docs():
     """Print the response handling documentation."""

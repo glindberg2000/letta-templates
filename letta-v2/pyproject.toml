@@ -2,7 +2,10 @@
 name = "letta-templates"
 version = "0.9.6"
 dependencies = [
+    "letta-client==0.1.21",
+    "pydantic==2.10.6",
+    "httpx==0.28.1",
+    "anyio==4.8.0",
     "python-dotenv",
-    "requests",
-    "letta-client==0.1.21"
+    "requests"
 ] 
