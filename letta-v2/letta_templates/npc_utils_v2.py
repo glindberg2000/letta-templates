@@ -287,27 +287,8 @@ def update_status_block(client, agent_id: str, status_text: str, send_notificati
             )]
         )
 
-def update_group_block(client, agent_id: str, group_data: dict, send_notification: bool = True):
-    """Update the agent's group_members block with new group data.
-    
-    Args:
-        client: Letta client instance
-        agent_id: ID of agent to update
-        group_data: Dictionary containing group data with format:
-            {
-                "members": {
-                    "player_id": {
-                        "name": str,
-                        "appearance": str,
-                        "last_seen": str,
-                        "notes": str
-                    }
-                },
-                "summary": str,
-                "updates": list[str]
-            }
-        send_notification: Whether to send system message about update (default: True)
-    """
+def update_group_block(client, agent_id: str, group_data: dict, send_notification: bool = False):
+    """Update the agent's group_members block with new group data."""
     agent = client.agents.retrieve(agent_id)
     block = next(b for b in agent.memory.blocks if b.label == "group_members")
     client.blocks.modify(
@@ -328,57 +309,110 @@ def update_group_members_v2(
     client,
     agent_id: str,
     players: List[Dict],
-    max_updates: int = 10
+    update_message: str = None
 ) -> Dict:
-    """Enhanced group member tracking with history.
+    """Full group update for initialization or complete resets.
     
     Args:
         client: Letta client instance
         agent_id: ID of agent to update
         players: List of player dicts with:
             - id: Player ID
-            - name: Player name
+            - name: Player name (display name)
             - appearance: (optional) Description
-            - location: (optional) Current location
-            - notes: (optional) Additional notes
-        max_updates: Max number of group changes to track
+            - notes: (optional) Additional notes, defaults to "Spawned into group"
+        update_message: Optional message about this group formation
     """
-    # Get current group data
-    group = get_memory_block(client, agent_id, "group_members")
-    current_members = set(group.get("members", {}).keys())
-    new_members = set(p["id"] for p in players)
-    
-    # Track changes
-    joined = new_members - current_members
-    left = current_members - new_members
-    
-    # Build updates list
-    timestamp = datetime.utcnow().isoformat()
-    updates = group.get("updates", [])
-    
-    if joined:
-        updates.insert(0, f"{', '.join(sorted(joined))} joined the group at {timestamp}")
-    if left:
-        updates.insert(0, f"{', '.join(sorted(left))} left the group at {timestamp}")
-    
-    # Update group data
-    new_group = {
-        "members": {
-            p["id"]: {
-                "name": p["name"],
-                "appearance": p.get("appearance", ""),
-                "last_location": p.get("location", "unknown"),
-                "last_seen": timestamp,
-                "notes": p.get("notes", "")
-            } for p in players
-        },
-        "summary": f"Current members: {', '.join(p['name'] for p in players)}",
-        "updates": updates[:max_updates],
-        "last_updated": timestamp
-    }
-    
-    update_group_block(client, agent_id, new_group)
-    return new_group
+    try:
+        # Create new group state
+        new_group = {
+            "members": {
+                p["id"]: {
+                    "name": p["name"],
+                    "appearance": p.get("appearance", ""),
+                    "notes": p.get("notes", "Spawned into group"),
+                    "last_seen": datetime.utcnow().isoformat()
+                } for p in players
+            },
+            "summary": f"Current members: {', '.join(p['name'] for p in players)}",
+            "updates": [update_message] if update_message else [],
+            "last_updated": datetime.utcnow().isoformat()
+        }
+        
+        # Update block without system message
+        update_group_block(client, agent_id, new_group, send_notification=False)
+        return {"success": True, "group": new_group}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+def add_group_member(
+    client,
+    agent_id: str,
+    player_id: str,
+    player_name: str,
+    appearance: str = "",
+    notes: str = "Spawned into group",
+    update_message: str = None
+) -> Dict:
+    """Add a single member to group with optional notes."""
+    try:
+        group = get_memory_block(client, agent_id, "group_members")
+        
+        # Add new member with all fields
+        group["members"][player_id] = {
+            "name": player_name,
+            "appearance": appearance,
+            "notes": notes,
+            "last_seen": datetime.utcnow().isoformat()
+        }
+        
+        # Update summary and latest update
+        group["summary"] = f"Current members: {', '.join(m['name'] for m in group['members'].values())}"
+        if update_message:
+            group["updates"] = [update_message]  # Keep only latest update
+            
+        group["last_updated"] = datetime.utcnow().isoformat()
+        
+        # Update block without system message
+        update_group_block(client, agent_id, group, send_notification=False)
+        return {"success": True, "group": group}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+def remove_group_member(
+    client,
+    agent_id: str,
+    player_id: str,
+    update_message: str = None
+) -> Dict:
+    """Remove member and return their data for potential reuse."""
+    try:
+        group = get_memory_block(client, agent_id, "group_members")
+        
+        # Store member data before removal
+        removed_member = group["members"].pop(player_id, None)
+        
+        if removed_member:
+            # Update summary
+            group["summary"] = f"Current members: {', '.join(m['name'] for m in group['members'].values())}"
+            if update_message:
+                group["updates"] = [update_message]  # Keep only latest update
+                
+            group["last_updated"] = datetime.utcnow().isoformat()
+            
+            # Update block without system message
+            update_group_block(client, agent_id, group, send_notification=False)
+            return {
+                "success": True,
+                "removed_member": removed_member,
+                "group": group
+            }
+        return {
+            "success": False,
+            "error": "Member not found"
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 def get_location_history(client, agent_id: str) -> List[str]:
     """Get agent's location history."""

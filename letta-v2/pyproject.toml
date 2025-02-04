@@ -1,8 +1,8 @@
 [project]
 name = "letta-templates"
-version = "0.9.5"
+version = "0.9.6"
 dependencies = [
     "python-dotenv",
     "requests",
-    "letta-client>=0.1.21"
+    "letta-client==0.1.21"
 ] 
