@@ -326,18 +326,24 @@ def update_group_members_v2(
     try:
         # Create new group state
         new_group = {
-            "members": {
-                p["id"]: {
-                    "name": p["name"],
-                    "appearance": p.get("appearance", ""),
-                    "notes": p.get("notes", "Spawned into group"),
-                    "last_seen": datetime.utcnow().isoformat()
-                } for p in players
-            },
-            "summary": f"Current members: {', '.join(p['name'] for p in players)}",
+            "members": {},
+            "summary": "",
             "updates": [update_message] if update_message else [],
             "last_updated": datetime.utcnow().isoformat()
         }
+        
+        for player in players:
+            player_id = player["id"]
+            if player_id not in new_group["members"]:
+                new_group["members"][player_id] = {
+                    "name": player["name"],
+                    "appearance": player.get("appearance", ""),
+                    "notes": player.get("notes", "Spawned into group"),
+                    "last_seen": datetime.utcnow().isoformat()
+                }
+        
+        # Update summary
+        new_group["summary"] = f"Current members: {', '.join(p['name'] for p in new_group['members'].values())}"
         
         # Update block without system message
         update_group_block(client, agent_id, new_group, send_notification=False)
@@ -357,6 +363,10 @@ def add_group_member(
     """Add a single member to group with optional notes."""
     try:
         group = get_memory_block(client, agent_id, "group_members")
+        
+        # Check for duplicate
+        if player_id in group["members"]:
+            return {"success": False, "error": "Member already exists"}
         
         # Add new member with all fields
         group["members"][player_id] = {
