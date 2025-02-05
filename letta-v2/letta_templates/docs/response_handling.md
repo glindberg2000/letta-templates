@@ -110,11 +110,26 @@ status = update_location_status(
 
 ### Status Updates
 ```python
-from letta_templates.npc_utils_v2 import update_status
+from letta_templates.npc_utils_v2 import update_status_block
 
-# Update status with narrative
-update_status(client, agent_id, 
-    "Taking a break by the fountain, watching the pigeons and greeting passersby"
+# Method 1: Update with dict (recommended)
+update_status_block(
+    client=client,
+    agent_id=agent_id,
+    status_data={
+        "location": "Town Square",
+        "action": "Taking a break",
+        "activity": "available",
+        "mood": "relaxed",          # Custom fields work too
+        "notes": "Watching pigeons" # Any field is preserved
+    }
+)
+
+# Method 2: Use text format
+update_status_block(
+    client=client,
+    agent_id=agent_id,
+    status_text="Location: Shop | Action: Helping | Activity: busy"
 )
 
 # Read current status

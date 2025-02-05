@@ -1,6 +1,6 @@
 [project]
 name = "letta-templates"
-version = "0.9.6"
+version = "0.9.7"
 dependencies = [
     "letta-client==0.1.21",
     "pydantic==2.10.6",

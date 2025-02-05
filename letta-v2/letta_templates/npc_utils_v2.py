@@ -262,30 +262,98 @@ def retry_test_call(func, *args, max_retries=3, delay=2, **kwargs):
             delay *= 2  # Exponential backoff
     raise last_error 
 
-def update_status_block(client, agent_id: str, status_text: str, send_notification: bool = True):
-    """Update the agent's status block with new status.
+def update_status_block(
+    client, 
+    agent_id: str, 
+    status_text: str = None,
+    status_data: dict = None,
+    send_notification: bool = True
+) -> Dict:
+    """Update status block with new information.
     
     Args:
         client: Letta client instance
         agent_id: ID of agent to update
-        status_text: New status text
-        send_notification: Whether to send system message about update (default: True)
-    """
-    agent = client.agents.retrieve(agent_id)
-    block = next(b for b in agent.memory.blocks if b.label == "status")
-    client.blocks.modify(
-        block_id=block.id,
-        value=status_text
-    )
+        status_text: Full status text (overrides status_data if provided)
+        status_data: Dict of status fields to update (e.g. {"location": "Shop"})
+        send_notification: Whether to send system message
     
-    if send_notification:
-        client.agents.messages.create(
-            agent_id=agent_id,
-            messages=[MessageCreate(
-                role="system",
-                content=STATUS_UPDATE_MESSAGE
-            )]
+    Returns:
+        Dict with success status and current status
+    
+    Example:
+        update_status_block(client, agent_id, status_data={
+            "location": "Shop",
+            "action": "Helping customers",
+            "activity": "busy",
+            "mood": "happy"      # Custom fields are preserved
+        })
+    """
+    try:
+        # Get current status
+        agent = client.agents.retrieve(agent_id)
+        block = next(b for b in agent.memory.blocks if b.label == "status")
+        
+        if status_text:
+            # Use provided full text
+            new_status = status_text
+            
+        else:
+            # Parse current status into dict
+            current = block.value
+            status_dict = {}
+            
+            # Parse existing status
+            if " | " in current:
+                for part in current.split(" | "):
+                    if ":" in part:
+                        key, value = part.split(": ", 1)
+                        status_dict[key.lower()] = value
+            
+            # Update with new data
+            if status_data:
+                for key, value in status_data.items():
+                    status_dict[key.lower()] = value
+                    
+            # Format for LLM readability
+            parts = []
+            # Priority fields first
+            for key in ["location", "action", "activity"]:
+                if key in status_dict:
+                    parts.append(f"{key.title()}: {status_dict[key]}")
+            # Then any custom fields
+            for key, value in status_dict.items():
+                if key not in ["location", "action", "activity"]:
+                    parts.append(f"{key.title()}: {value}")
+                    
+            new_status = " | ".join(parts)
+        
+        # Update block
+        client.blocks.modify(
+            block_id=block.id,
+            value=new_status
         )
+        
+        if send_notification:
+            client.agents.messages.create(
+                agent_id=agent_id,
+                messages=[MessageCreate(
+                    role="system",
+                    content=STATUS_UPDATE_MESSAGE
+                )]
+            )
+            
+        return {
+            "success": True,
+            "status": new_status,
+            "data": status_dict
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 def update_group_block(client, agent_id: str, group_data: dict, send_notification: bool = False):
     """Update the agent's group_members block with new group data."""
