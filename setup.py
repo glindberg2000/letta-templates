@@ -2,15 +2,15 @@ from setuptools import setup, find_packages
 
 setup(
     name="letta-templates",
-    version="3.1.1",
-    packages=["letta_templates"],  # Explicitly list the package
+    version="3.1.2",
+    packages=find_packages(include=['letta_templates', 'letta_templates.*']),
     package_data={
         "letta_templates": ["docs/**/*"]
     },
-    include_package_data=True,  # Add this to use MANIFEST.in
+    include_package_data=True,
     entry_points={
         'console_scripts': [
-            'letta-cli=letta_templates.letta_cli:main',  # Assuming there's a main() function
+            'letta-cli=letta_templates.letta_cli:main',
         ],
     },
     install_requires=[
