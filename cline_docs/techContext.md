@@ -1,18 +1,23 @@
 # Technical Context
 
-## Technologies Used
-- Python 3.7+
-- letta-client >= 0.1.21
-- python-dotenv
-- requests
+## Technologies
+- Python 3.8+
+- letta-client 0.1.26+
+- pydantic 2.10.6+
 
 ## Development Setup
-Installation via git:
+1. Installation:
 ```bash
-pip install git+https://github.com/glindberg2000/letta-templates.git@v0.9.5
+pip install git+https://github.com/glindberg2000/letta-templates.git@v3.1.0
 ```
 
-## Technical Constraints
-- Requires internet connectivity
-- Depends on letta-client API
-- Git-based distribution 
+2. Dependencies:
+   - httpx
+   - anyio
+   - python-dotenv
+   - requests
+
+## Constraints
+- Memory block size < 5000 chars
+- Real-time updates needed
+- Backward compatibility 

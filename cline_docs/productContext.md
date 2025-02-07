@@ -1,23 +1,28 @@
 # Product Context
 
-## Why This Project Exists
-Letta Templates is a Python framework created to solve the challenge of building intelligent, socially-aware NPCs (Non-Player Characters) in interactive environments. It provides a structured way to manage NPC memory, status, and group interactions.
+## Purpose
+- Provide tools for NPCs and game systems to manage group memory
+- Maintain separation between NPC observations and game state
+- Support real-time player tracking and interactions
 
 ## Problems Solved
-1. Memory Persistence
-   - Maintains consistent NPC memory across sessions
-   - Organizes different types of memory (core, journal, archival)
-   - Enables efficient memory searching and updating
+1. Memory Management
+   - Structured data storage for NPCs
+   - FIFO pruning for size limits
+   - Standardized field formats
 
-2. Social Intelligence
-   - Tracks group dynamics and member interactions
-   - Maintains location and status awareness
-   - Handles natural conversations and social protocols
+2. State Synchronization
+   - NPCs track observations
+   - Game system tracks player state
+   - Clean separation of concerns
 
-3. State Management
-   - Coordinates NPC actions and responses
-   - Tracks location history and status
-   - Manages tool usage and interactions
+3. Documentation
+   - Clear API boundaries
+   - Usage examples
+   - Best practices
+
+## Why This Project Exists
+Letta Templates is a Python framework created to solve the challenge of building intelligent, socially-aware NPCs (Non-Player Characters) in interactive environments. It provides a structured way to manage NPC memory, status, and group interactions.
 
 ## How It Should Work
 The system should:

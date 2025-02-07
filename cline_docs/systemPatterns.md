@@ -24,4 +24,19 @@
 - Memory block updates with system notifications
 - Tool call extraction and processing
 - Status and group state management
-- Social awareness protocols 
+- Social awareness protocols
+
+1. Memory Blocks
+   - group_members
+   - status
+   - navigation
+
+2. Update Patterns
+   - NPCs: append-only notes
+   - Game: state updates
+   - System: structure maintenance
+
+3. Data Flow
+   - NPCs observe and record
+   - Game updates state
+   - System maintains integrity 

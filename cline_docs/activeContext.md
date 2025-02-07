@@ -1,16 +1,22 @@
 # Active Context
 
 ## Current Work
-- Implementing standard system messages
-- Improving status and group update functions
-- Enhancing documentation
+- Implemented upsert_group_member for game state
+- Added comprehensive documentation
+- Updated setup.py and dependencies
 
 ## Recent Changes
-- Added STATUS_UPDATE_MESSAGE and GROUP_UPDATE_MESSAGE
-- Created update_status_block and update_group_block functions
-- Updated dependency versions
+1. Memory Structure
+   - Standardized fields (is_present, last_seen, etc.)
+   - FIFO pruning at 4800 chars
+   - Timestamp management
+
+2. Tool Separation
+   - NPCs: group_memory_append/replace
+   - Game: upsert_group_member
+   - System: update_group_block
 
 ## Next Steps
-1. Test new system messages
-2. Verify update functions
-3. Document usage patterns 
+1. Test with live game cluster
+2. Monitor memory usage
+3. Add validation for fields 
