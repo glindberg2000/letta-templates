@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="letta-templates",
-    version="3.1.0",
+    version="3.1.1",
     packages=find_packages(),  # This will find letta_templates directory automatically
     package_data={
         "letta_templates": ["docs/**/*"]
