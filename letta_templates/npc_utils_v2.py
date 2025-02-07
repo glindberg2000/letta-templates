@@ -457,7 +457,7 @@ def print_client_info(client):
     except Exception as e:
         print(f"Error inspecting client: {e}") 
 
-def upsert_group_member(client, agent_id: str, entity_id: str, update_data: dict) -> str:
+def upsert_group_member(client, agent_id: str, entity_id: str, update_data: dict) -> dict:
     """Upsert (create or update) an entity in group memory."""
     try:
         # Get current block
@@ -465,11 +465,27 @@ def upsert_group_member(client, agent_id: str, entity_id: str, update_data: dict
         block = next((b for b in agent.memory.blocks if b.label == "group_members"), None)
         group_data = json.loads(block.value) if block else {"members": {}}
         
+        # Check if player already exists with different ID
+        existing_id = None
+        if "name" in update_data:
+            for id, member in group_data["members"].items():
+                if member.get("name") == update_data["name"]:
+                    existing_id = id
+                    break
+        
+        # Use existing ID if found, otherwise use provided entity_id
+        member_id = existing_id or entity_id
+        
         # Update member data
-        if entity_id not in group_data["members"]:
-            group_data["members"][entity_id] = {}
+        if member_id not in group_data["members"]:
+            group_data["members"][member_id] = {}
             
-        member = group_data["members"][entity_id]
+        member = group_data["members"][member_id]
+        updated_fields = []
+        
+        # Track presence changes for updates
+        old_presence = member.get("is_present", False)
+        new_presence = update_data.get("is_present", old_presence)
         
         # Update fields
         for key, value in update_data.items():
@@ -477,6 +493,19 @@ def upsert_group_member(client, agent_id: str, entity_id: str, update_data: dict
                 member[key] = value.isoformat()
             else:
                 member[key] = value
+            updated_fields.append(key)
+            
+        # Add to updates if presence changed
+        if "is_present" in update_data:
+            name = member.get("name", entity_id)
+            location = member.get("last_location", "unknown location")
+            if new_presence and not old_presence:
+                group_data["updates"].insert(0, f"{name} arrived at {location}")
+            elif not new_presence and old_presence:
+                group_data["updates"].insert(0, f"{name} left {location}")
+                
+        # Keep only last 10 updates
+        group_data["updates"] = group_data.get("updates", [])[:10]
         
         # Update summary with present members' names
         present_members = [m["name"] for m in group_data["members"].values() 
@@ -500,7 +529,22 @@ def upsert_group_member(client, agent_id: str, entity_id: str, update_data: dict
         # Use module function to update block
         update_group_block(client, agent_id, group_data)
         
-        return f"Updated {update_data.get('name', entity_id)} in group memory"
+        return {
+            "success": True,
+            "message": f"Updated {update_data.get('name', entity_id)} in group memory",
+            "data": {
+                "group_size": len(group_data["members"]),
+                "present_count": len(present_members),
+                "updated_id": entity_id,
+                "updated_fields": updated_fields
+            },
+            "error": None
+        }
         
     except Exception as e:
-        return f"Error updating group memory: {e}" 
+        return {
+            "success": False,
+            "message": f"Error updating group memory: {str(e)}",
+            "data": None,
+            "error": str(e)
+        } 

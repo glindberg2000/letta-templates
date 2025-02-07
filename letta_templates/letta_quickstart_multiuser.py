@@ -1669,9 +1669,8 @@ def test_upsert(client, agent_id):
     print_response(response)
     time.sleep(1)
     
-    # API updates presence and appearance
-    print("\nAPI updating player state...")
-    result = upsert_group_member(
+    # Store the ID from first creation
+    first_result = upsert_group_member(
         client,
         agent_id,
         "player_1738913511",
@@ -1683,19 +1682,20 @@ def test_upsert(client, agent_id):
             "appearance": "Wearing a hamburger hat"
         }
     )
-    print(f"API update result: {result}")
-
-    # Print block state right after player is added
-    print("\nBlock state after player joins (should be present):")
+    
+    # Get the actual ID that was used (either existing or new)
+    player_id = None
     agent = client.agents.retrieve(agent_id)
     block = next(b for b in agent.memory.blocks if b.label == "group_members")
-    print(json.dumps(json.loads(block.value), indent=2))
+    data = json.loads(block.value)
+    for id, member in data["members"].items():
+        if member.get("name") == "greggytheegg":
+            player_id = id
+            break
+            
+    print(f"Using player ID: {player_id}")
 
-    if "Error" in result:
-        print("WARNING: API update failed!")
-    time.sleep(1)
-    
-    # Test 2: Backend updates appearance - NPC adds notes
+    # Test 2: Backend updates appearance
     print("\nTest 2: Backend updates appearance")
     response = client.agents.messages.create(
         agent_id=agent_id,
@@ -1705,36 +1705,33 @@ def test_upsert(client, agent_id):
         }]
     )
     print_response(response)
-    time.sleep(1)
     
-    # Test 3: Player leaves - API updates presence
+    # Test 3: Player leaves
     print("\nTest 3: Player leaves")
-    # First API updates presence
-    print("\nAPI updating player presence...")
     result = upsert_group_member(
         client,
         agent_id,
-        "player_1738913511",
+        player_id,  # Use stored ID
         {
             "is_present": False,
             "last_seen": datetime.now().isoformat()
         }
     )
-    print(f"API update result: {result}")
-
-    # Test 4: Update existing player
+    print(f"API update result: {result['message']}")
+    
+    # Test 4: Player returns with new appearance
     print("\nTest 4: Update existing player appearance")
     result = upsert_group_member(
         client,
         agent_id,
-        "player_1738913511",  # Same ID as before
+        player_id,  # Use stored ID
         {
             "appearance": "Now wearing a party hat",
-            "is_present": True,  # Add this to show player is present
+            "is_present": True,
             "last_seen": datetime.now()
         }
     )
-    print(f"API update result: {result}")
+    print(f"API update result: {result['message']}")
 
     # Print final state to verify both NPC and API updates
     print("\nFinal state:")
