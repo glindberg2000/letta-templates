@@ -5,13 +5,15 @@ setup(
     version="3.1.0",
     packages=find_packages(),
     package_data={
-        "letta_templates": ["docs/**/*"]  # Include all docs
+        "letta_templates": ["docs/**/*"]
     },
     install_requires=[
-        "letta-client>=0.1.0",
-        "python-dotenv>=0.19.0",
-        "requests>=2.26.0",
-        "typing-extensions>=4.0.0"
+        "letta-client>=0.1.26",
+        "pydantic>=2.10.6",
+        "httpx>=0.28.1",
+        "anyio>=4.8.0",
+        "python-dotenv",
+        "requests"
     ],
     author="Plato",
     description="Templates and tools for Letta NPCs",
