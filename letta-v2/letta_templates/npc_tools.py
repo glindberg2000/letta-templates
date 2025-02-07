@@ -256,15 +256,25 @@ def group_memory_append(player_name: str, note: str, request_heartbeat: bool = T
     Args:
         player_name (str): Name of the player to add note for
         note (str): Note to append to player's memory
-        request_heartbeat (bool, optional): Whether to request heartbeat. Defaults to True.
-    """
-    import json
-    from datetime import datetime
-    
-    try:
-        block = json.loads(agent_state.memory.get_block("group_members").value)
+        request_heartbeat (bool): Whether to request heartbeat
         
-        # Find player by exact name match
+    Example:
+        >>> group_memory_append(
+        ...     "greggytheegg",
+        ...     "Asked about directions to Pete's Stand"
+        ... )
+    """
+    try:
+        # Get or create group block
+        try:
+            block = json.loads(agent_state.memory.get_block("group_members").value)
+        except:
+            block = {
+                "members": {},
+                "last_updated": datetime.now().isoformat()
+            }
+        
+        # Create or update player entry
         player_id = None
         for id, info in block["members"].items():
             if info["name"].lower() == player_name.lower():
@@ -272,10 +282,16 @@ def group_memory_append(player_name: str, note: str, request_heartbeat: bool = T
                 break
                 
         if not player_id:
-            return f"Player {player_name} not found"
+            player_id = f"player_{int(time.time())}"
+            block["members"][player_id] = {
+                "name": player_name,
+                "notes": note
+            }
+        else:
+            # Append to existing notes
+            current_notes = block["members"][player_id].get("notes", "")
+            block["members"][player_id]["notes"] = f"{current_notes}\n{note}".strip()
             
-        # Update notes
-        block["members"][player_id]["notes"] = note
         block["last_updated"] = datetime.now().isoformat()
         
         agent_state.memory.update_block_value(
@@ -294,31 +310,41 @@ def group_memory_replace(player_name: str, note: str, request_heartbeat: bool = 
     Args:
         player_name (str): Name of the player to update
         note (str): New note to replace existing note
-        request_heartbeat (bool, optional): Whether to request heartbeat. Defaults to True.
-    """
-    import json
-    from datetime import datetime
-    
-    try:
-        block = json.loads(agent_state.memory.get_block("group_members").value)
+        request_heartbeat (bool): Whether to request heartbeat
         
-        # Find player - use same lookup as group_memory_append
+    Example:
+        >>> group_memory_replace(
+        ...     "greggytheegg",
+        ...     "Now interested in trading items"
+        ... )
+    """
+    try:
+        # Get or create group block
+        try:
+            block = json.loads(agent_state.memory.get_block("group_members").value)
+        except:
+            block = {
+                "members": {},
+                "last_updated": datetime.now().isoformat()
+            }
+        
+        # Create or update player entry
         player_id = None
         for id, info in block["members"].items():
-            if info["name"] == player_name:
+            if info["name"].lower() == player_name.lower():
                 player_id = id
                 break
                 
         if not player_id:
-            return f"Player {player_name} not found"
+            player_id = f"player_{int(time.time())}"
+            block["members"][player_id] = {
+                "name": player_name,
+                "notes": note
+            }
+        else:
+            # Replace notes
+            block["members"][player_id]["notes"] = note
             
-        # Replace in notes field
-        if note not in block["members"][player_id]["notes"]:
-            return f"Note '{note}' not found in player's notes"
-            
-        block["members"][player_id]["notes"] = block["members"][player_id]["notes"].replace(note, note)
-        
-        # Update timestamp
         block["last_updated"] = datetime.now().isoformat()
         
         agent_state.memory.update_block_value(

@@ -456,3 +456,128 @@ def print_client_info(client):
         
     except Exception as e:
         print(f"Error inspecting client: {e}") 
+
+def upsert_group_member(
+    client, 
+    agent_id: str, 
+    entity_id: str,
+    update_data: dict,
+    request_heartbeat: bool = True
+) -> str:
+    """Upsert (create or update) an entity in group memory.
+    
+    Args:
+        client: Letta client instance
+        agent_id: ID of the agent to update
+        entity_id: ID of player/NPC to upsert
+        update_data: Dict containing fields to update:
+            {
+                "name": str,              # Display name
+                "is_present": bool,       # Currently in range
+                "health_status": str,     # "healthy", "injured", "critical", "dead"
+                "appearance": str,        # Physical description
+                "notes": str,            # NPC's observations/notes about entity
+                "type": str,              # "player" or "npc"
+                "last_seen": str,         # Timestamp (only when is_present=False)
+            }
+        request_heartbeat: Whether to request heartbeat
+        
+    Returns:
+        str: Status message
+        
+    Example:
+        >>> # NPC first sees player and adds notes
+        >>> upsert_group_member(
+        ...     client, 
+        ...     "agent-123",
+        ...     "player_456",
+        ...     {
+        ...         "name": "greggytheegg",
+        ...         "is_present": True,
+        ...         "type": "player",
+        ...         "notes": "Asked about directions to the garden"
+        ...     }
+        ... )
+        
+        >>> # Backend updates with appearance
+        >>> upsert_group_member(
+        ...     client,
+        ...     "agent-123", 
+        ...     "player_456",
+        ...     {
+        ...         "appearance": "Wearing a hamburger hat",
+        ...         "health_status": "healthy"
+        ...     }
+        ... )
+    """
+    try:
+        # Get current group memory
+        agent = client.agents.retrieve(agent_id)
+        block = next((b for b in agent.memory.blocks if b.label == "group_members"), None)
+        
+        if not block:
+            # Create new block if it doesn't exist
+            group_data = {
+                "members": {},
+                "last_updated": datetime.datetime.now().isoformat(),
+                "summary": "0 members"
+            }
+        else:
+            group_data = json.loads(block.value)
+            
+        # Update or create member entry
+        if entity_id not in group_data["members"]:
+            group_data["members"][entity_id] = {}
+            
+        member = group_data["members"][entity_id]
+        
+        # Handle presence state changes
+        if "is_present" in update_data:
+            if update_data["is_present"]:
+                # Member arrives - clear last_seen
+                member.pop("last_seen", None)
+            else:
+                # Member leaves - set last_seen if not provided
+                if "last_seen" not in update_data:
+                    update_data["last_seen"] = datetime.datetime.now().isoformat()
+                    
+        # Update fields
+        member.update(update_data)
+        
+        # Update summary
+        present_count = sum(1 for m in group_data["members"].values() if m.get("is_present", False))
+        total_count = len(group_data["members"])
+        group_data["summary"] = f"{total_count} members: {present_count} present, {total_count - present_count} absent"
+        
+        # Update timestamp
+        group_data["last_updated"] = datetime.datetime.now().isoformat()
+        
+        # FIFO pruning if needed (remove oldest absent members)
+        if len(json.dumps(group_data)) > 4800:  # Leave buffer for new updates
+            absent_members = [
+                (id, data) for id, data in group_data["members"].items() 
+                if not data.get("is_present", True)
+            ]
+            if absent_members:
+                # Sort by last_seen and remove oldest
+                oldest_id = sorted(
+                    absent_members,
+                    key=lambda x: x[1].get("last_seen", "")
+                )[0][0]
+                del group_data["members"][oldest_id]
+        
+        # Update block
+        if block:
+            client.update_block(block.id, json.dumps(group_data))
+        else:
+            client.create_block(
+                agent_id=agent_id,
+                label="group_members",
+                value=json.dumps(group_data),
+                limit=5000
+            )
+            
+        return f"Updated {update_data.get('name', entity_id)} in group memory"
+        
+    except Exception as e:
+        return f"Error updating group memory: {e}" 
