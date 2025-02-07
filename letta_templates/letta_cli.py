@@ -24,6 +24,7 @@ letta_v2_env = os.path.join(os.getcwd(), 'letta-v2', '.env')
 
 if os.path.exists(env_file):
     print(f"Found .env file at: {env_file}")
+    load_dotenv(env_file, override=True)
 elif os.path.exists(letta_v2_env):
     print(f"Found .env file in letta-v2: {letta_v2_env}")
     load_dotenv(letta_v2_env, override=True)
@@ -36,6 +37,11 @@ else:
         load_dotenv(parent_env, override=True)
     else:
         print("Warning: No .env file found in parent directory either")
+
+# After the load_dotenv calls, add:
+print(f"Loaded environment variables:")
+print(f"LETTA_BASE_URL: {os.getenv('LETTA_BASE_URL')}")
+print(f"LETTA_API_KEY: {os.getenv('LETTA_API_KEY')}")
 
 # Get required environment variables with defaults
 LETTA_BASE_URL = os.getenv('LETTA_BASE_URL')

@@ -1684,6 +1684,13 @@ def test_upsert(client, agent_id):
         }
     )
     print(f"API update result: {result}")
+
+    # Print block state right after player is added
+    print("\nBlock state after player joins (should be present):")
+    agent = client.agents.retrieve(agent_id)
+    block = next(b for b in agent.memory.blocks if b.label == "group_members")
+    print(json.dumps(json.loads(block.value), indent=2))
+
     if "Error" in result:
         print("WARNING: API update failed!")
     time.sleep(1)
@@ -1714,17 +1721,20 @@ def test_upsert(client, agent_id):
         }
     )
     print(f"API update result: {result}")
-    time.sleep(1)
-    
-    # Then NPC reacts to departure
-    response = client.agents.messages.create(
-        agent_id=agent_id,
-        messages=[{
-            "role": "system",
-            "content": "Player greggytheegg has left the area and is no longer present"
-        }]
+
+    # Test 4: Update existing player
+    print("\nTest 4: Update existing player appearance")
+    result = upsert_group_member(
+        client,
+        agent_id,
+        "player_1738913511",  # Same ID as before
+        {
+            "appearance": "Now wearing a party hat",
+            "is_present": True,  # Add this to show player is present
+            "last_seen": datetime.now()
+        }
     )
-    print_response(response)
+    print(f"API update result: {result}")
 
     # Print final state to verify both NPC and API updates
     print("\nFinal state:")

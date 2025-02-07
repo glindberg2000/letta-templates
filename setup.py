@@ -2,8 +2,8 @@ from setuptools import setup, find_packages
 
 setup(
     name="letta-templates",
-    version="3.1.2",
-    packages=find_packages(include=['letta_templates', 'letta_templates.*']),
+    version="3.1.3",
+    packages=find_packages(),
     package_data={
         "letta_templates": ["docs/**/*"]
     },

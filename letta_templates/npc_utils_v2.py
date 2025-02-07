@@ -478,10 +478,13 @@ def upsert_group_member(client, agent_id: str, entity_id: str, update_data: dict
             else:
                 member[key] = value
         
-        # Update summary
-        present_count = sum(1 for m in group_data["members"].values() if m.get("is_present", False))
-        total_count = len(group_data["members"])
-        group_data["summary"] = f"{total_count} members: {present_count} present, {total_count - present_count} absent"
+        # Update summary with present members' names
+        present_members = [m["name"] for m in group_data["members"].values() 
+                         if m.get("is_present", False) and "name" in m]
+        group_data["summary"] = (
+            f"Players in range: {', '.join(present_members)}" if present_members 
+            else "No players currently in range"
+        )
         
         # Update timestamp
         group_data["last_updated"] = datetime.now().isoformat()
