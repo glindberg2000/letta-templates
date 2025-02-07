@@ -111,27 +111,19 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
     
     Args:
         action (str): Type of action to perform:
-            - "emote": Play an emote animation (wave, dance)
+            - "emote": Play an emote animation (requires type parameter)
             - "follow": Follow a target player
             - "unfollow": Stop following current target
         type (str): For emotes, the type of emote to play:
             - "wave": Wave hello/goodbye
             - "dance": Dance animation
         target (str, optional): Optional target for the action (e.g. player name)
-        request_heartbeat (bool): Whether to request a heartbeat response
-        
-    Returns:
-        str: Description of the action performed
+        request_heartbeat (bool, optional): Whether to request a heartbeat response. Defaults to True.
         
     Example:
-        >>> perform_action("emote", "wave", "Alice") 
-        "Performing emote: wave at Alice"
-        
-        >>> perform_action("emote", "wave")
-        "Performing emote: wave"
-        
-        >>> perform_action("follow", target="Bob")
-        "Following player: Bob"
+        >>> perform_action("emote", "wave", "Alice")  # Wave at Alice
+        >>> perform_action("follow", target="Bob")    # Follow Bob
+        >>> perform_action("emote", "dance")          # Dance without target
     """
     # Normalize inputs
     action = action.lower().strip()
@@ -144,6 +136,8 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
     
     # Validate action
     if action not in valid_actions:
+        if action in valid_emotes:
+            return f"Error: For emotes use action='emote' with type='{action}' instead"
         return f"Error: Unknown action: {action}. Valid actions are: {', '.join(valid_actions)}"
     
     # Handle emotes
@@ -445,35 +439,43 @@ def update_tool(client, tool_name: str, tool_func, verbose: bool = True) -> str:
         print(f"Error updating tool {tool_name}: {e}")
         raise
 
-def update_tools(client: Letta):
-    """Update tool registry with latest versions (Development use)"""
-    print("\nUpdating tools...")
-    
-    # Get existing tools using global tools API
-    existing_tools = {t.name: t.id for t in client.tools.list()}
-    
-    # Update each tool
-    for name, tool_info in TOOL_REGISTRY.items():
-        try:
-            # Delete if exists
-            if name in existing_tools:
-                print(f"Deleting {name}...")
-                client.tools.delete(existing_tools[name])
+def update_tools(client):
+    """Update all custom tools."""
+    try:
+        # Get existing tools
+        existing_tools = client.tools.list()
+        
+        # Create tools globally first
+        for name, tool_info in TOOL_REGISTRY.items():
+            try:
+                print(f"Creating {name}...")
+                # Delete existing tool if found
+                for tool in existing_tools:
+                    if tool.name == name:
+                        print(f"Deleting existing tool {name}...")
+                        client.tools.delete(tool.id)
+                        break
+                
+                source_code = inspect.getsource(tool_info['function'])
+                # Extract function name from source code
+                function_lines = source_code.split('\n')
+                function_def = next(line for line in function_lines if line.startswith('def '))
+                function_name = function_def.split('def ')[1].split('(')[0].strip()
+                
+                tool = client.tools.create(
+                    source_code=source_code,
+                    description=tool_info.get('description', ''),
+                    tags=[name, function_name]  # Both registry name and function name
+                )
+                print(f"Created {name}: {tool.id}")
+                
+            except Exception as e:
+                print(f"Error creating {name}: {e}")
+                raise
             
-            # Create new version
-            print(f"Creating {name}...")
-            # Convert function to source code
-            source_code = inspect.getsource(tool_info['function'])
-            
-            tool = client.tools.create(
-                name=name,
-                source_code=source_code
-            )
-            print(f"Created {name} with ID: {tool.id}")
-            
-        except Exception as e:
-            print(f"Error updating {name}: {e}")
-            raise
+    except Exception as e:
+        print(f"Error updating tools: {e}")
+        raise
 
 def ensure_custom_tools_exist(client: Letta):
     """Ensure all required NPC tools exist, creating only if missing (Production use).

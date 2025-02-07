@@ -136,24 +136,7 @@ def update_group_status(client, agent_id: str, nearby_players: list,
     )
 
 def extract_agent_response(response) -> dict:
-    """Extract structured data from an agent response.
-    
-    Args:
-        response: Response from client.agents.messages.create()
-        
-    Returns:
-        dict with:
-            message (str): Final response to user
-            tool_calls (list): List of tool calls with name and arguments
-            tool_results (list): Results from tool executions
-            reasoning (list): Agent's reasoning steps
-            
-    Example:
-        >>> response = client.agents.messages.create(agent_id, message="Go to the shop")
-        >>> result = extract_agent_response(response)
-        >>> print(f"Tool calls: {result['tool_calls']}")  # [{tool: 'navigate_to', args: {'destination': 'shop'}}]
-        >>> print(f"Final message: {result['message']}")  # "I'll head to the shop now!"
-    """
+    """Extract structured data from an agent response."""
     tool_calls = []
     tool_results = []
     reasoning = []
@@ -176,7 +159,7 @@ def extract_agent_response(response) -> dict:
             reasoning.append(msg.reasoning)
             
         elif msg.message_type == "assistant_message":
-            final_message = msg.content if isinstance(msg.content, str) else msg.content[0].text
+            final_message = msg.content  # Content is now always a string
 
     return {
         "message": final_message,
@@ -212,10 +195,7 @@ def print_response(response):
                 print(f"Output: {message.stdout}")
                 
         elif message.message_type == "assistant_message":
-            if isinstance(message.content, str):
-                print(f"Assistant: {message.content}")
-            elif isinstance(message.content, list):
-                print(f"Assistant: {message.content[0].text}")
+            print(f"Assistant: {message.content}")  # Content is now always a string
                 
         elif message.message_type == "system_message":
             print(f"System: {message.content}")
@@ -263,14 +243,7 @@ def retry_test_call(func, *args, max_retries=3, delay=2, **kwargs):
     raise last_error 
 
 def update_status_block(client, agent_id: str, status_text: str, send_notification: bool = True):
-    """Update the agent's status block with new status.
-    
-    Args:
-        client: Letta client instance
-        agent_id: ID of agent to update
-        status_text: New status text
-        send_notification: Whether to send system message about update (default: True)
-    """
+    """Update the agent's status block with new status."""
     agent = client.agents.retrieve(agent_id)
     block = next(b for b in agent.memory.blocks if b.label == "status")
     client.blocks.modify(
@@ -281,10 +254,10 @@ def update_status_block(client, agent_id: str, status_text: str, send_notificati
     if send_notification:
         client.agents.messages.create(
             agent_id=agent_id,
-            messages=[MessageCreate(
-                role="system",
-                content=STATUS_UPDATE_MESSAGE
-            )]
+            messages=[{
+                "role": "system",
+                "content": STATUS_UPDATE_MESSAGE
+            }]
         )
 
 def update_group_block(client, agent_id: str, group_data: dict, send_notification: bool = False):
@@ -299,10 +272,11 @@ def update_group_block(client, agent_id: str, group_data: dict, send_notificatio
     if send_notification:
         client.agents.messages.create(
             agent_id=agent_id,
-            messages=[MessageCreate(
-                role="system",
-                content=GROUP_UPDATE_MESSAGE
-            )]
+            messages=[{
+                "role": "system",
+                "content": GROUP_UPDATE_MESSAGE
+            }],
+            use_assistant_message=False
         )
 
 def update_group_members_v2(
