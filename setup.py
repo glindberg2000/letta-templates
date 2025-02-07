@@ -1,12 +1,16 @@
-from setuptools import setup, find_namespace_packages
+from setuptools import setup, find_packages
 
 setup(
     name="letta-templates",
     version="3.1.0",
-    package_dir={"": "letta-v2"},
-    packages=find_namespace_packages(where="letta-v2"),
+    packages=find_packages(),  # This will find letta_templates directory automatically
     package_data={
         "letta_templates": ["docs/**/*"]
+    },
+    entry_points={
+        'console_scripts': [
+            'letta-cli=letta_templates.letta_cli:main',  # Assuming there's a main() function
+        ],
     },
     install_requires=[
         "letta-client>=0.1.26",
