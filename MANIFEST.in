@@ -1,0 +1,5 @@
+recursive-include letta_templates *.py
+recursive-include docs *
+include README.md
+include CHANGELOG.md
+include CONTRIBUTING.md 

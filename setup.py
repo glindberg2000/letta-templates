@@ -3,10 +3,11 @@ from setuptools import setup, find_packages
 setup(
     name="letta-templates",
     version="3.1.1",
-    packages=find_packages(),  # This will find letta_templates directory automatically
+    packages=["letta_templates"],  # Explicitly list the package
     package_data={
         "letta_templates": ["docs/**/*"]
     },
+    include_package_data=True,  # Add this to use MANIFEST.in
     entry_points={
         'console_scripts': [
             'letta-cli=letta_templates.letta_cli:main',  # Assuming there's a main() function
