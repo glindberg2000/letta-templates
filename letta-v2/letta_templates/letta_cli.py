@@ -1,15 +1,16 @@
 import argparse
 import os
+import sys
 from dotenv import load_dotenv
+from .letta_local_client import LocalAPIClient
 from letta_client import (
     EmbeddingConfig,
-    LlmConfig as LLMConfig,  # Note case change
+    LlmConfig,
     Memory,
     Block,
     Tool,
     Letta
 )
-from letta_local_client import LocalAPIClient
 import time
 import json
 
@@ -157,7 +158,7 @@ def create_test_agent(client, name="TestAgent", description="A test agent"):
                 embedding_dim=1536,
                 embedding_chunk_size=300,
             ),
-            llm_config=LLMConfig(
+            llm_config=LlmConfig(
                 model=os.getenv("LETTA_MODEL", "gpt-4o-mini"),
                 model_endpoint_type=os.getenv("LETTA_ENDPOINT_TYPE", "openai"),
                 model_endpoint=os.getenv("LETTA_MODEL_ENDPOINT", "https://api.openai.com/v1"),

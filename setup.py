@@ -8,6 +8,11 @@ setup(
     author_email="greglindberg@gmail.com",
     packages=find_packages(where="letta-v2"),
     package_dir={"": "letta-v2"},
+    entry_points={
+        'console_scripts': [
+            'letta=letta_templates.letta_cli:main',
+        ],
+    },
     install_requires=[
         "letta-client>=0.1.26",
         "pydantic>=2.10.6",
