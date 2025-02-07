@@ -43,9 +43,9 @@ See TOOL_INSTRUCTIONS for complete usage documentation.
 """
 from typing import Dict, Callable, Optional, TypedDict, Union, List
 from typing_extensions import Any  # Use typing_extensions for Any
-import datetime
 from dataclasses import dataclass
 from enum import Enum
+from datetime import datetime  # Add at top with other imports
 import json
 import os
 import requests
@@ -258,12 +258,15 @@ def group_memory_append(player_name: str, note: str, request_heartbeat: bool = T
         note (str): Note to append to player's memory
         request_heartbeat (bool): Whether to request heartbeat
         
-    Example:
-        >>> group_memory_append(
-        ...     "greggytheegg",
-        ...     "Asked about directions to Pete's Stand"
-        ... )
+    The function will:
+    - Create new player entry if player doesn't exist
+    - Set default fields (is_present=True, health_status="healthy")
+    - Append the note to existing notes if player exists
     """
+    import json
+    from datetime import datetime
+    import time
+    
     try:
         # Get or create group block
         try:
@@ -285,6 +288,11 @@ def group_memory_append(player_name: str, note: str, request_heartbeat: bool = T
             player_id = f"player_{int(time.time())}"
             block["members"][player_id] = {
                 "name": player_name,
+                "is_present": True,
+                "health_status": "healthy",
+                "appearance": "",
+                "last_seen": datetime.now().isoformat(),
+                "last_location": "",
                 "notes": note
             }
         else:
@@ -312,12 +320,15 @@ def group_memory_replace(player_name: str, note: str, request_heartbeat: bool = 
         note (str): New note to replace existing note
         request_heartbeat (bool): Whether to request heartbeat
         
-    Example:
-        >>> group_memory_replace(
-        ...     "greggytheegg",
-        ...     "Now interested in trading items"
-        ... )
+    The function will:
+    - Create new player entry if player doesn't exist
+    - Set default fields (is_present=True, health_status="healthy")
+    - Replace the entire notes field with the new note
     """
+    import json
+    from datetime import datetime
+    import time
+    
     try:
         # Get or create group block
         try:

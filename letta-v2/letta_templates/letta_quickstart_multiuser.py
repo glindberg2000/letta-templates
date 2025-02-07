@@ -29,7 +29,8 @@ from letta_templates.npc_utils_v2 import (
     retry_test_call,
     extract_agent_response,
     update_status_block,
-    update_group_block
+    update_group_block,
+    upsert_group_member
 )
 from letta_templates.npc_prompts import (
     STATUS_UPDATE_MESSAGE,
@@ -54,6 +55,7 @@ from letta_client import (
     MessageCreate,
     Letta
 )
+from datetime import datetime
 
 # Load environment variables (keeps your custom server URL)
 load_dotenv()
@@ -745,7 +747,8 @@ def parse_args():
     parser.add_argument('--minimal-test', action='store_true')
     parser.add_argument('--test-type', choices=[
         'all', 'base', 'notes', 'social', 'status', 
-        'group', 'persona', 'journal', 'navigation', 'actions'
+        'group', 'persona', 'journal', 'navigation', 'actions',
+        'upsert'
     ], default='all')
     parser.add_argument(
         '--prompt',
@@ -1273,6 +1276,26 @@ def test_group(client, agent_id: str):
         group_block = next(b for b in agent.memory.blocks if b.label == "group_members")
         print("\nCurrent group state:", group_block.value)
 
+    # Print final state to verify both NPC and API updates
+    print("\nFinal state:")
+    agent = client.agents.retrieve(agent_id)
+    block = next(b for b in agent.memory.blocks if b.label == "group_members")
+    data = json.loads(block.value)
+    
+    # Print full block first
+    print("\nFull block:")
+    print(json.dumps(data, indent=2))
+    
+    # Verify fields
+    greggytheegg = next((m for m in data["members"].values() if m["name"] == "greggytheegg"), None)
+    if greggytheegg:
+        print("\nVerifying fields:")
+        print(f"is_present: {greggytheegg.get('is_present', 'MISSING')}")
+        print(f"appearance: {greggytheegg.get('appearance', 'MISSING')}")
+        print(f"last_location: {greggytheegg.get('last_location', 'MISSING')}")
+        print(f"last_seen: {greggytheegg.get('last_seen', 'MISSING')}")
+        print(f"notes: {greggytheegg.get('notes', 'MISSING')}")
+
 def get_npc_prompt(name: str, persona: str):
     return f"""You are {name}, {persona}
 
@@ -1630,6 +1653,99 @@ def test_minimal_agent():
         print_response(response)
         time.sleep(1)
 
+def test_upsert(client, agent_id):
+    """Test group member upsert functionality"""
+    print("\nTesting group member upsert...")
+    
+    # Test 1: First interaction - NPC adds notes
+    print("\nTest 1: First interaction")
+    response = client.agents.messages.create(
+        agent_id=agent_id,
+        messages=[{
+            "role": "user",
+            "content": "Hi! I'm a new player named greggytheegg. I noticed Alice and Charlie in the plaza. Could you help me find Pete's Stand?"
+        }]
+    )
+    print_response(response)
+    time.sleep(1)
+    
+    # API updates presence and appearance
+    print("\nAPI updating player state...")
+    result = upsert_group_member(
+        client,
+        agent_id,
+        "player_1738913511",
+        {
+            "name": "greggytheegg",
+            "is_present": True,
+            "last_seen": datetime.now(),
+            "last_location": "Main Plaza",
+            "appearance": "Wearing a hamburger hat"
+        }
+    )
+    print(f"API update result: {result}")
+    if "Error" in result:
+        print("WARNING: API update failed!")
+    time.sleep(1)
+    
+    # Test 2: Backend updates appearance - NPC adds notes
+    print("\nTest 2: Backend updates appearance")
+    response = client.agents.messages.create(
+        agent_id=agent_id,
+        messages=[{
+            "role": "system", 
+            "content": "Player greggytheegg is wearing a distinctive hamburger hat and appears healthy"
+        }]
+    )
+    print_response(response)
+    time.sleep(1)
+    
+    # Test 3: Player leaves - API updates presence
+    print("\nTest 3: Player leaves")
+    # First API updates presence
+    print("\nAPI updating player presence...")
+    result = upsert_group_member(
+        client,
+        agent_id,
+        "player_1738913511",
+        {
+            "is_present": False,
+            "last_seen": datetime.now().isoformat()
+        }
+    )
+    print(f"API update result: {result}")
+    time.sleep(1)
+    
+    # Then NPC reacts to departure
+    response = client.agents.messages.create(
+        agent_id=agent_id,
+        messages=[{
+            "role": "system",
+            "content": "Player greggytheegg has left the area and is no longer present"
+        }]
+    )
+    print_response(response)
+
+    # Print final state to verify both NPC and API updates
+    print("\nFinal state:")
+    agent = client.agents.retrieve(agent_id)
+    block = next(b for b in agent.memory.blocks if b.label == "group_members")
+    data = json.loads(block.value)
+    
+    # Print full block first
+    print("\nFull block:")
+    print(json.dumps(data, indent=2))
+    
+    # Verify fields
+    greggytheegg = next((m for m in data["members"].values() if m["name"] == "greggytheegg"), None)
+    if greggytheegg:
+        print("\nVerifying fields:")
+        print(f"is_present: {greggytheegg.get('is_present', 'MISSING')}")
+        print(f"appearance: {greggytheegg.get('appearance', 'MISSING')}")
+        print(f"last_location: {greggytheegg.get('last_location', 'MISSING')}")
+        print(f"last_seen: {greggytheegg.get('last_seen', 'MISSING')}")
+        print(f"notes: {greggytheegg.get('notes', 'MISSING')}")
+
 def main():
     args = parse_args()
     
@@ -1701,6 +1817,10 @@ def main():
             test_navigation(client, agent_id)
         if args.test_type in ["all", "actions"]:
             test_actions(client, agent_id)
+
+        if args.test_type == 'upsert':
+            test_upsert(client, agent_id)
+            return
 
     finally:
         pass
