@@ -1,9 +1,10 @@
-from setuptools import setup, find_packages
+from setuptools import setup, find_namespace_packages
 
 setup(
     name="letta-templates",
     version="3.1.0",
-    packages=find_packages(),
+    package_dir={"": "letta-v2"},
+    packages=find_namespace_packages(where="letta-v2"),
     package_data={
         "letta_templates": ["docs/**/*"]
     },

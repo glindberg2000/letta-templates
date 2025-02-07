@@ -75,15 +75,5 @@ wheels/
 # Environment variables
 .env
 
-# Virtual environments
-test_venv/
-**/test_venv/
-
 # IDE files
 *.code-workspace
-
-# Test environments
-test_env_2/
-
-# Temporary test files
-test.py
