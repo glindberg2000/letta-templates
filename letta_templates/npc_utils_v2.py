@@ -455,71 +455,49 @@ def print_client_info(client):
 def upsert_group_member(client, agent_id: str, entity_id: str, update_data: dict) -> dict:
     """Update or insert a group member.
     
-    Args:
-        client: Letta client instance
-        agent_id (str): Agent ID
-        entity_id (str): Player/NPC ID (e.g. "962483389" or "guide_pete")
-        update_data (dict): Fields to update, must include:
-            - name (str)
-            - is_present (bool)
-            - health (str)
-            - appearance (str)
-            - last_seen (str, ISO format)
-    
-    Returns:
-        dict: Result message
+    If a player with matching name exists under a temporary ID (unnamed_*),
+    will migrate their data to the real ID.
     """
     try:
-        print(f"\nDEBUG: Starting upsert for {entity_id}")
-        
         # Get current block
-        print(f"DEBUG: Getting agent {agent_id}")
         agent = client.agents.retrieve(agent_id)
-        
-        print("DEBUG: Finding group_members block")
         block = next(b for b in agent.memory.blocks if b.label == "group_members")
-        
-        print("DEBUG: Parsing block data")
         data = json.loads(block.value)
         
-        # Initialize players dict if needed
         if "players" not in data:
-            print("DEBUG: Initializing players dict")
             data["players"] = {}
             
-        # Update or create player entry
-        if entity_id not in data["players"]:
-            print(f"DEBUG: Creating new entry for {entity_id}")
-            data["players"][entity_id] = {
-                **update_data,
-                "notes": ""  # Initialize empty notes
-            }
+        # Check for temp ID with same name
+        temp_id = None
+        for pid, pdata in data["players"].items():
+            if (pid.startswith("unnamed_") and 
+                pdata["name"] == update_data["name"]):
+                temp_id = pid
+                break
+                
+        if temp_id:
+            # Migrate data from temp ID to real ID
+            existing_data = data["players"].pop(temp_id)  # Remove temp entry
+            # Keep existing notes and other data
+            update_data.setdefault("notes", "")  # Ensure notes field exists
+            update_data["notes"] = existing_data.get("notes", "")  # Preserve notes
+            data["players"][entity_id] = update_data
         else:
-            print(f"DEBUG: Updating existing entry for {entity_id}")
-            data["players"][entity_id].update(update_data)
-            if "notes" not in update_data:
-                data["players"][entity_id].setdefault("notes", "")
+            # Normal update/insert
+            if entity_id not in data["players"]:
+                update_data.setdefault("notes", "")  # Initialize empty notes
+            else:
+                # Keep existing notes if updating
+                update_data["notes"] = data["players"][entity_id].get("notes", "")
+            data["players"][entity_id] = update_data
             
-        # Ensure required fields
-        required_fields = {"name", "is_present", "health", "appearance", "last_seen", "notes"}
-        if not all(field in data["players"][entity_id] for field in required_fields):
-            missing = required_fields - set(data["players"][entity_id].keys())
-            print(f"DEBUG: Missing required fields: {missing}")
-            return {"error": f"Missing required fields: {missing}"}
-            
-        # Update block using core memory API
-        print("DEBUG: Updating block")
-        print(f"DEBUG: Block ID: {block.id}")
-        
+        # Convert to JSON string before updating
         client.agents.core_memory.modify_block(
             agent_id=agent_id,
             block_label="group_members",
             value=json.dumps(data)
         )
-        
-        return {"message": f"Successfully updated {entity_id}"}
-        
+        return {"status": "success", "message": f"Successfully updated {entity_id}"}
+            
     except Exception as e:
-        print(f"DEBUG: Error in upsert: {str(e)}")
-        print(f"DEBUG: Error type: {type(e)}")
-        return {"error": f"Error updating group memory: {str(e)}"} 
+        return {"status": "error", "message": str(e)} 

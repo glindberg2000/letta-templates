@@ -250,42 +250,46 @@ def test_echo(message: str) -> str:
     """
     return f"[TEST_ECHO_V3] {message} (echo...Echo...ECHO!)"
 
-def group_memory_append(player_id: str, player_name: str, note: str, request_heartbeat: bool = True) -> None:
+def group_memory_append(agent_state: "AgentState", player_name: str, note: str, request_heartbeat: bool = True) -> None:
     """Append a note about a player to group memory.
     
     Args:
-        player_id (str): Unique ID for any character (e.g. "962483389" or "guide_pete")
-        player_name (str): Display name of the character (e.g. "Alice" or "Pete")
-        note (str): Note to append to player's history
-        request_heartbeat (bool): Whether to request a heartbeat. Defaults to True.
-        
-    Returns:
-        None on success, error message on failure
-        
-    Example:
-        >>> group_memory_append("962483389", "Alice", "Interested in exploring the garden")
-        >>> group_memory_append("guide_pete", "Pete", "Making soup at his stand")
+        agent_state: Current agent state
+        player_name: Name of the player to add note for
+        note: Note to append
+        request_heartbeat: Whether to request a heartbeat
     """
-    import json  # Add import
-    from datetime import datetime  # Add import
+    import json
+    from datetime import datetime
     
     try:
         block = json.loads(agent_state.memory.get_block("group_members").value)
         
-        if player_id not in block["players"]:
+        if "players" not in block:
+            block["players"] = {}
+            
+        # Find or create player entry
+        player_id = None
+        for id, info in block["players"].items():
+            if info["name"] == player_name:
+                player_id = id
+                break
+                
+        # Auto-create if not found
+        if not player_id:
+            player_id = f"unnamed_{player_name}"
             block["players"][player_id] = {
                 "name": player_name,
                 "is_present": True,
                 "health": "healthy",
-                "appearance": "",  # Empty appearance
-                "notes": note,     # Put note here
+                "appearance": "",
+                "notes": "",
                 "last_seen": datetime.now().isoformat()
             }
-        else:
-            # Append to existing notes
-            current_notes = block["players"][player_id].get("notes", "")
-            block["players"][player_id]["notes"] = f"{current_notes}\n{note}".strip()
-            block["players"][player_id]["last_seen"] = datetime.now().isoformat()
+            
+        # Update notes
+        current_notes = block["players"][player_id].get("notes", "")
+        block["players"][player_id]["notes"] = f"{current_notes}\n{note}".strip()
         
         agent_state.memory.update_block_value(
             label="group_members",
@@ -294,17 +298,18 @@ def group_memory_append(player_id: str, player_name: str, note: str, request_hea
         return None
             
     except Exception as e:
+        print(f"Error in group_memory_append: {e}")
         return f"Failed to append note: {str(e)}"
 
-def group_memory_replace(player_id: str, player_name: str, old_note: str, new_note: str, request_heartbeat: bool = True) -> None:
+def group_memory_replace(agent_state: "AgentState", player_name: str, old_note: str, new_note: str, request_heartbeat: bool = True) -> None:
     """Replace a note about a player in group memory.
     
     Args:
-        player_id (str): Unique ID for any character
-        player_name (str): Display name of the character
-        old_note (str): Exact note to replace
-        new_note (str): New note to use
-        request_heartbeat (bool): Whether to request a heartbeat
+        agent_state: Current agent state
+        player_name: Name of the player
+        old_note: Note text to replace
+        new_note: New note text
+        request_heartbeat: Whether to request a heartbeat
     """
     import json
     from datetime import datetime
@@ -312,17 +317,37 @@ def group_memory_replace(player_id: str, player_name: str, old_note: str, new_no
     try:
         block = json.loads(agent_state.memory.get_block("group_members").value)
         
-        if player_id in block["players"]:
-            # Update notes
-            current_notes = block["players"][player_id].get("notes", "")
-            block["players"][player_id]["notes"] = current_notes.replace(old_note, new_note)
-            block["players"][player_id]["last_seen"] = datetime.now().isoformat()
+        if "players" not in block:
+            block["players"] = {}
             
-            agent_state.memory.update_block_value(
-                label="group_members",
-                value=json.dumps(block)
-            )
-            return None
+        # Find or create player entry
+        player_id = None
+        for pid, pdata in block["players"].items():
+            if pdata["name"] == player_name:
+                player_id = pid
+                break
+                
+        # Auto-create if not found
+        if not player_id:
+            player_id = f"unnamed_{player_name}"
+            block["players"][player_id] = {
+                "name": player_name,
+                "is_present": True,
+                "health": "healthy",
+                "appearance": "",
+                "notes": "",
+                "last_seen": datetime.now().isoformat()
+            }
+            
+        # Update notes
+        current_notes = block["players"][player_id].get("notes", "")
+        block["players"][player_id]["notes"] = current_notes.replace(old_note, new_note)
+        
+        agent_state.memory.update_block_value(
+            label="group_members",
+            value=json.dumps(block)
+        )
+        return None
             
     except Exception as e:
         print(f"Error in group_memory_replace: {e}")
@@ -343,18 +368,30 @@ def group_memory_update(agent_state: "AgentState", player_name: str, value: str)
     try:
         block = json.loads(agent_state.memory.get_block("group_members").value)
         
-        # Find player
+        if "players" not in block:
+            block["players"] = {}
+            
+        # Find or create player entry
         player_id = None
-        for id, info in block["members"].items():
-            if info["name"] == player_name:
-                player_id = id
+        for pid, pdata in block["players"].items():
+            if pdata["name"] == player_name:
+                player_id = pid
                 break
                 
+        # Auto-create if not found
         if not player_id:
-            return f"Player {player_name} not found"
+            player_id = f"unnamed_{player_name}"
+            block["players"][player_id] = {
+                "name": player_name,
+                "is_present": True,
+                "health": "healthy",
+                "appearance": "",
+                "notes": "",
+                "last_seen": datetime.now().isoformat()
+            }
             
         # Update entire player data
-        block["members"][player_id] = value
+        block["players"][player_id] = value
         
         agent_state.memory.update_block_value(
             label="group_members",
@@ -691,7 +728,7 @@ def group_memory_add(player_id: str, name: str, request_heartbeat: bool = True) 
     
     # Add to group members
     group_memory_append(
-        player_id=player_id,
+        agent_state=None,
         player_name=name,
         note=json.dumps(member_data),
         request_heartbeat=request_heartbeat
@@ -730,6 +767,7 @@ def group_memory_remove(player_id: str, request_heartbeat: bool = True) -> str:
     
     # Remove from group
     group_memory_replace(
+        agent_state=None,
         player_name=player_id,
         old_note="*",  # Remove all notes
         new_note="",
@@ -757,7 +795,7 @@ def group_memory_restore(player_id: str, name: str, request_heartbeat: bool = Tr
     
     if results and results[0]:
         group_memory_append(
-            player_id=player_id,
+            agent_state=None,
             player_name=name,
             note=f"Previous visitor: {results[0]}",
             request_heartbeat=request_heartbeat
@@ -795,6 +833,7 @@ def group_memory_archive(player_id: str, name: str, request_heartbeat: bool = Tr
     
     # Remove from group
     group_memory_replace(
+        agent_state=None,
         player_name=name,
         old_note="*",  # Remove all notes
         new_note="",
@@ -824,12 +863,12 @@ TOOL_REGISTRY: Dict[str, Dict] = {
     },
     "group_memory_append": {
         "function": group_memory_append,
-        "version": "1.0.1",
+        "version": "2.0.0",
         "supports_state": True
     },
     "group_memory_replace": {
         "function": group_memory_replace,
-        "version": "1.0.1",
+        "version": "2.0.0",
         "supports_state": True
     }
 }

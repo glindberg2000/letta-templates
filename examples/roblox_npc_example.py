@@ -7,17 +7,39 @@ Demonstrates:
 - Group management
 - Navigation
 - Status updates
+
+UPGRADE NOTICE v2.0.0:
+Group memory tools have been updated with auto-creation and better data handling:
+
+1. group_memory_append and group_memory_replace now:
+   - Auto-create players if not found
+   - Use consistent "players" structure
+   - Preserve notes when migrating temp IDs
+   - Handle errors consistently
+
+2. Data structure changes:
+   - Uses "players" instead of "members"
+   - Temporary IDs use "unnamed_" prefix
+   - Notes are preserved during migrations
+
+3. Required updates:
+   - Update tool versions to 2.0.0
+   - Check for "players" instead of "members"
+   - Handle both real and temp IDs
 """
 
 from letta import create_client
 from letta_templates import (
     create_personalized_agent,
-    update_group_status,
+    update_status_block,
+    upsert_group_member,
     chat_with_agent,
     print_agent_details,
     get_memory_block,
     update_memory_block,
-    create_letta_client
+    create_letta_client,
+    group_memory_append,
+    group_memory_replace
 )
 from dotenv import load_dotenv
 import os
@@ -48,27 +70,64 @@ def print_memory_blocks(client, agent_id, blocks=["status", "group_members"]):
             print(json.dumps(json.loads(block.value), indent=2))
 
 def test_status_update(client, agent_id):
-    """Test status block updates"""
+    """Test status block updates with new first-person format"""
     print("\n=== Testing Status Updates ===")
     
-    # Print initial status
-    print("\nInitial Status:")
-    status = get_memory_block(client, agent_id, "status")
-    print(status)
-    
-    # Test 1: Basic status update
-    print("\nTest 1: Basic Status Update...")
-    response = client.send_message(
+    # Test 1: Normal status
+    update_status_block(
+        client=client,
         agent_id=agent_id,
-        message="Update status: Taking a break near the fountain, watching visitors pass by.",
-        role="system"
+        field_updates={
+            "current_location": "Welcome Center",
+            "state": "greeting",
+            "description": "I'm standing here at the Welcome Center, ready to help new visitors. The information kiosk glows warmly behind me."
+        }
     )
-    print_response(response)
     
-    # Print final status
-    print("\nFinal Status:")
-    status = get_memory_block(client, agent_id, "status")
-    print(status)
+    # Test 2: Moving status
+    update_status_block(
+        client=client,
+        agent_id=agent_id,
+        field_updates={
+            "current_location": "path_to_plaza",
+            "state": "guiding",
+            "description": "I'm walking along the path to the Visitor Plaza, showing the scenic route to my group."
+        }
+    )
+
+def update_player_status(client, agent_id, player_data):
+    """Update single player in group"""
+    upsert_group_member(
+        client=client,
+        agent_id=agent_id,
+        entity_id=player_data["id"],
+        update_data={
+            "name": player_data["name"],
+            "is_present": True,
+            "health": "healthy",
+            "appearance": player_data["appearance"],
+            "last_seen": datetime.now().isoformat()
+        }
+    )
+
+def handle_player_join(player_name: str):
+    """Example showing auto-creation of players"""
+    # Tool will auto-create if needed
+    group_memory_append(
+        agent_state=agent_state,
+        player_name=player_name,
+        note="First login"
+    )
+
+def handle_player_update(player_id: str, player_data: dict):
+    """Example showing ID migration"""
+    # Will migrate from temp ID if it exists
+    upsert_group_member(
+        client=client,
+        agent_id=agent_id,
+        entity_id=player_id,
+        update_data=player_data
+    )
 
 def main():
     # Load environment variables first
@@ -138,17 +197,14 @@ def main():
     
     # Game event: Player approaches NPC
     print("\nGame Event: Player Alex approaches NPC")
-    update_group_status(
+    update_status_block(
         client=client,
         agent_id=agent.id,
-        nearby_players=[{
-            "id": "player_123",
-            "name": "Alex",
-            "appearance": "Wearing a blue hat and red shirt",
-            "notes": "First time visitor"
-        }],
-        current_location="Welcome Center",
-        current_action="idle"
+        field_updates={
+            "current_location": "Welcome Center",
+            "state": "greeting",
+            "description": "I'm standing here at the Welcome Center, ready to help new visitors. The information kiosk glows warmly behind me."
+        }
     )
     print_memory_blocks(client, agent.id)
 
@@ -164,33 +220,27 @@ def main():
 
     # Game event: NPC starts moving
     print("\nGame Event: NPC starts moving")
-    update_group_status(
+    update_status_block(
         client=client,
         agent_id=agent.id,
-        nearby_players=[{
-            "id": "player_123",
-            "name": "Alex",
-            "appearance": "Wearing a blue hat and red shirt",
-            "notes": "First time visitor"
-        }],
-        current_location="Welcome Center",
-        current_action="moving"  # Status change: now moving
+        field_updates={
+            "current_location": "path_to_plaza",
+            "state": "guiding",
+            "description": "I'm walking along the path to the Visitor Plaza, showing the scenic route to my group."
+        }
     )
     print_memory_blocks(client, agent.id)
 
     # Game event: NPC arrives at destination
     print("\nGame Event: NPC arrives at Visitor Plaza")
-    update_group_status(
+    update_status_block(
         client=client,
         agent_id=agent.id,
-        nearby_players=[{
-            "id": "player_123",
-            "name": "Alex",
-            "appearance": "Wearing a blue hat and red shirt",
-            "notes": "First time visitor"
-        }],
-        current_location="Visitor Plaza",
-        current_action="idle"  # Back to idle after arriving
+        field_updates={
+            "current_location": "Visitor Plaza",
+            "state": "idle",
+            "description": "I've arrived at the Visitor Plaza, ready to greet visitors."
+        }
     )
     print_memory_blocks(client, agent.id)
 
@@ -199,26 +249,11 @@ def main():
     
     # Game event: Another player joins
     print("\nGame Event: Player Emma joins the group")
-    update_group_status(
-        client=client,
-        agent_id=agent.id,
-        nearby_players=[
-            {
-                "id": "player_123",
-                "name": "Alex",
-                "appearance": "Wearing a blue hat and red shirt",
-                "notes": "First time visitor"
-            },
-            {
-                "id": "player_456",
-                "name": "Emma",
-                "appearance": "Purple dress with a backpack",
-                "notes": "Regular visitor, likes the garden"
-            }
-        ],
-        current_location="Visitor Plaza",
-        current_action="idle"
-    )
+    update_player_status(client, agent.id, {
+        "id": "player_456",
+        "name": "Emma",
+        "appearance": "Purple dress with a backpack"
+    })
     print_memory_blocks(client, agent.id)
 
     # Test group interaction
@@ -233,25 +268,14 @@ def main():
 
     # Game event: Group starts moving
     print("\nGame Event: Group starts moving to Scenic Lookout")
-    update_group_status(
+    update_status_block(
         client=client,
         agent_id=agent.id,
-        nearby_players=[
-            {
-                "id": "player_123",
-                "name": "Alex",
-                "appearance": "Wearing a blue hat and red shirt",
-                "notes": "First time visitor"
-            },
-            {
-                "id": "player_456",
-                "name": "Emma",
-                "appearance": "Purple dress with a backpack",
-                "notes": "Regular visitor, likes the garden"
-            }
-        ],
-        current_location="Visitor Plaza",
-        current_action="moving"
+        field_updates={
+            "current_location": "path_to_scenic_lookout",
+            "state": "moving",
+            "description": "I'm walking to the Scenic Lookout, showing the scenic route to my group."
+        }
     )
     print_memory_blocks(client, agent.id)
 
@@ -260,18 +284,13 @@ def main():
     
     # Game event: Alex leaves
     print("\nGame Event: Player Alex leaves")
-    update_group_status(
-        client=client,
-        agent_id=agent.id,
-        nearby_players=[{
-            "id": "player_456",
-            "name": "Emma",
-            "appearance": "Purple dress with a backpack",
-            "notes": "Regular visitor, likes the garden"
-        }],
-        current_location="Scenic Lookout",
-        current_action="idle"
-    )
+    update_player_status(client, agent.id, {
+        "id": "player_123",
+        "name": "Alex",
+        "appearance": "Wearing a blue hat and red shirt",
+        "state": "idle",
+        "description": "I've left the group and am now idle."
+    })
     print_memory_blocks(client, agent.id)
 
     # Final interaction
@@ -286,12 +305,14 @@ def main():
 
     # Game event: Last player leaves
     print("\nGame Event: All players have left")
-    update_group_status(
+    update_status_block(
         client=client,
         agent_id=agent.id,
-        nearby_players=[],
-        current_location="Scenic Lookout",
-        current_action="idle"
+        field_updates={
+            "current_location": "scenic_lookout",
+            "state": "idle",
+            "description": "I'm standing here at the Scenic Lookout, no longer in a group."
+        }
     )
     print_memory_blocks(client, agent.id)
 
