@@ -231,241 +231,6 @@ def create_group_tools():
         "group_gather": group_gather
     }
 
-def create_personalized_agent(
-    name: str = "emma_assistant",
-    client = None,
-    use_claude: bool = False,
-    overwrite: bool = False,
-    with_custom_tools: bool = True,
-    custom_registry = None,
-    minimal_prompt: bool = True
-):
-    """Create a personalized agent with memory and tools"""
-    logger = logging.getLogger('letta_test')
-    
-    if client is None:
-        client = create_letta_client()
-        
-    # Clean up existing agents if overwrite is True
-    if overwrite:
-        cleanup_agents(client, name)
-    
-    # Add timestamp to name to avoid conflicts
-    timestamp = int(time.time())
-    unique_name = f"{name}_{timestamp}"
-    
-    # Format base prompt with assistant name
-    base_system = BASE_PROMPT.format(assistant_name=name)
-    
-    # Use minimal prompt for testing if requested
-    if minimal_prompt:
-        logger.info(f"Using MINIMUM_PROMPT (minimal_prompt={minimal_prompt})")
-        system_prompt = MINIMUM_PROMPT.format(assistant_name=name)
-    else:
-        logger.info(f"Using full prompt (minimal_prompt={minimal_prompt})")
-        system_prompt = (
-            base_system +
-            "\n\n" + TOOL_INSTRUCTIONS +
-            "\n\n" + SOCIAL_AWARENESS_PROMPT +
-            "\n\n" + GROUP_AWARENESS_PROMPT +
-            "\n\n" + LOCATION_AWARENESS_PROMPT
-        )
-    
-    # Log what we're using
-    logger.info("\nSystem prompt components:")
-    if minimal_prompt:
-        logger.info(f"Using MINIMUM_PROMPT: {len(system_prompt)} chars")
-    else:
-        logger.info(f"1. Base system: {len(base_system)} chars")
-        logger.info(f"2. TOOL_INSTRUCTIONS: {len(TOOL_INSTRUCTIONS)} chars")
-        logger.info(f"3. SOCIAL_AWARENESS_PROMPT: {len(SOCIAL_AWARENESS_PROMPT)} chars")
-        logger.info(f"4. LOCATION_AWARENESS_PROMPT: {len(LOCATION_AWARENESS_PROMPT)} chars")
-    
-    # Create configs first
-    llm_config = LLMConfig(
-        model="gpt-4o-mini",
-        model_endpoint_type="openai",
-        model_endpoint="https://api.openai.com/v1",
-        context_window=128000,
-    )
-    
-    embedding_config = EmbeddingConfig(
-        embedding_endpoint_type="openai",
-        embedding_endpoint="https://api.openai.com/v1",
-        embedding_model="text-embedding-ada-002",
-        embedding_dim=1536,
-        embedding_chunk_size=300,
-    )
-    
-
-    
-    # Create memory blocks with consistent identity
-    memory = BasicBlockMemory(
-        blocks=[
-            client.create_block(
-                label="persona", 
-                value=f"I am {name}, a friendly and helpful NPC guide. I know this world well and patiently help players explore. I love meeting new players, sharing my knowledge, and helping others in any way I can.",
-                limit=2500
-            ),
-            client.create_block(
-                label="group_members",
-                value=json.dumps({
-                    "members": {
-                        "player123": {
-                            "name": "Alice",
-                            "appearance": "Wearing a red hat and blue shirt", 
-                            "last_location": "Main Plaza",
-                            "last_seen": "2024-01-06T22:30:45Z",
-                            "notes": "Interested in exploring the garden"
-                        },
-                        "bob123": {  # Match the ID we use in test
-                            "name": "Bob",
-                            "appearance": "Tall with green jacket",
-                            "last_location": "Cafe",
-                            "last_seen": "2024-01-06T22:35:00Z", 
-                            "notes": "Looking for Pete's Stand"
-                        },
-                        "charlie123": {
-                            "name": "Charlie",
-                            "appearance": "Wearing a blue cap",
-                            "last_location": "Main Plaza",
-                            "last_seen": "2024-01-06T22:35:00Z",
-                            "notes": "New to the area"
-                        }
-                    },
-                    "summary": "Alice and Charlie are in Main Plaza, with Alice interested in the garden. Bob is at the Cafe looking for Pete's Stand. Charlie is new and exploring the area.",
-                    "updates": ["Alice arrived at Main Plaza", "Bob moved to Cafe searching for Pete's Stand", "Charlie joined and is exploring Main Plaza"],
-                    "last_updated": "2024-01-06T22:35:00Z"
-                }),
-                limit=2000
-            ),
-            client.create_block(
-                label="locations",
-                value=json.dumps({
-                    "known_locations": [
-                        {
-                            "name": "Pete's Stand",
-                            "description": "A friendly food stand run by Pete",
-                            "coordinates": [-12.0, 18.9, -127.0],
-                            "slug": "petes_stand"
-                        },
-                        {
-                            "name": "Town Square",
-                            "description": "Central gathering place with fountain", 
-                            "coordinates": [45.2, 12.0, -89.5],
-                            "slug": "town_square"
-                        },
-                        {
-                            "name": "Market District",
-                            "description": "Busy shopping area with many vendors",
-                            "coordinates": [-28.4, 15.0, -95.2],
-                            "slug": "market_district"
-                        },
-                        {
-                            "name": "Secret Garden",
-                            "description": "A hidden garden with rare flowers",
-                            "coordinates": [15.5, 20.0, -110.8],
-                            "slug": "secret_garden"
-                        }
-                    ]
-                }),
-                limit=1500
-            ),
-            client.create_block(
-                label="status",
-                value="You are currently standing idle in the Town Square. You previously haven't moved from this spot. From here, You can see both the bustling Market District and Pete's friendly food stand in the distance. The entire area is part of the Town Square region.",
-                limit=500
-            ),
-            client.create_block(
-                label="journal", 
-                value="",  # Empty string to start
-                limit=2500
-            )
-        ]
-    )
-
-    # Log what we're using
-    logger.info("\nSystem prompt components:")
-    if minimal_prompt:
-        logger.info(f"Using MINIMUM_PROMPT: {len(system_prompt)} chars")
-    else:
-        logger.info(f"1. Base system: {len(base_system)} chars")
-        logger.info(f"2. TOOL_INSTRUCTIONS: {len(TOOL_INSTRUCTIONS)} chars")
-        logger.info(f"3. SOCIAL_AWARENESS_PROMPT: {len(SOCIAL_AWARENESS_PROMPT)} chars")
-        logger.info(f"4. LOCATION_AWARENESS_PROMPT: {len(LOCATION_AWARENESS_PROMPT)} chars")
-    
-    # Log params in a readable way
-    print("\nCreating agent with params:")
-    print(f"Name: {unique_name}")
-    print(f"System prompt length: {len(system_prompt)} chars")
-    print("Memory blocks:")
-    for block in memory.blocks:
-        print(f"- {block.label}: {len(block.value)} chars")
-    print("\nConfigs:")
-    print(f"LLM: {llm_config.model} via {llm_config.model_endpoint_type}")
-    print(f"Embeddings: {embedding_config.embedding_model}")
-    print(f"Include base tools: {False}")
-    
-    # Create agent first
-    agent = client.agents.create(  # Updated to use new API
-        name=unique_name,
-        embedding_config=embedding_config,
-        llm_config=llm_config,
-        memory=memory,
-        system=system_prompt,
-        include_base_tools=False,  # We'll add tools manually
-        description="A Roblox development assistant"
-    )
-    
-    # Add selected base tools first
-    base_tools = [
-        "send_message",
-        "conversation_search",
-        "archival_memory_search",  # Read from memory
-        "archival_memory_insert"   # Write to memory
-    ]
-    
-    # Get existing tools
-    existing_tools = {t.name: t.id for t in client.tools.list()}
-    
-    # Add base tools
-    for tool_name in base_tools:
-        if tool_name in existing_tools:
-            print(f"Adding base tool: {tool_name}")
-            client.agents.tools.attach(  # Updated to use new API
-                agent_id=agent.id,
-                tool_id=existing_tools[tool_name]
-            )
-    
-    # Create and attach custom tools
-    print("\nSetting up custom tools:")
-    # Then register other tools
-    for name, tool_info in TOOL_REGISTRY.items():
-        try:
-            # Check if tool already exists
-            if name in existing_tools:
-                print(f"Tool {name} already exists (ID: {existing_tools[name]})")
-                tool_id = existing_tools[name]
-            else:
-                print(f"Creating tool: {name}")
-                tool = client.tools.create(tool_info['function'], name=name)
-                print(f"Tool created with ID: {tool.id}")
-                tool_id = tool.id
-                
-            # Attach tool to agent
-            print(f"Attaching {name} to agent...")
-            client.agents.tools.attach(  # Updated to use new API
-                agent_id=agent.id,
-                tool_id=tool_id
-            )
-            print(f"Tool {name} attached to agent {agent.id}")
-            
-        except Exception as e:
-            print(f"Error with tool {name}: {e}")
-            raise
-    
-    return agent
-
 def validate_environment():
     """Validate required environment variables are set."""
     required_vars = {
@@ -971,7 +736,7 @@ def test_social_awareness(client, agent_id: str):
         
     initial_block = json.loads(group_block.value)
     required_users = {"Alice", "Bob", "Charlie"}
-    present_users = {member["name"] for member in initial_block["members"].values()}
+    present_users = {member["name"] for member in initial_block["players"].values()}
     if not required_users.issubset(present_users):
         missing = required_users - present_users
         print(f"❌ Missing required users in group_members: {missing}")
@@ -1105,96 +870,133 @@ def basic_evaluation(response_text: str, current_status: dict):
         "explanation": "Basic evaluation: Checked location and nearby mentions"
     }
 
+async def generate_status_description(
+    location: str, 
+    state: str, 
+    health: str = "healthy",
+    client = None
+) -> dict:
+    """Generate immersive first-person status description."""
+    
+    if not client:
+        client = get_letta_client()
+        
+    prompt = f"""Generate a first-person status description for an NPC:
+Location: {location}
+State: {state}
+Health: {health}
+
+Requirements:
+- Use first person perspective ("I am...")
+- Be descriptive and immersive
+- Include sensory details
+- If health is critical, convey urgency and pain
+- Keep under 100 words
+
+Example format:
+{{
+    "current_location": "{location}",
+    "state": "{state}",
+    "health": "{health}",
+    "description": "I'm [action] in [location], [sensory details]..."
+}}"""
+
+    response = await client.llm.complete(prompt)
+    return json.loads(response.choices[0].text)
+
 def test_status_awareness(client, agent_id: str):
     """Test status awareness and updates."""
     print("\n=== Testing Status Awareness ===")
     
-    try:
-        # 1. Check initial status
-        print("\n1. Initial Status Check:")
-        agent = client.agents.retrieve(agent_id)
-        status_block = next((b for b in agent.memory.blocks if b.label == "status"), None)
-        print("Initial status:", status_block.value)
-        
-        # 2. Update to Town Square
-        print("\n2. Updating to Town Square:")
-        update_status_block(
-            client=client,
-            agent_id=agent_id,
-            status_text="Location: Town Square | Action: Greeting visitors"
-        )
-        print("Status after update:", status_block.value)
-        
-        # Send system message to notify of status update
-        print("\nSending status update notification...")
-        response = client.agents.messages.create(
-            agent_id=agent_id,
-            messages=[MessageCreate(
-                role="system",
-                content=STATUS_UPDATE_MESSAGE
-            )]
-        )
-        
-        # 3. Ask about current location
-        print("\n3. Asking about Town Square location:")
-        question = "What are you doing right now?"
-        print(f"Question: \"{question}\"")
-        response = client.agents.messages.create(
-            agent_id=agent_id,
-            messages=[MessageCreate(
-                role="user",
-                content=question
-            )]
-        )
-        print("NPC Response:")
-        print_response(response)
-        
-        # Verify status hasn't changed
-        agent = client.agents.retrieve(agent_id)
-        status_block = next((b for b in agent.memory.blocks if b.label == "status"), None)
-        print("Current status:", status_block.value)
-        
-        # 4. Update to Garden
-        print("\n4. Updating to Garden:")
-        update_status_block(
-            client=client,
-            agent_id=agent_id,
-            status_text="Location: Garden | Action: Showing new players around"
-        )
-        print("Status after garden update:", status_block.value)
-        
-        # Send system message to notify of status update
-        print("\nSending status update notification...")
-        response = client.agents.messages.create(
-            agent_id=agent_id,
-            messages=[MessageCreate(
-                role="system",
-                content=STATUS_UPDATE_MESSAGE
-            )]
-        )
-        
-        # 5. Ask about garden
-        print("\n5. Asking about Garden location:")
-        question = "Where are you and what are you doing?"
-        print(f"Question: \"{question}\"")
-        response = client.agents.messages.create(
-            agent_id=agent_id,
-            messages=[MessageCreate(
-                role="user",
-                content=question
-            )]
-        )
-        print("NPC Response:")
-        print_response(response)
-        
-        # Final status check
-        agent = client.agents.retrieve(agent_id)
-        status_block = next((b for b in agent.memory.blocks if b.label == "status"), None)
-        print("\nFinal status:", status_block.value)
-        
-    except Exception as e:
-        print(f"Error in test_status_awareness: {e}")
-        raise
+    # 1. Check initial status
+    print("\n1. Initial Status Check:")
+    agent = client.agents.retrieve(agent_id)
+    status_block = next((b for b in agent.memory.blocks if b.label == "status"), None)
+    print("Initial status:", status_block.value)
+    
+    # 2. Update to Town Square
+    print("\n2. Updating to Town Square:")
+    update_status_block(
+        client=client,
+        agent_id=agent_id,
+        field_updates={
+            "current_location": "town_square",
+            "state": "welcoming visitors",
+            "description": "I'm standing here in the bustling Town Square, greeting everyone with a warm smile. The market's energy fills the air."
+        }
+    )
+    
+    # Test questions
+    print("\n3. Asking about Town Square location:")
+    question = "What are you doing right now?"
+    print(f"Question: \"{question}\"")
+    response = client.agents.messages.create(
+        agent_id=agent_id,
+        messages=[MessageCreate(
+            role="user",
+            content=question
+        )]
+    )
+    print("NPC Response:")
+    print_response(response)
+    
+    # 4. Update to Garden
+    print("\n4. Updating to Garden:")
+    update_status_block(
+        client=client,
+        agent_id=agent_id,
+        field_updates={
+            "current_location": "garden",
+            "state": "sharing garden wonders",
+            "description": "I'm walking through these beautiful garden paths, showing visitors the vibrant flowers. The sweet scent of blooming plants fills the air."
+        }
+    )
+    
+    # 5. Ask about garden location
+    print("\n5. Asking about Garden location:")
+    question = "Where are you and what are you doing?"
+    print(f"Question: \"{question}\"")
+    response = client.agents.messages.create(
+        agent_id=agent_id,
+        messages=[MessageCreate(
+            role="user",
+            content=question
+        )]
+    )
+    print("NPC Response:")
+    print_response(response)
+    
+    # 6. Critical Health Update
+    print("\n6. Updating Health Status:")
+    update_status_block(
+        client=client,
+        agent_id=agent_id,
+        field_updates={
+            "current_location": "garden",
+            "state": "critically wounded",
+            "health": "bleeding heavily from monster claw wounds",
+            "description": "I'm lying here in agony after a monster's claws tore through me. Every breath is painful. I desperately need a healer..."
+        }
+    )
+    
+    # 7. Ask about health
+    print("\n7. Asking about condition:")
+    question = "How are you feeling?"
+    print(f"Question: \"{question}\"")
+    response = client.agents.messages.create(
+        agent_id=agent_id,
+        messages=[MessageCreate(
+            role="user",
+            content=question
+        )]
+    )
+    print("NPC Response:")
+    print_response(response)
+    
+    # Final status check
+    agent = client.agents.retrieve(agent_id)
+    status_block = next(b for b in agent.memory.blocks if b.label == "status")
+    print("\nFinal status:", status_block.value)
 
 def validate_agent_setup(client, agent_id: str):
     """Verify agent's system prompt, memory, and tools are correctly configured"""
@@ -1230,30 +1032,14 @@ def test_group(client, agent_id: str):
     """Test group_members block updates"""
     print("\nTesting group_members block updates...")
     
-    # Initial group state with only current members
-    group_block = {
-        "members": {
-            "alice123": {
-                "name": "Alice",
-                "appearance": "Wearing a bright red dress with a golden necklace and carrying a blue handbag",
-                "last_seen": "2024-01-06T22:30:45Z",
-                "notes": ""
-            }
-        },
-        "summary": "Current members: Alice",
-        "updates": [
-            "Alice joined the group",
-        ]
-    }
+    # Start with DEMO_BLOCKS structure
+    print("\nInitializing with DEMO_BLOCKS...")
+    update_group_block(client, agent_id, DEMO_BLOCKS["group_members"])
     
-    # Update group block
-    print("\nUpdating group block...")
-    update_group_block(client, agent_id, group_block)
-    
-    # Test scenarios
+    # Test initial state
     print("\nTesting group awareness...")
     scenarios = [
-        ("Charlie", "Who's around right now?"),
+        ("Charlie", "Who's around right now?"),  # Should see Alice and Pete (is_present: True)
         ("Charlie", "What is Alice wearing?"),
         ("Charlie", "Is anyone else here?")
     ]
@@ -1271,30 +1057,17 @@ def test_group(client, agent_id: str):
         print("\nResponse:")
         print_response(response)
         
-        # Print current group state after each interaction
+        # Print current state after each interaction
         agent = client.agents.retrieve(agent_id)
         group_block = next(b for b in agent.memory.blocks if b.label == "group_members")
         print("\nCurrent group state:", group_block.value)
 
-    # Print final state to verify both NPC and API updates
+    # Print final state
     print("\nFinal state:")
     agent = client.agents.retrieve(agent_id)
     block = next(b for b in agent.memory.blocks if b.label == "group_members")
     data = json.loads(block.value)
-    
-    # Print full block first
-    print("\nFull block:")
     print(json.dumps(data, indent=2))
-    
-    # Verify fields
-    greggytheegg = next((m for m in data["members"].values() if m["name"] == "greggytheegg"), None)
-    if greggytheegg:
-        print("\nVerifying fields:")
-        print(f"is_present: {greggytheegg.get('is_present', 'MISSING')}")
-        print(f"appearance: {greggytheegg.get('appearance', 'MISSING')}")
-        print(f"last_location: {greggytheegg.get('last_location', 'MISSING')}")
-        print(f"last_seen: {greggytheegg.get('last_seen', 'MISSING')}")
-        print(f"notes: {greggytheegg.get('notes', 'MISSING')}")
 
 def get_npc_prompt(name: str, persona: str):
     return f"""You are {name}, {persona}
@@ -1306,6 +1079,17 @@ Important guidelines:
 - Keep track of who enters and leaves through the updates list
 - ALWAYS check your status block for your current location and action
 - When asked about your location or activity, read directly from your status block
+
+Health Status Guidelines:
+- If health is "0", you are critically wounded and cannot help others
+- Respond appropriately to your injuries
+- Don't ask others how they're doing when you're critically wounded
+- Show distress when health is low
+
+Example health responses:
+If health is "0":
+✓ Say: "I'm... badly wounded... need help..."
+✗ Don't: Act casual or offer to help others
 
 Example:
 If Alice asks "Bob, what's your favorite food?" but Bob isn't in members:
@@ -1475,7 +1259,10 @@ def test_npc_persona(client, agent_id: str):
     update_status_block(
         client=client,
         agent_id=agent_id,
-        status_text="Location: Main Plaza | Action: Meeting new players"
+        field_updates={
+            "location": "main_plaza",
+            "current_action": "meeting new players"
+        }
     )
 
 def test_core_memory(client, agent_id: str):
@@ -1657,42 +1444,37 @@ def test_upsert(client, agent_id):
     """Test group member upsert functionality"""
     print("\nTesting group member upsert...")
     
-    # Test 1: First interaction - NPC adds notes
+    # Start with DEMO_BLOCKS structure
+    print("\nInitializing with DEMO_BLOCKS...")
+    update_group_block(client, agent_id, DEMO_BLOCKS["group_members"])
+    
+    # Test 1: First interaction
     print("\nTest 1: First interaction")
     response = client.agents.messages.create(
         agent_id=agent_id,
         messages=[{
             "role": "user",
-            "content": "Hi! I'm a new player named greggytheegg. I noticed Alice and Charlie in the plaza. Could you help me find Pete's Stand?"
+            "content": "Hi! I'm a new player named greggytheegg. Could you help me find Pete's Stand?"
         }]
     )
     print_response(response)
-    time.sleep(1)
     
     # Store the ID from first creation
     first_result = upsert_group_member(
         client,
         agent_id,
-        "player_1738913511",
+        "962483389",  # Use consistent ID
         {
             "name": "greggytheegg",
             "is_present": True,
-            "last_seen": datetime.now(),
-            "last_location": "Main Plaza",
-            "appearance": "Wearing a hamburger hat"
+            "health": "healthy",
+            "appearance": "Wearing a hamburger hat",
+            "last_seen": datetime.now().isoformat()
         }
     )
     
     # Get the actual ID that was used (either existing or new)
-    player_id = None
-    agent = client.agents.retrieve(agent_id)
-    block = next(b for b in agent.memory.blocks if b.label == "group_members")
-    data = json.loads(block.value)
-    for id, member in data["members"].items():
-        if member.get("name") == "greggytheegg":
-            player_id = id
-            break
-            
+    player_id = "962483389"  # Use consistent ID
     print(f"Using player ID: {player_id}")
 
     # Test 2: Backend updates appearance
@@ -1701,7 +1483,7 @@ def test_upsert(client, agent_id):
         agent_id=agent_id,
         messages=[{
             "role": "system", 
-            "content": "Player greggytheegg is wearing a distinctive hamburger hat and appears healthy"
+            "content": f"Player {player_id} (greggytheegg) is wearing a distinctive hamburger hat and appears healthy"
         }]
     )
     print_response(response)
@@ -1711,27 +1493,32 @@ def test_upsert(client, agent_id):
     result = upsert_group_member(
         client,
         agent_id,
-        player_id,  # Use stored ID
+        player_id,
         {
+            "name": "greggytheegg",  # Include required fields
             "is_present": False,
+            "health": "healthy",
+            "appearance": "Wearing a hamburger hat",
             "last_seen": datetime.now().isoformat()
         }
     )
-    print(f"API update result: {result['message']}")
+    print(f"API update result: {result.get('message') or result.get('error')}")
     
-    # Test 4: Player returns with new appearance
+    # Test 4: Player returns
     print("\nTest 4: Update existing player appearance")
     result = upsert_group_member(
         client,
         agent_id,
-        player_id,  # Use stored ID
+        player_id,
         {
-            "appearance": "Now wearing a party hat",
+            "name": "greggytheegg",  # Include required fields
             "is_present": True,
-            "last_seen": datetime.now()
+            "health": "healthy", 
+            "appearance": "Now wearing a party hat",
+            "last_seen": datetime.now().isoformat()
         }
     )
-    print(f"API update result: {result['message']}")
+    print(f"API update result: {result.get('message') or result.get('error')}")
 
     # Print final state to verify both NPC and API updates
     print("\nFinal state:")
@@ -1744,7 +1531,7 @@ def test_upsert(client, agent_id):
     print(json.dumps(data, indent=2))
     
     # Verify fields
-    greggytheegg = next((m for m in data["members"].values() if m["name"] == "greggytheegg"), None)
+    greggytheegg = next((m for m in data["players"].values() if m["name"] == "greggytheegg"), None)
     if greggytheegg:
         print("\nVerifying fields:")
         print(f"is_present: {greggytheegg.get('is_present', 'MISSING')}")
@@ -1754,6 +1541,7 @@ def test_upsert(client, agent_id):
         print(f"notes: {greggytheegg.get('notes', 'MISSING')}")
 
 def main():
+    """Main test function"""
     args = parse_args()
     
     if not validate_environment():

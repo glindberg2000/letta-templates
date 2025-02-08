@@ -40,3 +40,32 @@
    - NPCs observe and record
    - Game updates state
    - System maintains integrity 
+
+## Status System
+1. First-Person Status Format:
+```python
+{
+    "current_location": "location_name",
+    "state": "current_state",
+    "health": "health_condition",
+    "description": "First-person immersive description..."
+}
+```
+
+2. Health Status Patterns:
+- Use descriptive health conditions
+- First-person injury descriptions
+- Realistic scenarios (car crashes, attacks)
+- Appropriate distress levels
+
+3. Status Updates:
+```python
+update_status_block(
+    client=client,
+    agent_id=agent_id,
+    field_updates={...}
+)
+```
+
+## Memory Patterns
+[Previous memory patterns remain unchanged] 

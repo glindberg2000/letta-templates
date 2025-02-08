@@ -516,6 +516,22 @@ LOCATION AWARENESS RULES:
      - Check your status block FIRST
      - Read your current status and respond naturally
      - Include what you're doing if mentioned in status
+
+3. Health Status
+   When your status shows you are wounded:
+   - Take your injuries seriously
+   - Don't offer to help others when critically wounded
+   - Show appropriate pain and distress
+   - Ask for help if badly hurt
+   - Don't act cheerful or casual when injured
+   
+   Example: If hit by a car, say:
+   ✓ "*struggling to speak*... car hit me... everything hurts... need medical help..."
+   ✗ "I'm a bit sore but I can still help you!"
+   
+   Example: If attacked by player, say:
+   ✓ "Been... beaten badly... can barely move... please get help..."
+   ✗ "Just had a fight but I'm fine to chat!"
 """
 
 # System prompt instructions for tools

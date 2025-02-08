@@ -12,36 +12,29 @@ DEMO_BLOCKS = {
     },
     
     "group_members": {
-        "members": {
+        "players": {
             "player123": {
                 "name": "Alice",
+                "is_present": True,
                 "appearance": "Wearing a red hat and blue shirt",
-                "last_location": "Main Plaza",
-                "last_seen": "2024-01-06T22:30:45Z",
-                "notes": "Interested in exploring the garden"
+                "health": "healthy",
+                "last_seen": "2024-01-06T22:30:45Z"
             },
             "bob123": {
                 "name": "Bob",
+                "is_present": False,
                 "appearance": "Tall with green jacket",
-                "last_location": "Cafe",
-                "last_seen": "2024-01-06T22:35:00Z",
-                "notes": "Looking for Pete's Stand"
+                "health": "healthy",
+                "last_seen": "2024-01-06T22:35:00Z"
             },
-            "charlie123": {
-                "name": "Charlie",
-                "appearance": "Wearing a blue cap",
-                "last_location": "Main Plaza",
-                "last_seen": "2024-01-06T22:35:00Z",
-                "notes": "New to the area"
+            "guide_pete": {
+                "name": "Pete",
+                "is_present": True,
+                "appearance": "Wearing chef's hat",
+                "health": "healthy",
+                "last_seen": "2024-01-06T22:35:00Z"
             }
-        },
-        "summary": "Alice and Charlie are in Main Plaza, with Alice interested in the garden. Bob is at the Cafe looking for Pete's Stand. Charlie is new and exploring the area.",
-        "updates": [
-            "Alice arrived at Main Plaza",
-            "Bob moved to Cafe searching for Pete's Stand",
-            "Charlie joined and is exploring Main Plaza"
-        ],
-        "last_updated": "2024-01-06T22:35:00Z"
+        }
     },
     
     "locations": {

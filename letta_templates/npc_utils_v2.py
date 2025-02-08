@@ -61,12 +61,17 @@ def update_memory_block(client, agent_id: str, block_label: str, data: dict):
         block_label: Label of block to update
         data: New data for block
     """
-    print(f"Updating block {block_label} with method: {client.blocks.update.__name__}")
+    print(f"Updating block {block_label}")
+    
+    # Get current block to verify it exists
     agent = client.agents.retrieve(agent_id)
     block = next(b for b in agent.memory.blocks if b.label == block_label)
-    client.blocks.patch(
-        block_id=block.id,
-        value=json.dumps(data)
+    
+    # Update using core memory API
+    client.agents.core_memory.modify_block(
+        agent_id=agent_id,
+        block_label=block_label,
+        value=json.dumps(data) if isinstance(data, dict) else data
     )
 
 def update_group_members(client, agent_id: str, nearby_players: list):
@@ -242,23 +247,13 @@ def retry_test_call(func, *args, max_retries=3, delay=2, **kwargs):
             delay *= 2  # Exponential backoff
     raise last_error 
 
-def update_status_block(client, agent_id: str, status_text: str, send_notification: bool = True):
-    """Update the agent's status block with new status."""
-    agent = client.agents.retrieve(agent_id)
-    block = next(b for b in agent.memory.blocks if b.label == "status")
-    client.blocks.modify(
-        block_id=block.id,
-        value=status_text
+def update_status_block(client, agent_id: str, field_updates: dict, send_notification: bool = False):
+    """Update status fields dynamically."""
+    client.agents.core_memory.modify_block(
+        agent_id=agent_id,
+        block_label="status",
+        value=json.dumps(field_updates)
     )
-    
-    if send_notification:
-        client.agents.messages.create(
-            agent_id=agent_id,
-            messages=[{
-                "role": "system",
-                "content": STATUS_UPDATE_MESSAGE
-            }]
-        )
 
 def update_group_block(client, agent_id: str, group_data: dict, send_notification: bool = False):
     """Update the agent's group_members block with new group data."""
@@ -458,93 +453,73 @@ def print_client_info(client):
         print(f"Error inspecting client: {e}") 
 
 def upsert_group_member(client, agent_id: str, entity_id: str, update_data: dict) -> dict:
-    """Upsert (create or update) an entity in group memory."""
+    """Update or insert a group member.
+    
+    Args:
+        client: Letta client instance
+        agent_id (str): Agent ID
+        entity_id (str): Player/NPC ID (e.g. "962483389" or "guide_pete")
+        update_data (dict): Fields to update, must include:
+            - name (str)
+            - is_present (bool)
+            - health (str)
+            - appearance (str)
+            - last_seen (str, ISO format)
+    
+    Returns:
+        dict: Result message
+    """
     try:
+        print(f"\nDEBUG: Starting upsert for {entity_id}")
+        
         # Get current block
+        print(f"DEBUG: Getting agent {agent_id}")
         agent = client.agents.retrieve(agent_id)
-        block = next((b for b in agent.memory.blocks if b.label == "group_members"), None)
-        group_data = json.loads(block.value) if block else {"members": {}}
         
-        # Check if player already exists with different ID
-        existing_id = None
-        if "name" in update_data:
-            for id, member in group_data["members"].items():
-                if member.get("name") == update_data["name"]:
-                    existing_id = id
-                    break
+        print("DEBUG: Finding group_members block")
+        block = next(b for b in agent.memory.blocks if b.label == "group_members")
         
-        # Use existing ID if found, otherwise use provided entity_id
-        member_id = existing_id or entity_id
+        print("DEBUG: Parsing block data")
+        data = json.loads(block.value)
         
-        # Update member data
-        if member_id not in group_data["members"]:
-            group_data["members"][member_id] = {}
+        # Initialize players dict if needed
+        if "players" not in data:
+            print("DEBUG: Initializing players dict")
+            data["players"] = {}
             
-        member = group_data["members"][member_id]
-        updated_fields = []
-        
-        # Track presence changes for updates
-        old_presence = member.get("is_present", False)
-        new_presence = update_data.get("is_present", old_presence)
-        
-        # Update fields
-        for key, value in update_data.items():
-            if key == "last_seen" and isinstance(value, datetime):
-                member[key] = value.isoformat()
-            else:
-                member[key] = value
-            updated_fields.append(key)
+        # Update or create player entry
+        if entity_id not in data["players"]:
+            print(f"DEBUG: Creating new entry for {entity_id}")
+            data["players"][entity_id] = {
+                **update_data,
+                "notes": ""  # Initialize empty notes
+            }
+        else:
+            print(f"DEBUG: Updating existing entry for {entity_id}")
+            data["players"][entity_id].update(update_data)
+            if "notes" not in update_data:
+                data["players"][entity_id].setdefault("notes", "")
             
-        # Add to updates if presence changed
-        if "is_present" in update_data:
-            name = member.get("name", entity_id)
-            location = member.get("last_location", "unknown location")
-            if new_presence and not old_presence:
-                group_data["updates"].insert(0, f"{name} arrived at {location}")
-            elif not new_presence and old_presence:
-                group_data["updates"].insert(0, f"{name} left {location}")
-                
-        # Keep only last 10 updates
-        group_data["updates"] = group_data.get("updates", [])[:10]
+        # Ensure required fields
+        required_fields = {"name", "is_present", "health", "appearance", "last_seen", "notes"}
+        if not all(field in data["players"][entity_id] for field in required_fields):
+            missing = required_fields - set(data["players"][entity_id].keys())
+            print(f"DEBUG: Missing required fields: {missing}")
+            return {"error": f"Missing required fields: {missing}"}
+            
+        # Update block using core memory API
+        print("DEBUG: Updating block")
+        print(f"DEBUG: Block ID: {block.id}")
         
-        # Update summary with present members' names
-        present_members = [m["name"] for m in group_data["members"].values() 
-                         if m.get("is_present", False) and "name" in m]
-        group_data["summary"] = (
-            f"Players in range: {', '.join(present_members)}" if present_members 
-            else "No players currently in range"
+        client.agents.core_memory.modify_block(
+            agent_id=agent_id,
+            block_label="group_members",
+            value=json.dumps(data)
         )
         
-        # Update timestamp
-        group_data["last_updated"] = datetime.now().isoformat()
-        
-        # FIFO pruning if needed
-        if len(json.dumps(group_data)) > 4800:
-            absent_members = [(id, data) for id, data in group_data["members"].items() 
-                            if not data.get("is_present", True)]
-            if absent_members:
-                oldest_id = sorted(absent_members, key=lambda x: x[1].get("last_seen", ""))[0][0]
-                del group_data["members"][oldest_id]
-        
-        # Use module function to update block
-        update_group_block(client, agent_id, group_data)
-        
-        return {
-            "success": True,
-            "message": f"Updated {update_data.get('name', entity_id)} in group memory",
-            "data": {
-                "group_size": len(group_data["members"]),
-                "present_count": len(present_members),
-                "updated_id": entity_id,
-                "updated_fields": updated_fields
-            },
-            "error": None
-        }
+        return {"message": f"Successfully updated {entity_id}"}
         
     except Exception as e:
-        return {
-            "success": False,
-            "message": f"Error updating group memory: {str(e)}",
-            "data": None,
-            "error": str(e)
-        } 
+        print(f"DEBUG: Error in upsert: {str(e)}")
+        print(f"DEBUG: Error type: {type(e)}")
+        return {"error": f"Error updating group memory: {str(e)}"} 

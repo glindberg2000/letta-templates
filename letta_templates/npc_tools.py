@@ -250,57 +250,42 @@ def test_echo(message: str) -> str:
     """
     return f"[TEST_ECHO_V3] {message} (echo...Echo...ECHO!)"
 
-def group_memory_append(player_name: str, note: str, request_heartbeat: bool = True) -> None:
+def group_memory_append(player_id: str, player_name: str, note: str, request_heartbeat: bool = True) -> None:
     """Append a note about a player to group memory.
     
     Args:
-        player_name (str): Name of the player to add note for
-        note (str): Note to append to player's memory
-        request_heartbeat (bool): Whether to request heartbeat
+        player_id (str): Unique ID for any character (e.g. "962483389" or "guide_pete")
+        player_name (str): Display name of the character (e.g. "Alice" or "Pete")
+        note (str): Note to append to player's history
+        request_heartbeat (bool): Whether to request a heartbeat. Defaults to True.
         
-    The function will:
-    - Create new player entry if player doesn't exist
-    - Set default fields (is_present=True, health_status="healthy")
-    - Append the note to existing notes if player exists
+    Returns:
+        None on success, error message on failure
+        
+    Example:
+        >>> group_memory_append("962483389", "Alice", "Interested in exploring the garden")
+        >>> group_memory_append("guide_pete", "Pete", "Making soup at his stand")
     """
-    import json
-    from datetime import datetime
-    import time
+    import json  # Add import
+    from datetime import datetime  # Add import
     
     try:
-        # Get or create group block
-        try:
-            block = json.loads(agent_state.memory.get_block("group_members").value)
-        except:
-            block = {
-                "members": {},
-                "last_updated": datetime.now().isoformat()
-            }
+        block = json.loads(agent_state.memory.get_block("group_members").value)
         
-        # Create or update player entry
-        player_id = None
-        for id, info in block["members"].items():
-            if info["name"].lower() == player_name.lower():
-                player_id = id
-                break
-                
-        if not player_id:
-            player_id = f"player_{int(time.time())}"
-            block["members"][player_id] = {
+        if player_id not in block["players"]:
+            block["players"][player_id] = {
                 "name": player_name,
                 "is_present": True,
-                "health_status": "healthy",
-                "appearance": "",
-                "last_seen": datetime.now().isoformat(),
-                "last_location": "",
-                "notes": note
+                "health": "healthy",
+                "appearance": "",  # Empty appearance
+                "notes": note,     # Put note here
+                "last_seen": datetime.now().isoformat()
             }
         else:
             # Append to existing notes
-            current_notes = block["members"][player_id].get("notes", "")
-            block["members"][player_id]["notes"] = f"{current_notes}\n{note}".strip()
-            
-        block["last_updated"] = datetime.now().isoformat()
+            current_notes = block["players"][player_id].get("notes", "")
+            block["players"][player_id]["notes"] = f"{current_notes}\n{note}".strip()
+            block["players"][player_id]["last_seen"] = datetime.now().isoformat()
         
         agent_state.memory.update_block_value(
             label="group_members",
@@ -309,60 +294,35 @@ def group_memory_append(player_name: str, note: str, request_heartbeat: bool = T
         return None
             
     except Exception as e:
-        print(f"Error in group_memory_append: {e}")
         return f"Failed to append note: {str(e)}"
 
-def group_memory_replace(player_name: str, note: str, request_heartbeat: bool = True) -> None:
-    """Replace a player's note in group memory.
+def group_memory_replace(player_id: str, player_name: str, old_note: str, new_note: str, request_heartbeat: bool = True) -> None:
+    """Replace a note about a player in group memory.
     
     Args:
-        player_name (str): Name of the player to update
-        note (str): New note to replace existing note
-        request_heartbeat (bool): Whether to request heartbeat
-        
-    The function will:
-    - Create new player entry if player doesn't exist
-    - Set default fields (is_present=True, health_status="healthy")
-    - Replace the entire notes field with the new note
+        player_id (str): Unique ID for any character
+        player_name (str): Display name of the character
+        old_note (str): Exact note to replace
+        new_note (str): New note to use
+        request_heartbeat (bool): Whether to request a heartbeat
     """
     import json
     from datetime import datetime
-    import time
     
     try:
-        # Get or create group block
-        try:
-            block = json.loads(agent_state.memory.get_block("group_members").value)
-        except:
-            block = {
-                "members": {},
-                "last_updated": datetime.now().isoformat()
-            }
+        block = json.loads(agent_state.memory.get_block("group_members").value)
         
-        # Create or update player entry
-        player_id = None
-        for id, info in block["members"].items():
-            if info["name"].lower() == player_name.lower():
-                player_id = id
-                break
-                
-        if not player_id:
-            player_id = f"player_{int(time.time())}"
-            block["members"][player_id] = {
-                "name": player_name,
-                "notes": note
-            }
-        else:
-            # Replace notes
-            block["members"][player_id]["notes"] = note
+        if player_id in block["players"]:
+            # Update notes
+            current_notes = block["players"][player_id].get("notes", "")
+            block["players"][player_id]["notes"] = current_notes.replace(old_note, new_note)
+            block["players"][player_id]["last_seen"] = datetime.now().isoformat()
             
-        block["last_updated"] = datetime.now().isoformat()
-        
-        agent_state.memory.update_block_value(
-            label="group_members",
-            value=json.dumps(block)
-        )
-        return None
+            agent_state.memory.update_block_value(
+                label="group_members",
+                value=json.dumps(block)
+            )
+            return None
             
     except Exception as e:
         print(f"Error in group_memory_replace: {e}")
@@ -731,6 +691,7 @@ def group_memory_add(player_id: str, name: str, request_heartbeat: bool = True) 
     
     # Add to group members
     group_memory_append(
+        player_id=player_id,
         player_name=name,
         note=json.dumps(member_data),
         request_heartbeat=request_heartbeat
@@ -796,6 +757,7 @@ def group_memory_restore(player_id: str, name: str, request_heartbeat: bool = Tr
     
     if results and results[0]:
         group_memory_append(
+            player_id=player_id,
             player_name=name,
             note=f"Previous visitor: {results[0]}",
             request_heartbeat=request_heartbeat
@@ -868,11 +830,6 @@ TOOL_REGISTRY: Dict[str, Dict] = {
     "group_memory_replace": {
         "function": group_memory_replace,
         "version": "1.0.1",
-        "supports_state": True
-    },
-    "examine_object": {
-        "function": examine_object,
-        "version": "1.0.0",
         "supports_state": True
     }
 }

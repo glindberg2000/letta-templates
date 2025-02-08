@@ -1,22 +1,60 @@
-# Active Context
+# Active Development Context
 
-## Current Work
-- Implemented upsert_group_member for game state
-- Added comprehensive documentation
-- Updated setup.py and dependencies
+## Current Focus
+- Improving NPC status system with more immersive first-person descriptions
+- Enhanced health status awareness
+- More realistic injury/condition responses
 
 ## Recent Changes
-1. Memory Structure
-   - Standardized fields (is_present, last_seen, etc.)
-   - FIFO pruning at 4800 chars
-   - Timestamp management
+1. Status System Updates:
+   - Added first-person descriptive status
+   - Improved health status handling
+   - More realistic injury scenarios
+   - Better status awareness in responses
 
-2. Tool Separation
-   - NPCs: group_memory_append/replace
-   - Game: upsert_group_member
-   - System: update_group_block
+2. Prompt Improvements:
+   - Added health awareness guidelines
+   - Added realistic injury examples
+   - Enhanced status checking instructions
 
 ## Next Steps
-1. Test with live game cluster
-2. Monitor memory usage
-3. Add validation for fields 
+1. Update documentation for new status features
+2. Create Roblox developer guide
+3. Test health status responses
+4. Document new status format
+
+## Current Issues
+- Need to ensure consistent health status responses
+- Documentation needs updating
+- Need to create Roblox integration guide
+
+### Changes Made
+1. Fixed `group_memory_replace` to correctly update notes:
+```python
+# Update notes only
+current_notes = block["players"][player_id].get("notes", "")
+block["players"][player_id]["notes"] = current_notes.replace(old_note, new_note)
+```
+
+2. Verified separation of concerns:
+- Agent tools (`group_memory_append/replace`): Only modify notes
+- API function (`upsert_group_member`): Full access to update any field
+
+### Testing Status
+✅ Notes functionality test passed:
+- ✅ Append: Correctly adds new notes
+- ✅ Replace: Only updates notes field, preserves other fields
+- ✅ Memory: Agent accurately recalls notes
+- ✅ Fields: Appearance and notes properly separated
+- ✅ Timestamps: Last seen updated correctly
+
+🔄 Still need to test:
+1. Status updates
+2. Social awareness
+3. Navigation
+4. Action emotes
+
+### Notes
+- Agent tools working as designed - strict field access
+- API functions maintain full update capability
+- Need to verify other test failures are not related to memory changes 
