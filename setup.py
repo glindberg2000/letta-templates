@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="letta-templates",
-    version="3.3.0",
+    version="3.4.0",
     packages=find_packages(),
     package_data={
         "letta_templates": ["docs/**/*"]

@@ -452,52 +452,34 @@ def print_client_info(client):
     except Exception as e:
         print(f"Error inspecting client: {e}") 
 
-def upsert_group_member(client, agent_id: str, entity_id: str, update_data: dict) -> dict:
+def upsert_group_member(
+    client: LettaClient,
+    agent_id: str,
+    entity_id: str,  # Already expect string
+    update_data: dict
+) -> dict:
     """Update or insert a group member.
     
-    If a player with matching name exists under a temporary ID (unnamed_*),
-    will migrate their data to the real ID.
+    Args:
+        entity_id: String Roblox UserId or temp ID
     """
     try:
-        # Get current block
-        agent = client.agents.retrieve(agent_id)
-        block = next(b for b in agent.memory.blocks if b.label == "group_members")
-        data = json.loads(block.value)
+        block = get_memory_block(client, agent_id, "group_members")
+        data = json.loads(block)
         
         if "players" not in data:
             data["players"] = {}
             
-        # Check for temp ID with same name
-        temp_id = None
-        for pid, pdata in data["players"].items():
-            if (pid.startswith("unnamed_") and 
-                pdata["name"] == update_data["name"]):
-                temp_id = pid
-                break
-                
-        if temp_id:
-            # Migrate data from temp ID to real ID
-            existing_data = data["players"].pop(temp_id)  # Remove temp entry
-            # Keep existing notes and other data
-            update_data.setdefault("notes", "")  # Ensure notes field exists
-            update_data["notes"] = existing_data.get("notes", "")  # Preserve notes
-            data["players"][entity_id] = update_data
-        else:
-            # Normal update/insert
-            if entity_id not in data["players"]:
-                update_data.setdefault("notes", "")  # Initialize empty notes
-            else:
-                # Keep existing notes if updating
-                update_data["notes"] = data["players"][entity_id].get("notes", "")
-            data["players"][entity_id] = update_data
-            
-        # Convert to JSON string before updating
-        client.agents.core_memory.modify_block(
+        # No type conversion needed
+        data["players"][entity_id] = update_data
+        
+        update_memory_block(
+            client=client,
             agent_id=agent_id,
-            block_label="group_members",
+            label="group_members",
             value=json.dumps(data)
         )
-        return {"status": "success", "message": f"Successfully updated {entity_id}"}
+        return {"status": "success"}
             
     except Exception as e:
         return {"status": "error", "message": str(e)} 
