@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  letta:
+    image: letta/letta:latest
+    ports:
+      - "8283:8283"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - letta_logs:/root/.letta
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  letta_logs: 

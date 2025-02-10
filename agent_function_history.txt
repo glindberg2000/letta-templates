@@ -1,0 +1,509 @@
++2. When updating player state:
++   - Use group_memory_replace to update specific notes
++   - Or group_memory_append to add new observations
++
++3. When a player leaves:
++   - Archive their profile first:
++     ```
++     archival_memory_insert(
++         content="Player profile for <player_id>: Last seen <timestamp>. Notes: <current notes>"
++     )
++     ```
++   - Player removal from group block handled externally
++"""
++
++MEMORY_COMMANDS = {
++    "check_player_history": """
++    Check if player has previous history:
++    1. Use archival_memory_search(query="Player profile for {player_id}", page=0, start=0)
++    2. If found, add to their notes with group_memory_append
++    """,
++    
++    "archive_player": """
++    Archive player before they leave:
++    1. Use archival_memory_insert to save: "Player profile for {player_id}: Last seen {timestamp}. Notes: {current_notes}"
++    2. Player will be removed from group externally
++    """,
++    
++    "update_player_state": """
++    Update player state in memory:
++    1. For specific updates: group_memory_replace
++    2. For new observations: group_memory_append
++    """
++}
+
+commit aad2b03ad9985af83a054021f9867a6407917767
+Author: Greg Lindberg <greglindberg@gmail.com>
+Date:   Thu Jan 23 09:30:33 2025 +0000
+
+    refactor: move prompts to separate file and simplify group memory tools
+    
+    - Move prompts to npc_prompts.py to reduce file size
+    - Remove custom group_memory_restore/archive tools
+    - Update test sequence to use base memory tools
+    - Fix archival search parameters in test steps
+
+diff --git a/letta_templates/letta_quickstart_multiuser.py b/letta_templates/letta_quickstart_multiuser.py
+index 8139845..42fa7cd 100644
+--- a/letta_templates/letta_quickstart_multiuser.py
++++ b/letta_templates/letta_quickstart_multiuser.py
+@@ -32,6 +32,8 @@ from letta_templates.npc_tools import (
+     create_personalized_agent_v3,
+     create_letta_client
+ )
++
++
+ import requests
+ import asyncio
+ import logging
+@@ -746,47 +748,94 @@ def test_tool_update(client, agent_id: str):
+             
+         time.sleep(1)
+ 
+-def test_npc_actions(client, agent_id: str):
+-    """Test NPC actions including state transitions"""
+-    print("\nTesting NPC actions...")
++def ensure_locations_block(client, agent_id):
++    """Ensure locations block has required locations"""
++    agent = client.get_agent(agent_id)
++    locations_block = json.loads(agent.memory.get_block("locations").value)
++    
++    required_locations = {
++        "Main Plaza": {
++            "name": "Main Plaza",
++            "description": "Central gathering place with fountain",
++            "coordinates": [45.2, 12.0, -89.5],
++            "slug": "main_plaza"
++        },
++        "Town Square": {
++            "name": "Town Square",
++            "description": "Busy central area",
++            "coordinates": [0.0, 0.0, 0.0],
++            "slug": "town_square"
++        }
++    }
+     
+-    test_sequence = [
+-        # Test navigation with location service
+-        ("Navigate to Pete's stand", None),
+-        # Should return coordinates and transit message
+-        
+-        # Test unknown location
+-        ("Go to the secret shop", None),
+-        # Should return error and suggestion
++    # Update locations if needed
++    locations_block["known_locations"] = [
++        loc for loc in locations_block["known_locations"] 
++        if loc["name"] not in required_locations
++    ] + list(required_locations.values())
++    
++    # Update the block
++    agent.memory.update_block_value(
+--
+-    message: str 
+-
+ def find_location(query: str, game_id: int = GAME_ID) -> Dict:
+     """Query location service for destination."""
+     try:
+@@ -1501,20 +511,33 @@ def update_tool(client, tool_name: str, tool_func, verbose: bool = True) -> str:
+         raise
+ 
+ def update_tools(client):
+-    """Force update all tools with latest versions"""
++    """Update tool definitions"""
+     print("\nUpdating tools...")
+     
+-    # Delete existing tools
+-    tools = client.list_tools()
+-    for tool in tools:
+-        if tool.name in ["group_memory_append", "group_memory_replace"]:
+-            print(f"Deleting {tool.name}...")
+-            client.delete_tool(tool.id)
++    tools_to_update = {
++        "perform_action": perform_action,
++        "group_memory_append": group_memory_append,
++        "group_memory_replace": group_memory_replace
++    }
+     
+-    # Create new tools
+-    print("\nCreating new tools...")
+-    client.create_tool(group_memory_append, name="group_memory_append")
+-    client.create_tool(group_memory_replace, name="group_memory_replace")
++    # Get existing tools
++    existing_tools = {t.name: t.id for t in client.list_tools()}
++    
++    for tool_name, tool_func in tools_to_update.items():
++        try:
++            if tool_name in existing_tools:
++                print(f"Deleting {tool_name}...")
++                client.delete_tool(existing_tools[tool_name])
++            
++            print(f"Creating {tool_name}...")
++            new_tool = client.create_tool(tool_func, name=tool_name)
++            print(f"Created {tool_name} with ID: {new_tool.id}")
++            
++        except Exception as e:
++            print(f"Error updating {tool_name}: {e}")
++            raise
++    
++    print("\nTool updates complete")
+ 
+ def create_letta_client():
+     """Create a configured Letta client"""
+@@ -1788,3 +811,211 @@ def create_personalized_agent_v3(
+             raise
+     
+     return agent
++
++def group_memory_add(player_id: str, name: str, request_heartbeat: bool = True) -> str:
++    """Add a new player to group memory, populating from archival if available
++    
++    Args:
++        player_id: Unique ID of player (e.g. "alice_123")
++        name: Display name of player (e.g. "Alice")
++        request_heartbeat: Whether to request heartbeat
++        
++    Returns:
++        str: Status message
++        
++    Flow:
++        1. Search archival memory for player history
++        2. Create new group member entry
++        3. Populate notes from archival if found
++    
++    Example:
++        >>> group_memory_add("alice_123", "Alice")
++        "Added Alice to group. Found previous visits: loves exploring garden."
++    """
++    # First search archival memory
++    results = archival_memory_search(
++        query=f"Player profile for {player_id}",
++        request_heartbeat=request_heartbeat
++    )
++    
++    # Create base member entry
++    member_data = {
++        "name": name,
++        "id": player_id,
++        "joined": datetime.datetime.now().isoformat(),
++        "notes": []
++    }
++    
++    # Add any historical context
++    if results and results[0]:
++        member_data["notes"].append(f"Previous visitor: {results[0]}")
++    
++    # Add to group members
++    group_memory_append(
++        player_name=name,
++        note=json.dumps(member_data),
++        request_heartbeat=request_heartbeat
++    )
++    
++    return f"Added {name} to group with historical context"
+--
++     ```
++
++   - *Examination Chain:*
++     ```python
++     perform_action("emote", type="curious", request_heartbeat=True)
++     examine_object(target, request_heartbeat=True)
++     # Wait for system response
++     core_memory_append("journal", observation, request_heartbeat=True)
++     ```
++
++4. **Parameter Requirements**
++   *Every tool call must include:*
++   ```python
++   request_heartbeat=True  # Always required
++   
++   # Navigation
++   navigate_to(
++       destination_slug,  # Must match known_locations exactly
++       request_heartbeat=True
++   )
++   
++   # Actions
++   perform_action(
++       action,  # "follow", "unfollow", "emote"
++       type=None,  # Required for emotes: "wave", "laugh", "dance", "point", "sit"
++       target=None,  # Required for follow
++       request_heartbeat=True
++   )
++   
++   # Memory
++   group_memory_replace(
++       player_name,  # Must match exactly
++       old_note,    # Must exist in current notes
++       new_note,    # New observation
++       request_heartbeat=True
++   )
++   ```
++```
++
++Then continue with the original "Example of Being" section...
+\ No newline at end of file
+diff --git a/letta_templates/letta_quickstart_multiuser.py b/letta_templates/letta_quickstart_multiuser.py
+index 83bcd4e..8139845 100644
+--- a/letta_templates/letta_quickstart_multiuser.py
++++ b/letta_templates/letta_quickstart_multiuser.py
+@@ -29,7 +29,7 @@ from letta_templates.npc_tools import (
+     examine_object,
+     test_echo,
+     update_tools,
+-    create_personalized_agent,
++    create_personalized_agent_v3,
+     create_letta_client
+ )
+ import requests
+@@ -354,7 +354,7 @@ def create_group_tools():
+         "group_gather": group_gather
+     }
+ 
+-def create_personalized_agent_bak(
++def create_personalized_agent(
+     name: str = "emma_assistant",
+     client = None,
+     use_claude: bool = False,
+@@ -797,10 +797,17 @@ def parse_args():
+     parser.add_argument('--custom-tools', action='store_true', default=True)
+     parser.add_argument('--minimal-prompt', action='store_true', default=True)
+     parser.add_argument('--continue-on-error', action='store_true')
++    parser.add_argument('--minimal-test', action='store_true', help='Run minimal agent test')
+     parser.add_argument('--test-type', choices=[
+         'all', 'base', 'notes', 'social', 'status', 
+-        'group', 'persona', 'journal', 'navigation', 'actions'  # Add new types
++        'group', 'persona', 'journal', 'navigation', 'actions'
+     ], default='all')
++    parser.add_argument(
++        '--prompt',
++        choices=['DEEPSEEK', 'GPT01', 'MINIMUM', 'FULL'],
++        default='FULL',
++        help='Which prompt version to use'
++    )
+     return parser.parse_args()
+ 
+ def get_api_url():
+@@ -1298,7 +1305,7 @@ def validate_agent_setup(client, agent_id: str):
+     # Rest of validation...
+ 
+ def test_group(client, agent_id):
+-    """Test group memory block updates"""
++    """Test group_members block updates"""
+     print("\nTesting group_members block updates...")
+     
+     # Initial group state
+@@ -1378,7 +1385,7 @@ def update_status_block(client, agent_id, status_text):
+             status_block = client.create_block(
+                 label="status",
+                 value="",
+-                limit=500
++                limit=5000
+             )
+             status_block_id = status_block.id
+         else:
+@@ -1675,6 +1682,73 @@ def update_memory_block(client, agent_id: str, block_label: str, value: Any):
+--
++        print(f"\nSending {role} message: {message}")
++        response = client.send_message(
++            agent_id=agent.id,
++            message=message,
++            role=role
++        )
++        print("\nResponse:")
++        print_response(response)
++        time.sleep(1)
++
+ def main():
+     args = parse_args()
+     
+@@ -1682,6 +1756,7 @@ def main():
+         sys.exit(1)
+ 
+     try:
++        # Print configuration
+         port = os.getenv('LETTA_PORT')
+         port = int(port) if port else None
+         base_url = os.getenv('LETTA_BASE_URL', 'http://localhost:8283')
+@@ -1689,282 +1764,61 @@ def main():
+         print("\nStarting Letta Quickstart with:")
+         print(f"- Environment URL: {base_url}")
+         print(f"- Environment Port: {port if port else 'default'}")
++        
++        client = create_letta_client()
++        
++        # Check for minimal test first
++        if args.minimal_test:
++            test_minimal_agent()
++            return
++            
++        # Regular test path
+         print(f"- Keep Agent: {args.keep}")
+         print(f"- LLM Provider: {args.llm}")
+         print(f"- Agent Name: {args.name}")
+         print(f"- Overwrite: {args.overwrite}")
+         
+-        client = create_letta_client()
+-        
+         # Update tools first
+         update_tools(client)
+         
+-        agent = create_personalized_agent(
++        print(f"\nCreating agent with {args.prompt} prompt...")
++        print(f"- Using {'minimal' if args.minimal_prompt else 'full'} prompt mode")
++        print(f"- LLM: {args.llm}")
++        
++        # Create agent ONCE
++        agent = create_personalized_agent_v3(
+             name=args.name,
++            client=client,
+             use_claude=(args.llm == 'claude'),
+             overwrite=args.overwrite,
+             with_custom_tools=args.custom_tools,
+-            minimal_prompt=args.minimal_prompt
++            minimal_prompt=args.minimal_prompt,
++            prompt_version=args.prompt
+         )
+-        print(f"\nCreated agent: {agent.id}")
+-        
+-        # VERIFY NPC TOOLS FIRST
+-        print("\nVerifying NPC tools are attached...")
+-        required_npc_tools = [
+-            "navigate_to",
+-            "navigate_to_coordinates",
+-            "perform_action",
+-            "examine_object"
+-        ]
+-        
+-        # Get all tools
+-        tools = client.list_tools()
+-        print("\nAll available tools:")
+-        for tool in tools:
+-            print(f"- {tool.name} (ID: {tool.id})")
+-        
+-        # Get agent's tools directly
+-        agent_details = client.get_agent(agent.id)
+-        agent_tools = [t.name for t in agent_details.tools] if hasattr(agent_details, 'tools') else []
+-        
+-        print("\nTools attached to agent:")
+-        for tool_name in agent_tools:
+-            print(f"✓ Found attached: {tool_name}")
+-            
+-        missing_tools = [t for t in required_npc_tools if t not in agent_tools]
+-        if missing_tools:
+-            print(f"\n❌ Missing required NPC tools: {', '.join(missing_tools)}")
+-            print("Tests aborted - NPC tools not attached")
+-            return
+-            
+-        print("✓ All required NPC tools attached")
+-        
+-        # VERIFY PROMPTS FIRST
+-        print("\nVerifying prompt components...")
+-        agent_details = client.get_agent(agent.id)
+-        system_prompt = agent_details.system
+-        
+-        # Only check essential components in minimal mode
+-        required_components = {
+-            "TOOL_INSTRUCTIONS": [
+--
++                        new_note: str, request_heartbeat: bool = True) -> Optional[str]:
++    """Replace a player's note in group memory with exact string matching.
+     
+     Args:
+-        agent_state (AgentState): Current agent state containing memory
+-        player_name (str): Name of the player to update note for
+-        old_note (str): Existing note text to replace
+-        new_note (str): New note text to use instead
++        agent_state: Current agent state containing memory
++        player_name: Must exactly match a name in group_members
++        old_note: Must EXACTLY match existing note string
++        new_note: New note to replace the old one
++        request_heartbeat: Always set True
+         
+     Returns:
+         Optional[str]: Error message if failed, None if successful
++        
++    Validation:
++        - Verify player exists in group_members
++        - old_note must match EXACTLY (case-sensitive)
++        - Will fail if old_note doesn't match perfectly
++        
++    Example:
++        ```python
++        # Get current note first
++        current_note = "Interested in exploring the garden"  # Must be exact string
++        
++        # Then replace with new note
++        if player_name in group_members["members"]:
++            group_memory_replace(
++                agent_state,
++                "Alice", 
++                current_note,  # Must match exactly
++                "Now interested in crystal weapons instead of the garden",
++                request_heartbeat=True
++            )
++        ```
++        
++    Common Errors:
++        - Partial matches won't work: "interested in garden" != "Interested in exploring the garden"
++        - Case sensitive: "interested" != "Interested"
++        - Extra spaces matter: "garden " != "garden"
+     """
+     import json
+     from datetime import datetime
+@@ -926,16 +1525,22 @@ def create_letta_client():
+         base_url=base_url
+     )
+ 
+-def create_personalized_agent(
++def create_personalized_agent_v3(
+     name: str = "emma_assistant",
+     client = None,
+     use_claude: bool = False,
+     overwrite: bool = False,
+     with_custom_tools: bool = True,
+     custom_registry = None,
+-    minimal_prompt: bool = True  # Changed default to True
++    minimal_prompt: bool = True,
++    system_prompt: str = None,
++    prompt_version: str = "DEEPSEEK"  # Add prompt version parameter
+ ):
+-    """Create a personalized agent with memory and tools"""
++    """Create a personalized agent with memory and tools using specified prompt version
++    
++    Args:
++        prompt_version: One of ["DEEPSEEK", "GPT01", "MINIMUM", "FULL"]
++    """
+     logger = logging.getLogger('letta_test')
+     
+     if client is None:
+@@ -949,32 +1554,36 @@ def create_personalized_agent(
+     timestamp = int(time.time())
+     unique_name = f"{name}_{timestamp}"
+     
+-    # Format base prompt with assistant name
+-    base_system = BASE_PROMPT.format(assistant_name=name)
+-    
+-    # Use minimal prompt for testing if requested
+-    if minimal_prompt:
+-        logger.info(f"Using MINIMUM_PROMPT (minimal_prompt={minimal_prompt})")
+-        system_prompt = MINIMUM_PROMPT.format(assistant_name=name)
++    # Select prompt based on version
++    if system_prompt:
++        selected_prompt = system_prompt
++        prompt_name = "CUSTOM"
+     else:
+-        logger.info(f"Using full prompt (minimal_prompt={minimal_prompt})")
+-        system_prompt = (
+-            base_system +
+-            "\n\n" + TOOL_INSTRUCTIONS +
+-            "\n\n" + SOCIAL_AWARENESS_PROMPT +
+-            "\n\n" + GROUP_AWARENESS_PROMPT +
+-            "\n\n" + LOCATION_AWARENESS_PROMPT
+-        )
++        prompts = {
++            "DEEPSEEK": DEEPSEEK_PROMPT_V3,
++            "GPT01": GPT01_PROMPT_V3,
++            "MINIMUM": MINIMUM_PROMPT,
++            "FULL": (
++                BASE_PROMPT +
