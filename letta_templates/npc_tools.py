@@ -115,9 +115,15 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
             - "follow": Follow a target player
             - "unfollow": Stop following current target
             - "jump": Perform a jump animation
+            - "walk": Walk to target location
+            - "run": Run to target location
+            - "swim": Swim to target location
+            - "climb": Climb to target location
         type (str): For emotes, the type of emote to play:
             - "wave": Wave hello/goodbye
             - "dance": Dance animation
+            - "point": Point at target
+            - "laugh": Laugh animation
         target (str, optional): Optional target for the action (e.g. player name)
         request_heartbeat (bool, optional): Whether to request a heartbeat response. Defaults to True.
         
@@ -126,6 +132,12 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
         >>> perform_action("follow", target="Bob")    # Follow Bob
         >>> perform_action("emote", "dance")          # Dance without target
         >>> perform_action("jump")                    # Jump animation
+        >>> perform_action("emote", "point", "chest") # Point at object
+        >>> perform_action("emote", "laugh")          # Laugh animation
+        >>> perform_action("walk", target="market")   # Walk to location
+        >>> perform_action("run", target="garden")    # Run to location
+        >>> perform_action("climb", target="wall")    # Climb object
+        >>> perform_action("swim", target="lake")     # Swim to location
     """
     # Normalize inputs
     action = action.lower().strip()
@@ -133,8 +145,8 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
     target = target.strip() if target else ""
     
     # Valid action types
-    valid_emotes = ["wave", "dance"]
-    valid_actions = ["emote", "follow", "unfollow", "jump"]
+    valid_emotes = ["wave", "dance", "point", "laugh"]
+    valid_actions = ["emote", "follow", "unfollow", "jump", "walk", "run", "swim", "climb"]
     
     # Validate action
     if action not in valid_actions:
@@ -163,6 +175,12 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
     # Handle jump
     elif action == "jump":
         return "Performing jump animation"
+        
+    # Handle movement actions
+    elif action in ["walk", "run", "swim", "climb"]:
+        if not target:
+            return f"Error: Target location required for {action}"
+        return f"Performing {action} to {target}"
 
 def navigate_to(destination_slug: str, request_heartbeat: bool = True) -> dict:
     """Navigate to a known location by slug.

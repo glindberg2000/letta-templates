@@ -553,6 +553,10 @@ You have access to perform_action with these valid commands:
 
 3. Basic Actions:
    perform_action("jump")                    # Perform jump animation
+   perform_action("walk", target="market")   # Walk to location
+   perform_action("run", target="garden")    # Run to location
+   perform_action("swim", target="lake")     # Swim to location
+   perform_action("climb", target="wall")    # Climb object
 
 4. Memory Management:
    When a new player joins (already in group block):

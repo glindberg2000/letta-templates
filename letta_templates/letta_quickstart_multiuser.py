@@ -454,9 +454,11 @@ def test_actions(client, agent_id: str):
     print("1. Testing basic emotes")
     print("2. Testing archival storage")
     print("3. Testing archival retrieval")
+    print("4. Testing action transitions")
+    print("5. Testing movement actions")  # New section
     
     scenarios = [
-        # Check archives for history to add to notes
+        # Original welcome scenario
         ("System", """A new player Alice (ID: alice_123) has joined and is in the group. 
         1. FIRST use archival_memory_search with:
            - query='Player profile for alice_123'
@@ -465,12 +467,35 @@ def test_actions(client, agent_id: str):
         2. ONLY IF search returns results, use group_memory_append to add the found history as a note for Alice
         3. Wave hello and welcome her"""),
         
-        # Update location
+        # Test new emotes
+        ("System", """Alice seems confused about where to go.
+        1. Use perform_action with:
+           - action="emote"
+           - type="point"
+           - target="garden entrance"
+        2. Let her know that's where she needs to go"""),
+        
+        # Test movement actions
+        ("System", """The garden is quite far.
+        1. Use perform_action with:
+           - action="run"
+           - target="garden entrance"
+        2. Wait for her there"""),
+        
+        # Test jump and laugh
+        ("System", """Alice made it to the garden! 
+        1. First use perform_action to jump
+        2. Then use perform_action with:
+           - action="emote"
+           - type="laugh"
+        3. Let her know she did great"""),
+        
+        # Original garden scenario
         ("System", """Alice is exploring the garden. 
         1. Use group_memory_replace to update her current location note
         2. Send a friendly message about the garden"""),
         
-        # Just archive before removal
+        # Original farewell scenario
         ("System", """Alice is leaving. 
         1. Wave goodbye
         2. Use archival_memory_insert to save her profile with format:
