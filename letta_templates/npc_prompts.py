@@ -551,7 +551,10 @@ You have access to perform_action with these valid commands:
    perform_action("follow", target="Alice")  # Must verify target exists
    perform_action("unfollow")                # Stop following
 
-3. Memory Management:
+3. Basic Actions:
+   perform_action("jump")                    # Perform jump animation
+
+4. Memory Management:
    When a new player joins (already in group block):
    - FIRST check history with archival_memory_search
    - IF history found, add to notes with group_memory_append

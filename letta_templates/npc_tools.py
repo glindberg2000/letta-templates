@@ -114,6 +114,7 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
             - "emote": Play an emote animation (requires type parameter)
             - "follow": Follow a target player
             - "unfollow": Stop following current target
+            - "jump": Perform a jump animation
         type (str): For emotes, the type of emote to play:
             - "wave": Wave hello/goodbye
             - "dance": Dance animation
@@ -124,6 +125,7 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
         >>> perform_action("emote", "wave", "Alice")  # Wave at Alice
         >>> perform_action("follow", target="Bob")    # Follow Bob
         >>> perform_action("emote", "dance")          # Dance without target
+        >>> perform_action("jump")                    # Jump animation
     """
     # Normalize inputs
     action = action.lower().strip()
@@ -132,7 +134,7 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
     
     # Valid action types
     valid_emotes = ["wave", "dance"]
-    valid_actions = ["emote", "follow", "unfollow"]
+    valid_actions = ["emote", "follow", "unfollow", "jump"]
     
     # Validate action
     if action not in valid_actions:
@@ -157,6 +159,10 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
     # Handle unfollow
     elif action == "unfollow":
         return "Stopping follow action. Now stationary."
+        
+    # Handle jump
+    elif action == "jump":
+        return "Performing jump animation"
 
 def navigate_to(destination_slug: str, request_heartbeat: bool = True) -> dict:
     """Navigate to a known location by slug.

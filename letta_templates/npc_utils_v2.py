@@ -141,36 +141,67 @@ def update_group_status(client, agent_id: str, nearby_players: list,
     )
 
 def extract_agent_response(response) -> dict:
-    """Extract structured data from an agent response."""
-    tool_calls = []
-    tool_results = []
+    """Extract structured data from an agent response.
+    
+    Tracks tool calls and their corresponding returns by ID to ensure
+    proper message construction. Returns a dict with:
+    - message: Final assistant message
+    - tool_calls: List of tool calls with their args
+    - tool_results: List of tool returns linked to their calls
+    - reasoning: List of reasoning steps
+    """
+    tool_calls = {}  # Track by ID
+    tool_results = {}
     reasoning = []
     final_message = None
 
     for msg in response.messages:
         if msg.message_type == "tool_call_message":
-            tool_calls.append({
+            tool_calls[msg.tool_call.tool_call_id] = {
+                "id": msg.tool_call.tool_call_id,
                 "tool": msg.tool_call.name,
-                "args": json.loads(msg.tool_call.arguments)
-            })
+                "args": json.loads(msg.tool_call.arguments),
+                "message_id": msg.id  # Track parent message
+            }
             
         elif msg.message_type == "tool_return_message":
-            tool_results.append({
+            tool_results[msg.tool_call_id] = {
+                "id": msg.tool_call_id,
                 "result": msg.tool_return,
-                "status": msg.status
-            })
+                "status": msg.status,
+                "stdout": getattr(msg, 'stdout', None),
+                "stderr": getattr(msg, 'stderr', None),
+                "tool_call": tool_calls.get(msg.tool_call_id),  # Link to original call
+                "message_id": msg.id
+            }
             
         elif msg.message_type == "reasoning_message":
-            reasoning.append(msg.reasoning)
+            reasoning.append({
+                "text": msg.reasoning,
+                "message_id": msg.id
+            })
             
         elif msg.message_type == "assistant_message":
-            final_message = msg.content  # Content is now always a string
+            final_message = msg.content
+
+    # Convert to lists but maintain order
+    ordered_calls = [
+        tool_calls[call_id] 
+        for call_id in tool_calls.keys()
+    ]
+    
+    ordered_results = [
+        tool_results[call_id] 
+        for call_id in tool_calls.keys() 
+        if call_id in tool_results
+    ]
 
     return {
         "message": final_message,
-        "tool_calls": tool_calls,
-        "tool_results": tool_results,
-        "reasoning": reasoning
+        "tool_calls": ordered_calls,
+        "tool_results": ordered_results,
+        "reasoning": reasoning,
+        "complete": bool(final_message)  # Did we get a final message?
     }
 
 def print_response(response):
