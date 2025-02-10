@@ -22,6 +22,9 @@ wheels/
 
 # Virtual Environment
 venv/
+venv_latest/
+**/venv/
+**/venv_latest/
 ENV/
 env/
 
@@ -30,11 +33,17 @@ env/
 .vscode/
 *.swp
 *.swo
+*.code-workspace
 
 # OS
 .DS_Store
+
+# Logs and databases
+*.log
+*.sqlite
 
 # Environment variables
 .env
 .env.*
 !.env.example
+logs/
