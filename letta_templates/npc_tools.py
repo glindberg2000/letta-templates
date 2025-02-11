@@ -466,74 +466,46 @@ def find_location(query: str, game_id: int = GAME_ID) -> Dict:
         return {"message": "Service error", "locations": []}
 
 
-def update_tool(client, tool_name: str, tool_func, verbose: bool = True) -> str:
-    """Update a tool by deleting and recreating it."""
+def update_global_tools(client):
+    """Update all custom tools globally."""
     try:
-        # Delete if exists
-        existing_tools = {t["name"]: t["id"] for t in client.agents.tools.list()}
-        if tool_name in existing_tools:
-            if verbose:
-                print(f"\nDeleting old tool: {tool_name}")
-                print(f"Tool ID: {existing_tools[tool_name]}")
-            client.agents.tools.delete(existing_tools[tool_name])
-        
-        # Create new
-        if verbose:
-            print(f"Creating new tool: {tool_name}")
-        tool = client.agents.tools.create(
-            function=tool_func, 
-            name=tool_name
-        )
-        tool_id = tool["id"]
-        
-        # Verify
-        all_tools = client.agents.tools.list()
-        if not any(t["id"] == tool_id for t in all_tools):
-            raise ValueError(f"Tool {tool_id} not found after creation")
-        
-        return tool_id
-    
-    except Exception as e:
-        print(f"Error updating tool {tool_name}: {e}")
-        raise
-
-def update_tools(client):
-    """Update all custom tools."""
-    try:
-        # Get existing tools
-        existing_tools = client.tools.list()
-        
-        # Create tools globally first
         for name, tool_info in TOOL_REGISTRY.items():
             try:
-                print(f"Creating {name}...")
-                # Delete existing tool if found
-                for tool in existing_tools:
-                    if tool.name == name:
-                        print(f"Deleting existing tool {name}...")
-                        client.tools.delete(tool.id)
-                        break
-                
+                print(f"Updating {name}...")
                 source_code = inspect.getsource(tool_info['function'])
-                # Extract function name from source code
-                function_lines = source_code.split('\n')
-                function_def = next(line for line in function_lines if line.startswith('def '))
-                function_name = function_def.split('def ')[1].split('(')[0].strip()
                 
-                tool = client.tools.create(
+                # Use upsert with just source_code
+                tool = client.tools.upsert(
                     source_code=source_code,
                     description=tool_info.get('description', ''),
-                    tags=[name, function_name]  # Both registry name and function name
+                    tags=[name]
                 )
-                print(f"Created {name}: {tool.id}")
+                print(f"Updated {name}: {tool.id}")
                 
             except Exception as e:
-                print(f"Error creating {name}: {e}")
+                print(f"Error updating {name}: {e}")
                 raise
             
     except Exception as e:
         print(f"Error updating tools: {e}")
         raise
+
+def update_agent_tools(client, agent_id: str, tools: list = None):
+    """Update tools for a specific agent."""
+    if tools is None:
+        tools = list(TOOL_REGISTRY.keys())
+        
+    for name in tools:
+        if name in TOOL_REGISTRY:
+            info = TOOL_REGISTRY[name]
+            # Use upsert with just source_code
+            tool = client.tools.upsert(
+                source_code=inspect.getsource(info["function"])
+            )
+            client.agents.tools.attach(agent_id=agent_id, tool_id=tool.id)
+
+# Keep old name for backward compatibility
+update_tools = update_global_tools
 
 def ensure_custom_tools_exist(client: Letta):
     """Ensure all required NPC tools exist, creating only if missing (Production use).
