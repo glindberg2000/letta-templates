@@ -15,10 +15,11 @@ from .npc_tools import (
     TOOL_INSTRUCTIONS,
     navigate_to,
     perform_action,
-    examine_object
+    examine_object,
+    create_personalized_agent_v3
 )
 
-__version__ = "3.0.0"
+__version__ = "3.5.0"
 
 def view_docs():
     """Print the response handling documentation."""
