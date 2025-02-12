@@ -21,20 +21,16 @@
 # Progress Status
 
 ## Completed
-1. Memory Structure
-   - Block definitions
-   - Field standards
-   - Update patterns
+- Simplified action system
+- Added movement styles to navigation
+- Cleaned up duplicate handlers
+- Verified waiter role behavior
+- Emergency response system
 
-2. Tools
-   - group_memory_append/replace
-   - upsert_group_member
-   - update_group_block
-
-3. Documentation
-   - API reference
-   - Architecture docs
-   - Examples
+## Next Steps
+- Review base prompts for role clarity
+- Consider additional role-specific actions
+- Test other NPC roles thoroughly
 
 ## In Progress
 - Live testing

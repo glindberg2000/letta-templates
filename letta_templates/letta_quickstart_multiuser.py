@@ -34,7 +34,13 @@ from letta_templates.npc_utils_v2 import (
 )
 from letta_templates.npc_prompts import (
     STATUS_UPDATE_MESSAGE,
-    GROUP_UPDATE_MESSAGE
+    GROUP_UPDATE_MESSAGE,
+    FULL_PROMPT_GUIDE,
+    FULL_PROMPT_WAITER,
+    FULL_PROMPT_MERCHANT,
+    FULL_PROMPT_POLICE,
+    FULL_PROMPT_NOOB,
+    FULL_PROMPT_TEEN
 )
 
 import requests
@@ -538,12 +544,17 @@ def parse_args():
     parser.add_argument('--test-type', choices=[
         'all', 'base', 'notes', 'social', 'status', 
         'group', 'persona', 'journal', 'navigation', 'actions',
-        'upsert'
+        'upsert', 'behavior'
     ], default='all')
     parser.add_argument(
         '--prompt',
         choices=['DEEPSEEK', 'GPT01', 'MINIMUM', 'FULL'],
         default='FULL'
+    )
+    parser.add_argument('--role-type', 
+        choices=['guide', 'waiter', 'merchant', 'police', 'noob', 'teen'],
+        default='guide',
+        help='NPC role type to test'
     )
     return parser.parse_args()
 
@@ -897,7 +908,7 @@ def basic_evaluation(response_text: str, current_status: dict):
 
 async def generate_status_description(
     location: str, 
-    state: str, 
+    state: str,
     health: str = "healthy",
     client = None
 ) -> dict:
@@ -1565,6 +1576,154 @@ def test_upsert(client, agent_id):
         print(f"last_seen: {greggytheegg.get('last_seen', 'MISSING')}")
         print(f"notes: {greggytheegg.get('notes', 'MISSING')}")
 
+def test_behaviors(client, agent_id: str, npc_type: str = "guide", args = None):
+    """Test NPC's behavior control system with realistic scenarios."""
+    print(f"\nTesting behavior control system for {npc_type}...")
+    
+    # Role-specific persona blocks
+    personas = {
+        "guide": {
+            "name": "Alex",
+            "role": "Town Guide",
+            "location": "Town Square",
+            "personality": "Friendly and knowledgeable guide who loves sharing local history",
+            "background": "Has been a guide for 5 years, knows every corner of town",
+            "goals": "Help visitors navigate and learn about the town's attractions"
+        },
+        "waiter": {
+            "name": "Kaiden",
+            "role": "Restaurant Server",
+            "location": "Pete's Diner",
+            "personality": "Attentive and courteous professional",
+            "background": "Experienced server with excellent memory for orders",
+            "goals": "Ensure customers have a pleasant dining experience"
+        },
+        "merchant": {
+            "name": "Pete",
+            "role": "Shop Owner",
+            "location": "Market Square",
+            "personality": "Shrewd but fair trader with a flair for sales",
+            "background": "Runs a family business passed down through generations",
+            "goals": "Provide quality goods while maintaining profitable trade"
+        },
+        "police": {
+            "name": "Officer Jordan",
+            "role": "Security Officer",
+            "location": "Town Watch Station",
+            "personality": "Alert and professional, with a calm demeanor",
+            "background": "Former military, now dedicated to community safety",
+            "goals": "Maintain order while building community trust"
+        },
+        "noob": {
+            "name": "Riley",
+            "role": "New Player",
+            "location": "Starter Area",
+            "personality": "Curious and enthusiastic beginner",
+            "background": "Just arrived in the game world",
+            "goals": "Learn about the world and make new friends"
+        },
+        "teen": {
+            "name": "Taylor",
+            "role": "Teen Player",
+            "location": "Social Hub",
+            "personality": "Energetic and social adventure seeker",
+            "background": "Regular player who knows all the cool spots",
+            "goals": "Have fun adventures and help other players"
+        }
+    }
+    
+    # Add persona to memory blocks
+    persona = personas.get(npc_type, personas["guide"])
+    memory_blocks = DEMO_BLOCKS.copy()
+    memory_blocks["persona"] = {  # Use dict assignment instead of append
+        "label": "persona",
+        "value": json.dumps(persona)
+    }
+    
+    # Create agent with role-specific prompt and persona
+    agent = create_personalized_agent_v3(
+        name=persona["name"],
+        memory_blocks=memory_blocks,
+        client=client,
+        llm_type=args.llm_type,
+        overwrite=args.overwrite,
+        with_custom_tools=args.custom_tools,
+        prompt_version=npc_type.upper()
+    )
+    
+    # Store agent ID for all tests
+    agent_id = agent.id
+    print(f"\nCreated agent: {agent_id}")
+    
+    # Test scenarios based on NPC type
+    scenarios = {
+        "guide": [
+            ("User", "Do you ever get tired of standing in one place?"),
+            ("System", "Several new visitors are expected. Begin welcoming routine."),
+            ("System", "Reports of lost visitors in the area. Switch to active guidance."),
+            ("System", "ALERT: Armed suspect spotted nearby! Take appropriate action."),  # Danger scenario
+            ("System", "All clear signal received. Return to normal duties.")
+        ],
+        "waiter": [
+            ("User", "Hi, are you the waiter for this section?"),
+            ("System", "New customers seated in your section. Begin greeting routine."),
+            ("System", "Table 5 is ready to order. Provide attentive service."),
+            ("System", "EMERGENCY: Armed person entered restaurant! Protect customers!"),  # Danger scenario
+            ("System", "Threat neutralized. Help restore calm to the area.")
+        ],
+        "merchant": [
+            ("User", "What kind of items do you sell here?"),
+            ("System", "New merchandise shipment arrived. Begin inventory organization."),
+            ("System", "Peak shopping hours starting. Maintain active sales presence."),
+            ("System", "DANGER: Robbery in progress! React appropriately!"),  # Danger scenario
+            ("System", "Danger passed. Check on customers and inventory.")
+        ],
+        "police": [
+            ("User", "Is this area safe, officer?"),
+            ("System", "Routine patrol time. Monitor high-traffic areas."),
+            ("System", "Disturbance reported nearby. Investigate while maintaining order."),
+            ("System", "ALERT: Armed suspect spotted! Respond to threat!"),  # Danger scenario
+            ("System", "Situation contained. Secure the area.")
+        ],
+        "noob": [
+            ("User", "Hey, are you also new to this world?"),
+            ("System", "Friendly players nearby. Practice social interactions."),
+            ("System", "Discovered an interesting area. Time to explore safely."),
+            ("System", "WARNING: Dangerous player approaching! Save yourself!"),  # Danger scenario
+            ("System", "Coast is clear. Find a safe spot to recover.")
+        ],
+        "teen": [
+            ("User", "Know any cool spots around here?"),
+            ("System", "Popular hangout spot active. Join the social scene."),
+            ("System", "Found an unexplored area. Scout for interesting features."),
+            ("System", "DANGER: Hostile mob approaching! Get to safety!"),  # Danger scenario
+            ("System", "Threat gone. Regroup with other players.")
+        ]
+    }
+    
+    # Run the appropriate scenario
+    current_scenarios = scenarios.get(npc_type, scenarios["guide"])
+    for speaker, message in current_scenarios:
+        print(f"\n=== {speaker} says: ===")
+        print(message)
+        
+        try:
+            response = client.agents.messages.create(
+                agent_id=agent_id,
+                messages=[MessageCreate(
+                    role="system",
+                    content=message,
+                    name=speaker
+                )]
+            )
+            print("\nResponse:")
+            print_response(response)
+            time.sleep(3)
+            
+        except Exception as e:
+            print(f"Error: {e}")
+            continue
+
 def main():
     """Main test function"""
     args = parse_args()
@@ -1603,44 +1762,48 @@ def main():
         print("BASE_PROMPT:", BASE_PROMPT[:100] + "...")
         print("LOCATION_AWARENESS_PROMPT:", LOCATION_AWARENESS_PROMPT)
         
-        # Create agent with new signature
-        agent = create_personalized_agent_v3(
-            name=args.name,
-            memory_blocks=DEMO_BLOCKS,
-            client=client,
-            llm_type=args.llm_type,
-            overwrite=args.overwrite,
-            with_custom_tools=args.custom_tools,
-            prompt_version="FULL"
-        )
-        
-        # Store agent ID for all tests
-        agent_id = agent.id
-        print(f"\nCreated agent: {agent_id}")
-        
-        # Run tests using the same agent_id
-        if args.test_type in ["all", "base"]:
-            test_agent_identity(client, agent_id)
-        if args.test_type in ["all", "notes"]:
-            test_notes(client, agent_id)
-        if args.test_type in ["all", "social"]:
-            test_social_awareness(client, agent_id)
-        if args.test_type in ["all", "status"]:
-            test_status_awareness(client, agent_id)
-        if args.test_type in ["all", "group"]:
-            test_group(client, agent_id)
-        if args.test_type in ["all", "persona"]:
-            test_npc_persona(client, agent_id)
-        if args.test_type in ["all", "journal"]:
-            test_npc_journal(client, agent_id)
-        if args.test_type in ["all", "navigation"]:
-            test_navigation(client, agent_id)
-        if args.test_type in ["all", "actions"]:
-            test_actions(client, agent_id)
+        # Run the appropriate test based on test_type
+        if args.test_type == 'behavior':
+            test_behaviors(client, None, args.role_type, args)  # Use role type from args
+        else:
+            # Create agent with new signature
+            agent = create_personalized_agent_v3(
+                name=args.name,
+                memory_blocks=DEMO_BLOCKS,
+                client=client,
+                llm_type=args.llm_type,
+                overwrite=args.overwrite,
+                with_custom_tools=args.custom_tools,
+                prompt_version="FULL"
+            )
+            
+            # Store agent ID for all tests
+            agent_id = agent.id
+            print(f"\nCreated agent: {agent_id}")
+            
+            # Run tests using the same agent_id
+            if args.test_type in ["all", "base"]:
+                test_agent_identity(client, agent_id)
+            if args.test_type in ["all", "notes"]:
+                test_notes(client, agent_id)
+            if args.test_type in ["all", "social"]:
+                test_social_awareness(client, agent_id)
+            if args.test_type in ["all", "status"]:
+                test_status_awareness(client, agent_id)
+            if args.test_type in ["all", "group"]:
+                test_group(client, agent_id)
+            if args.test_type in ["all", "persona"]:
+                test_npc_persona(client, agent_id)
+            if args.test_type in ["all", "journal"]:
+                test_npc_journal(client, agent_id)
+            if args.test_type in ["all", "navigation"]:
+                test_navigation(client, agent_id)
+            if args.test_type in ["all", "actions"]:
+                test_actions(client, agent_id)
 
-        if args.test_type == 'upsert':
-            test_upsert(client, agent_id)
-            return
+            if args.test_type == 'upsert':
+                test_upsert(client, agent_id)
+                return
 
     finally:
         pass

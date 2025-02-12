@@ -69,3 +69,19 @@ update_status_block(
 
 ## Memory Patterns
 [Previous memory patterns remain unchanged] 
+
+## Action System
+- Core actions: patrol, wander, idle, hide, flee, emote, follow, unfollow
+- Each action has specific validation and response format
+- Movement style handled by navigate_to function
+- Emergency actions require location/threat targets
+
+## Navigation System
+- Uses slugs for location identification
+- Optional movement styles (walk, run, sneak)
+- Provides progress updates via heartbeat
+
+## Role-Based Behaviors
+- Each role (waiter, merchant, etc.) has specific action patterns
+- Prompts guide appropriate action selection
+- Emergency protocols consistent across roles 

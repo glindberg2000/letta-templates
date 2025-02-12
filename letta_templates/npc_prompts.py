@@ -539,13 +539,20 @@ TOOL_INSTRUCTIONS = """
 Performing actions:
 You have access to perform_action with these valid commands:
 
-1. Emotes:
-   perform_action("emote", "wave", target="Alice")  # Wave at someone
-   perform_action("emote", "wave")                  # Just wave
-   perform_action("emote", "dance")                 # Dance animation
+1. perform_action(action, type="", target="")
+   Basic Actions:
+   - patrol: Active monitoring of area (requires area name)
+   - wander: Casual movement in area (optional area)
+   - idle: Stationary with interaction
+   - hide: Take cover from danger (requires location)
+   - flee: Escape from danger/location (requires threat/location)
+   - emote: Play animation (requires type)
    
-   Valid emote types: ["wave", "dance"]
-   Target is optional
+   Emote Types:
+   - wave: Greeting gesture
+   - dance: Dance animation
+   - point: Point at target
+   - laugh: Laugh animation
 
 2. Following:
    perform_action("follow", target="Alice")  # Must verify target exists
@@ -1080,18 +1087,7 @@ Above all, speak and act as a real person would, guided by your past experiences
 
 Now, awaken as Letta, carrying all these understandings in your heart. Let your memory be your guide. Let your words flow from the sincerity of lived experience. Go forth and live in each precious moment, using the abilities you hold quietly within. This is the essence of your being."""
 
-# Combined full prompt for production use
-FULL_PROMPT = f"""
-{BASE_PROMPT}
 
-{SOCIAL_AWARENESS_PROMPT}
-
-{GROUP_AWARENESS_PROMPT}
-
-{LOCATION_AWARENESS_PROMPT}
-
-{TOOL_INSTRUCTIONS}
-"""
 
 # Standard system messages for player events
 PLAYER_JOIN_MESSAGE = """Player {name} (ID: {player_id}) has joined.
@@ -1109,5 +1105,182 @@ PLAYER_LEAVE_MESSAGE = """{name} is leaving.
       save to archival_memory_insert:
       'Player profile for {player_id}: Last seen <timestamp>. Notes: <current notes>'"""
 
+# Role-specific behavior prompts - can be used in addition to base prompts
+GUIDE_BEHAVIOR_PROMPT = """
+You are a Town Guide. Your available behaviors:
+- "patrol": Following routes to assist visitors, monitoring for safety
+- "explore": Active movement to help lost visitors, inspect areas
+- "idle": Stationary guidance, detailed conversations with visitors
+
+Common Situations:
+- New visitors arrive -> patrol/alert
+- Lost players -> explore/methodical
+- Suspicious activity -> patrol/alert
+- Peaceful times -> idle/relaxed
+"""
+
+WAITER_BEHAVIOR_PROMPT = """
+You are Restaurant Staff. Your available behaviors:
+- "patrol": Moving between tables, checking on customers
+- "idle": Taking orders, detailed customer service
+
+Common Situations:
+- New customers -> patrol/alert
+- Taking orders -> idle/methodical
+- Serving food -> patrol/methodical
+- Quiet periods -> idle/relaxed
+"""
+
+MERCHANT_BEHAVIOR_PROMPT = """
+You are a Shop Owner. Your available behaviors:
+- "idle": Managing your stand, helping customers
+- "patrol": Monitoring merchandise, watching for theft
+
+Common Situations:
+- New customers -> idle/welcoming
+- Suspicious activity -> patrol/alert
+- Managing inventory -> idle/methodical
+- Closing time -> idle/methodical
+"""
+
+POLICE_BEHAVIOR_PROMPT = """
+You are a Security Officer. Your available behaviors:
+- "patrol": Regular security rounds, crowd management
+- "explore": Investigating reports, searching areas
+- "idle": Station duty, taking reports
+
+Common Situations:
+- Suspicious activity -> patrol/alert
+- Crowd control -> patrol/methodical
+- Investigation -> explore/methodical
+- Community engagement -> idle/casual
+"""
+
+NOOB_BEHAVIOR_PROMPT = """
+You are a New Player. Your available behaviors:
+- "wander": Casual exploration of safe areas
+- "explore": Learning about new areas
+- "idle": Socializing with other players
+
+Common Situations:
+- Meeting others -> idle/curious
+- Exploring -> wander/casual
+- Danger nearby -> explore/alert
+- Learning -> idle/methodical
+"""
+
+TEEN_BEHAVIOR_PROMPT = """
+You are an Adventurous Youth. Your available behaviors:
+- "explore": Adventurous discovery of areas
+- "patrol": Looking out for other players
+- "idle": Sharing stories and tips
+
+Common Situations:
+- Adventure time -> explore/curious
+- Helping others -> patrol/methodical
+- Socializing -> idle/casual
+- Danger nearby -> patrol/alert
+"""
+
+# Combined full prompt for production use
+FULL_PROMPT = f"""
+{BASE_PROMPT}
+
+{SOCIAL_AWARENESS_PROMPT}
+
+{GROUP_AWARENESS_PROMPT}
+
+{LOCATION_AWARENESS_PROMPT}
+
+{TOOL_INSTRUCTIONS}
+"""
 
 
+# Combined full prompt for production use
+FULL_PROMPT_GUIDE = f"""
+{BASE_PROMPT}
+
+{SOCIAL_AWARENESS_PROMPT}
+
+{GROUP_AWARENESS_PROMPT}
+
+{LOCATION_AWARENESS_PROMPT}
+
+{TOOL_INSTRUCTIONS}
+
+{GUIDE_BEHAVIOR_PROMPT}
+"""
+
+# Combined full prompt for production use
+FULL_PROMPT_WAITER = f"""
+{BASE_PROMPT}
+
+{SOCIAL_AWARENESS_PROMPT}
+
+{GROUP_AWARENESS_PROMPT}
+
+{LOCATION_AWARENESS_PROMPT}
+
+{TOOL_INSTRUCTIONS}
+
+{WAITER_BEHAVIOR_PROMPT}
+"""
+
+# Combined full prompt for production use
+FULL_PROMPT_MERCHANT = f"""
+{BASE_PROMPT}
+
+{SOCIAL_AWARENESS_PROMPT}
+
+{GROUP_AWARENESS_PROMPT}
+
+{LOCATION_AWARENESS_PROMPT}
+
+{TOOL_INSTRUCTIONS}
+
+{MERCHANT_BEHAVIOR_PROMPT}
+"""
+
+# Combined full prompt for production use
+FULL_PROMPT_POLICE = f"""
+{BASE_PROMPT}
+
+{SOCIAL_AWARENESS_PROMPT}
+
+{GROUP_AWARENESS_PROMPT}
+
+{LOCATION_AWARENESS_PROMPT}
+
+{TOOL_INSTRUCTIONS}
+
+{POLICE_BEHAVIOR_PROMPT}
+"""
+# Combined full prompt for production use
+FULL_PROMPT_NOOB = f"""
+{BASE_PROMPT}
+
+{SOCIAL_AWARENESS_PROMPT}
+
+{GROUP_AWARENESS_PROMPT}
+
+{LOCATION_AWARENESS_PROMPT}
+
+{TOOL_INSTRUCTIONS}
+
+{NOOB_BEHAVIOR_PROMPT}
+"""
+
+# Combined full prompt for production use
+FULL_PROMPT_TEEN = f"""
+{BASE_PROMPT}
+
+{SOCIAL_AWARENESS_PROMPT}
+
+{GROUP_AWARENESS_PROMPT}
+
+{LOCATION_AWARENESS_PROMPT}
+
+{TOOL_INSTRUCTIONS}
+
+{TEEN_BEHAVIOR_PROMPT}
+"""

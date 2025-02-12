@@ -80,7 +80,13 @@ from letta_templates.npc_prompts import (
     DEEPSEEK_PROMPT_V3,
     GPT01_PROMPT,
     GPT01_PROMPT_V3,
-    SYSTEM_PROMPT_LIMNAL
+    SYSTEM_PROMPT_LIMNAL,
+    FULL_PROMPT_GUIDE,
+    FULL_PROMPT_WAITER,
+    FULL_PROMPT_MERCHANT,
+    FULL_PROMPT_POLICE,
+    FULL_PROMPT_NOOB,
+    FULL_PROMPT_TEEN
 )
 
 # Configuration
@@ -111,33 +117,28 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
     
     Args:
         action (str): Type of action to perform:
-            - "emote": Play an emote animation (requires type parameter)
-            - "follow": Follow a target player
-            - "unfollow": Stop following current target
-            - "jump": Perform a jump animation
-            - "walk": Walk to target location
-            - "run": Run to target location
-            - "swim": Swim to target location
-            - "climb": Climb to target location
-        type (str): For emotes, the type of emote to play:
-            - "wave": Wave hello/goodbye
+            Basic Actions:
+                - "patrol": Active monitoring of area
+                - "wander": Casual movement in area
+                - "idle": Stationary with interaction
+                - "hide": Take cover from danger
+                - "flee": Escape from danger/location
+                - "emote": Play animation
+            
+        type (str): For emotes only:
+            - "wave": Greeting gesture
             - "dance": Dance animation
             - "point": Point at target
             - "laugh": Laugh animation
-        target (str, optional): Optional target for the action (e.g. player name)
-        request_heartbeat (bool, optional): Whether to request a heartbeat response. Defaults to True.
-        
-    Example:
-        >>> perform_action("emote", "wave", "Alice")  # Wave at Alice
-        >>> perform_action("follow", target="Bob")    # Follow Bob
-        >>> perform_action("emote", "dance")          # Dance without target
-        >>> perform_action("jump")                    # Jump animation
-        >>> perform_action("emote", "point", "chest") # Point at object
-        >>> perform_action("emote", "laugh")          # Laugh animation
-        >>> perform_action("walk", target="market")   # Walk to location
-        >>> perform_action("run", target="garden")    # Run to location
-        >>> perform_action("climb", target="wall")    # Climb object
-        >>> perform_action("swim", target="lake")     # Swim to location
+            
+        target (str, optional): Target for the action:
+            - For emotes: Target entity
+            - For patrol: Area name
+            - For hide: Cover location
+            - For flee: Threat/location to flee from
+            
+        request_heartbeat (bool, optional): Request status updates from the system.
+            Set True to maintain state awareness (default: True)
     """
     # Normalize inputs
     action = action.lower().strip()
@@ -146,13 +147,24 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
     
     # Valid action types
     valid_emotes = ["wave", "dance", "point", "laugh"]
-    valid_actions = ["emote", "follow", "unfollow", "jump", "walk", "run", "swim", "climb"]
+    valid_actions = ["patrol", "wander", "idle", "hide", "flee", "emote", "follow", "unfollow"]  # Added back follow/unfollow
     
     # Validate action
     if action not in valid_actions:
         if action in valid_emotes:
             return f"Error: For emotes use action='emote' with type='{action}' instead"
         return f"Error: Unknown action: {action}. Valid actions are: {', '.join(valid_actions)}"
+    
+    # Handle behaviors
+    if action == "set_behavior":
+        if not type:
+            return "Error: Behavior type required"
+        if type not in valid_behaviors:
+            return f"Error: Unknown behavior type: {type}. Valid types are: {', '.join(valid_behaviors)}"
+        if target and target not in valid_styles:
+            return f"Error: Unknown behavior style: {target}. Valid styles are: {', '.join(valid_styles)}"
+        style_msg = f" with {target} style" if target else ""
+        return f"Setting behavior to: {type}{style_msg}"
     
     # Handle emotes
     if action == "emote":
@@ -162,31 +174,49 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
             return f"Error: Unknown emote type: {type}. Valid types are: {', '.join(valid_emotes)}"
         return f"Performing emote: {type}" + (f" at {target}" if target else "")
     
-    # Handle follow
+    # Handle follow actions
     elif action == "follow":
         if not target:
             return "Error: Target required for follow"
         return f"Following player: {target}"
     
-    # Handle unfollow
     elif action == "unfollow":
         return "Stopping follow action. Now stationary."
-        
-    # Handle jump
-    elif action == "jump":
-        return "Performing jump animation"
-        
-    # Handle movement actions
-    elif action in ["walk", "run", "swim", "climb"]:
+    
+    # Handle movement behaviors
+    elif action == "patrol":
         if not target:
-            return f"Error: Target location required for {action}"
-        return f"Performing {action} to {target}"
+            return "Patrolling current area"
+        return f"Patrolling {target}"
+        
+    elif action == "wander":
+        if target:
+            return f"Wandering around {target}"
+        return "Wandering around current area"
+        
+    elif action == "idle":
+        return "Standing by for interaction"
+    
+    # Handle emergency actions
+    elif action == "hide":
+        if not target:
+            return "Error: Cover location required for hide"
+        return f"Taking cover at {target}"
+        
+    elif action == "flee":
+        if not target:
+            return "Error: Threat/location required to flee from"
+        return f"Running away from {target}"
 
-def navigate_to(destination_slug: str, request_heartbeat: bool = True) -> dict:
-    """Navigate to a known location by slug.
+def navigate_to(destination_slug: str, style: str = None, request_heartbeat: bool = True) -> dict:
+    """Navigate to a known location
     
     Args:
         destination_slug: Must exactly match a slug in locations memory block
+        style (str, optional): Movement style
+            - "walk": Normal pace (default)
+            - "run": Fast pace
+            - "sneak": Cautious pace
         request_heartbeat: Always set True to maintain state awareness
         
     Returns:
@@ -204,10 +234,11 @@ def navigate_to(destination_slug: str, request_heartbeat: bool = True) -> dict:
             "message": "Please use a valid slug from your locations memory block. Slugs are lowercase with underscores (e.g. 'market_district', 'petes_stand')"
         }
     
+    style_msg = f" ({style})" if style else ""
     return {
         "status": "success",
         "message": (
-            f"Beginning navigation to {destination_slug}. "
+            f"Beginning navigation to {destination_slug}{style_msg}. "
             "Your status memory block will update with: "
             "- Current GPS coordinates "
             "- Next waypoint target "
@@ -581,6 +612,62 @@ def create_personalized_agent_v3(
             GROUP_AWARENESS_PROMPT + 
             LOCATION_AWARENESS_PROMPT + 
             TOOL_INSTRUCTIONS
+        )
+    elif prompt_version == "MINIMUM":
+        prompt = MINIMUM_PROMPT
+    elif prompt_version == "GUIDE":
+        prompt = (
+            BASE_PROMPT + 
+            SOCIAL_AWARENESS_PROMPT + 
+            GROUP_AWARENESS_PROMPT + 
+            LOCATION_AWARENESS_PROMPT + 
+            TOOL_INSTRUCTIONS +
+            FULL_PROMPT_GUIDE
+        )
+    elif prompt_version == "WAITER":
+        prompt = (
+            BASE_PROMPT + 
+            SOCIAL_AWARENESS_PROMPT + 
+            GROUP_AWARENESS_PROMPT + 
+            LOCATION_AWARENESS_PROMPT + 
+            TOOL_INSTRUCTIONS +
+            FULL_PROMPT_WAITER
+        )
+    elif prompt_version == "MERCHANT":
+        prompt = (
+            BASE_PROMPT + 
+            SOCIAL_AWARENESS_PROMPT + 
+            GROUP_AWARENESS_PROMPT + 
+            LOCATION_AWARENESS_PROMPT + 
+            TOOL_INSTRUCTIONS +
+            FULL_PROMPT_MERCHANT
+        )
+    elif prompt_version == "POLICE":
+        prompt = (
+            BASE_PROMPT + 
+            SOCIAL_AWARENESS_PROMPT +
+            GROUP_AWARENESS_PROMPT +
+            LOCATION_AWARENESS_PROMPT +
+            TOOL_INSTRUCTIONS +
+            FULL_PROMPT_POLICE
+        )
+    elif prompt_version == "NOOB":
+        prompt = (
+            BASE_PROMPT + 
+            SOCIAL_AWARENESS_PROMPT +
+            GROUP_AWARENESS_PROMPT +
+            LOCATION_AWARENESS_PROMPT +
+            TOOL_INSTRUCTIONS +
+            FULL_PROMPT_NOOB
+        )
+    elif prompt_version == "TEEN":
+        prompt = (
+            BASE_PROMPT + 
+            SOCIAL_AWARENESS_PROMPT +
+            GROUP_AWARENESS_PROMPT +
+            LOCATION_AWARENESS_PROMPT +
+            TOOL_INSTRUCTIONS +
+            FULL_PROMPT_TEEN
         )
     else:
         prompt = prompt_version  # Use whatever prompt version was passed
