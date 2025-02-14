@@ -454,70 +454,39 @@ def validate_action_response(response, action_type=None):
         for msg in response.messages:
             if msg.message_type == "tool_return_message":
                 # Skip memory operations that return None
-                if msg.tool_return in ["None", "([], 0)"]:  # Add common memory return values
-                    continue  # Skip this message but keep checking others
+                if msg.tool_return in ["None", "([], 0)"]:
+                    continue
                     
                 result = json.loads(msg.tool_return)
                 
-                if result.get("action") in ["hunt", "patrol", "wander", "emote", "jump"]:
-                    # Use the roblox_format directly from the response if available
-                    if "roblox_format" in result:
-                        roblox_format = result["roblox_format"]
-                    else:
-                        # Format based on action type
-                        if result["action"] == "hunt":
-                            roblox_format = {
-                                "type": "hunt",
-                                "data": {
-                                    "target": result["target"],
-                                    "type": result["type"]
-                                },
-                                "message": result["message"]
-                            }
-                        elif result["action"] == "patrol":
-                            roblox_format = {
-                                "type": "patrol",
-                                "data": {
-                                    "area": result.get("target", "current_area"),
-                                    "style": result.get("type", "normal")
-                                },
-                                "message": result["message"]
-                            }
-                        elif result["action"] == "emote":
-                            roblox_format = {
-                                "type": "emote",
-                                "data": {
-                                    "animation": result["type"],
-                                    "target": result.get("target", "")
-                                },
-                                "message": result["message"]
-                            }
-                        elif result["action"] == "wander":
-                            roblox_format = {
-                                "type": "wander",
-                                "data": {
-                                    "area": result.get("target", "current_area"),
-                                    "radius": result["metadata"].get("wander_radius", 10.0)
-                                },
-                                "message": result["message"]
-                            }
-                        elif result["action"] == "jump":
-                            roblox_format = {
-                                "type": "jump",
-                                "data": {},
-                                "message": result["message"]
-                            }
-                    
-                    print("\nRoblox Action:")
-                    print(json.dumps(roblox_format, indent=2))
-                    return True
+                # Verify roblox_format exists
+                if "roblox_format" not in result:
+                    print("❌ Missing roblox_format field")
+                    return False
                 
-                # For non-action operations, just return True
+                roblox_format = result["roblox_format"]
+                
+                # Verify required fields
+                if not all(field in roblox_format for field in ["type", "data", "message"]):
+                    print("❌ Missing required fields in roblox_format")
+                    print(f"Found fields: {list(roblox_format.keys())}")
+                    return False
+                
+                # Verify data structure
+                data = roblox_format["data"]
+                if data:  # Only check if data is not empty (jump has empty data)
+                    if not all(field in data for field in ["target", "type"]):
+                        print("❌ Invalid data structure")
+                        print(f"Found data fields: {list(data.keys())}")
+                        return False
+                
+                print("\nRoblox Format (Validated):")
+                print(json.dumps(roblox_format, indent=2))
                 return True
                     
         return True
     except Exception as e:
-        print(f"❌ Error: {str(e)}")
+        print(f"❌ Validation Error: {str(e)}")
         return False
 
 def test_actions(client, agent_id: str):
