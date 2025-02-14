@@ -525,9 +525,9 @@ def test_actions(client, agent_id: str):
         
         # Test movement actions
         ("System", """The garden is quite far.
-        1. Use perform_action with:
-           - action="run"
-           - target="garden entrance"
+        1. Use navigate_to with:
+           - destination_slug="garden_entrance"
+           - style="run"
         2. Wait for her there"""),
         
         # Test jump and laugh
@@ -578,7 +578,14 @@ def test_actions(client, agent_id: str):
            action="patrol",
            type="stealth",
            target="dark_alley"
-        )""")
+        )"""),
+        
+        # New follow test
+        ("System", """EXECUTE this action exactly:
+        perform_action(
+           action="follow",
+           target="greggytheegg"
+        )"""),
     ]
     
     for i, (speaker, message) in enumerate(scenarios, 1):

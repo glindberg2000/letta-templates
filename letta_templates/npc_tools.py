@@ -118,53 +118,60 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
     Args:
         action (str): Type of action to perform:
             Basic Actions:
-                - "patrol": Active monitoring of area
+                - "patrol": Monitor area ("full" or location_slug)
+                - "hunt": Track or destroy target
+                - "follow": Follow target player
+                - "emote": Play animation
+                - "jump": Jump animation
                 - "wander": Casual movement in area
                 - "idle": Stationary with interaction
                 - "hide": Take cover from danger
                 - "flee": Escape from danger/location
-                - "emote": Play animation
-                - "hunt": Track or destroy target
-                - "jump": Jump animation
+                - "unfollow": Stop following target player
             
-        type (str): For emotes and hunt:
-            Emotes:
-                - "wave": Greeting gesture
-                - "dance": Dance animation
-                - "point": Point at target
-                - "laugh": Laugh animation
+        type (str): Action variation:
+            Patrol:
+                - "normal": Regular patrol (default)
+                - "stealth": Cautious patrol
             Hunt:
-                - "track": Follow and monitor target
-                - "destroy": Pursue and eliminate target (default)
+                - "track": Monitor target
+                - "destroy": Eliminate target (default)
+            Emote:
+                - "wave": Greeting gesture at player
+                - "dance": Dance animation
+                - "point": Point at location (must be valid location_slug)
+                - "laugh": Laugh animation
             Jump:
                 - "high": High jump
                 - "low": Small hop (default)
+
             
         target (str, optional): Target for the action:
-            - For emotes: Target entity
-            - For patrol: Area name
-            - For hide: Cover location
-            - For flee: Threat/location to flee from
-            - For idle: Target to face/attend to
-            - For hunt: Name of player/NPC to hunt
+            Location targets (must match location_slug in memory block):
+                - For patrol: "full" or location_slug (e.g. "market_district")
+                - For emote point: location_slug (e.g. "petes_stand")
+                - For wander: location_slug or "current_area"
+            
+            Player/NPC targets:
+                - For hunt: Name of player/NPC to hunt
+                - For follow: Player name to follow
+                - For emote wave/dance/laugh: Optional player name
+            
+            Note: location_slugs are lowercase with underscores 
+            (e.g. "market_district", "petes_stand", "egg_cafe")
             
         request_heartbeat (bool, optional): Request status updates from the system.
             Set True to maintain state awareness (default: True)
             
     Returns:
-        dict: Action result with format:
+        dict: Action result with standardized roblox_format:
             {
-                "status": str,      # "success" or "error"
-                "action": str,      # The action being performed
-                "type": str,        # Specific type of the action
-                "target": str,      # Target of the action if any
-                "message": str,     # Human readable description
-                "metadata": dict,   # Additional action-specific data
-                "roblox_format": {  # Single action format for Roblox
-                    "type": str,    # Action type
-                    "data": dict,   # Action-specific data
-                    "message": str  # Display message
-                }
+                "type": str,    # Action type
+                "data": {
+                    "target": str,  # Target (e.g. "full" or location_slug for patrol)
+                    "type": str    # Action variation
+                },
+                "message": str  # Human readable description
             }
             
     Examples:
@@ -193,7 +200,7 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
     
     # Valid action types
     valid_emotes = ["wave", "dance", "point", "laugh"]
-    valid_actions = ["patrol", "wander", "idle", "hide", "flee", "emote", "follow", "unfollow", "hunt", "jump", "run"]
+    valid_actions = ["patrol", "wander", "idle", "hide", "flee", "emote", "follow", "unfollow", "hunt", "jump"]
     valid_hunt_types = ["track", "destroy"]
     
     # Base response structure
@@ -206,16 +213,23 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
         "metadata": {"request_heartbeat": request_heartbeat}
     }
     
+    # Validate slug format for location targets
+    is_slug = lambda s: s and s.replace('_', '').isalnum() and s.islower()
+
     # STANDARDIZED roblox_format for ALL actions
     if action == "patrol":
+        patrol_area = target if is_slug(target) else "full"
+        patrol_message = f"Patrolling {target}" if is_slug(target) else "Patrolling all locations"
+        
         roblox_format = {
             "type": "patrol",
             "data": {
-                "target": target,  # area name
-                "type": type if type else "normal"  # normal/stealth
+                "target": patrol_area,
+                "type": type if type else "normal"
             },
-            "message": f"Patrolling {target}"
+            "message": patrol_message
         }
+
 
     elif action == "hunt":
         roblox_format = {
@@ -254,15 +268,7 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
             "message": "Performing jump"
         }
 
-    elif action == "run":
-        roblox_format = {
-            "type": "run",
-            "data": {
-                "target": target,
-                "type": type if type else "normal"
-            },
-            "message": f"Running to {target}"
-        }
+
 
     elif action == "wander":
         roblox_format = {
@@ -302,6 +308,40 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
                 "type": type if type else "normal"
             },
             "message": f"Fleeing from {target}"
+        }
+
+    elif action == "follow":
+        roblox_format = {
+            "type": "follow",
+            "data": {
+                "target": target,  # player to follow
+                "type": type if type else "normal"
+            },
+            "message": f"Following {target}"
+        }
+
+    elif action == "unfollow":
+        roblox_format = {
+            "type": "unfollow",
+            "data": {
+                "target": target if target else "",
+                "type": type if type else "normal"
+            },
+            "message": "Stopped following"
+        }
+
+    elif action == "emote" and type == "point":
+        # For point emotes, encourage location slugs
+        point_target = target.lower().strip()
+        point_message = f"Pointing at {target}" if is_slug(target) else "Pointing"
+        
+        roblox_format = {
+            "type": "emote",
+            "data": {
+                "target": point_target,
+                "type": "point"
+            },
+            "message": point_message
         }
 
     # Add roblox_format to response
@@ -803,15 +843,23 @@ def create_personalized_agent_v3(
         embedding_chunk_size=300,
     )
     
-    # Create agent with new memory structure
+    # Define block-specific limits
+    block_limits = {
+        "group_members": 5500,  # Larger limit for group data
+        "locations": 2500,
+        "status": 2500,
+        "persona": 2500,
+        "journal": 2500
+    }
+
     agent = client.agents.create(
         name=unique_name,
         embedding_config=embedding_config,
         llm_config=llm_config,
-        memory_blocks=[{  # Pass blocks directly as list of dicts
+        memory_blocks=[{
             "label": label,
             "value": json.dumps(data) if isinstance(data, dict) else str(data),
-            "limit": 2500
+            "limit": block_limits.get(label, 2500)  # Use specific limit or default to 2500
         } for label, data in memory_blocks.items()],
         system=system_prompt,
         include_base_tools=False,

@@ -489,6 +489,25 @@ def upsert_group_member(client, agent_id: str, entity_id: str, update_data: dict
     If a player with matching name exists under a temporary ID (unnamed_*),
     will migrate their data to the real ID.
     """
+    def _prune_group_if_needed(client, agent_id: str, data: dict) -> dict:
+        content = json.dumps(data)
+        if len(content) > 5000:  # Our limit
+            # Sort players by last_seen
+            sorted_players = sorted(
+                data["players"].items(),
+                key=lambda x: x[1].get("last_seen", ""),
+                reverse=True
+            )
+            
+            # Keep removing oldest until under limit
+            while len(json.dumps(data)) > 4500:  # Buffer for new addition
+                if sorted_players:
+                    oldest_id, _ = sorted_players.pop()
+                    del data["players"][oldest_id]
+                else:
+                    break
+        return data
+
     try:
         # Get current block
         agent = client.agents.retrieve(agent_id)
@@ -498,7 +517,14 @@ def upsert_group_member(client, agent_id: str, entity_id: str, update_data: dict
         if "players" not in data:
             data["players"] = {}
             
-        # Check for temp ID with same name
+        # Prune if needed before adding new data
+        data = _prune_group_if_needed(client, agent_id, data)
+            
+        # Always set last_seen timestamp
+        update_data["last_seen"] = datetime.utcnow().isoformat()
+        update_data.setdefault("notes", "")  # Ensure notes exists
+
+        # Rest of existing upsert logic...
         temp_id = None
         for pid, pdata in data["players"].items():
             if (pid.startswith("unnamed_") and 
@@ -508,19 +534,19 @@ def upsert_group_member(client, agent_id: str, entity_id: str, update_data: dict
                 
         if temp_id:
             # Migrate data from temp ID to real ID
-            existing_data = data["players"].pop(temp_id)  # Remove temp entry
-            # Keep existing notes and other data
-            update_data.setdefault("notes", "")  # Ensure notes field exists
-            update_data["notes"] = existing_data.get("notes", "")  # Preserve notes
+            existing_data = data["players"].pop(temp_id)
+            # Keep existing notes but update timestamp
+            update_data["notes"] = existing_data.get("notes", "")
             data["players"][entity_id] = update_data
         else:
             # Normal update/insert
             if entity_id not in data["players"]:
-                update_data.setdefault("notes", "")  # Initialize empty notes
+                # New player
+                data["players"][entity_id] = update_data
             else:
-                # Keep existing notes if updating
+                # Update existing but preserve notes
                 update_data["notes"] = data["players"][entity_id].get("notes", "")
-            data["players"][entity_id] = update_data
+                data["players"][entity_id] = update_data
             
         # Convert to JSON string before updating
         client.agents.core_memory.modify_block(
