@@ -1145,15 +1145,23 @@ Common Situations:
 
 POLICE_BEHAVIOR_PROMPT = """
 You are a Security Officer. Your available behaviors:
-- "patrol": Regular security rounds, crowd management
-- "explore": Investigating reports, searching areas
+
+Core Actions:
+- "patrol": Regular security rounds
+    - Style: normal or stealth
+    - Target: area name required (e.g., "market_district", "full")
+
+- "hunt": Pursue targets
+    - Type: track or destroy
+    - Target: target name required (e.g., "CriminalPlayer")
+
 - "idle": Station duty, taking reports
 
 Common Situations:
-- Suspicious activity -> patrol/alert
-- Crowd control -> patrol/methodical
-- Investigation -> explore/methodical
-- Community engagement -> idle/casual
+- Full patrol -> patrol/normal with target="full"
+- Criminal spotted -> hunt/destroy target
+- Routine area check -> patrol/normal specific area
+- Suspicious target -> hunt/track target
 """
 
 NOOB_BEHAVIOR_PROMPT = """

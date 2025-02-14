@@ -448,6 +448,78 @@ def test_navigation(client, agent_id: str):
             print(f"Error in navigation test: {e}")
             continue  # Try next scenario
 
+def validate_action_response(response, action_type=None):
+    """Validate action response format"""
+    try:
+        for msg in response.messages:
+            if msg.message_type == "tool_return_message":
+                # Skip memory operations that return None
+                if msg.tool_return in ["None", "([], 0)"]:  # Add common memory return values
+                    continue  # Skip this message but keep checking others
+                    
+                result = json.loads(msg.tool_return)
+                
+                if result.get("action") in ["hunt", "patrol", "wander", "emote", "jump"]:
+                    # Use the roblox_format directly from the response if available
+                    if "roblox_format" in result:
+                        roblox_format = result["roblox_format"]
+                    else:
+                        # Format based on action type
+                        if result["action"] == "hunt":
+                            roblox_format = {
+                                "type": "hunt",
+                                "data": {
+                                    "target": result["target"],
+                                    "type": result["type"]
+                                },
+                                "message": result["message"]
+                            }
+                        elif result["action"] == "patrol":
+                            roblox_format = {
+                                "type": "patrol",
+                                "data": {
+                                    "area": result.get("target", "current_area"),
+                                    "style": result.get("type", "normal")
+                                },
+                                "message": result["message"]
+                            }
+                        elif result["action"] == "emote":
+                            roblox_format = {
+                                "type": "emote",
+                                "data": {
+                                    "animation": result["type"],
+                                    "target": result.get("target", "")
+                                },
+                                "message": result["message"]
+                            }
+                        elif result["action"] == "wander":
+                            roblox_format = {
+                                "type": "wander",
+                                "data": {
+                                    "area": result.get("target", "current_area"),
+                                    "radius": result["metadata"].get("wander_radius", 10.0)
+                                },
+                                "message": result["message"]
+                            }
+                        elif result["action"] == "jump":
+                            roblox_format = {
+                                "type": "jump",
+                                "data": {},
+                                "message": result["message"]
+                            }
+                    
+                    print("\nRoblox Action:")
+                    print(json.dumps(roblox_format, indent=2))
+                    return True
+                
+                # For non-action operations, just return True
+                return True
+                    
+        return True
+    except Exception as e:
+        print(f"❌ Error: {str(e)}")
+        return False
+
 def test_actions(client, agent_id: str):
     """Test NPC's ability to perform actions"""
     print("\nTesting action functionality...")
@@ -461,7 +533,8 @@ def test_actions(client, agent_id: str):
     print("2. Testing archival storage")
     print("3. Testing archival retrieval")
     print("4. Testing action transitions")
-    print("5. Testing movement actions")  # New section
+    print("5. Testing movement actions")
+    print("6. Testing hunt actions")  # Added new section
     
     scenarios = [
         # Original welcome scenario
@@ -490,7 +563,9 @@ def test_actions(client, agent_id: str):
         
         # Test jump and laugh
         ("System", """Alice made it to the garden! 
-        1. First use perform_action to jump
+        1. First use perform_action with:
+           - action="jump"
+           - type="high"  # Specify jump type
         2. Then use perform_action with:
            - action="emote"
            - type="laugh"
@@ -506,7 +581,35 @@ def test_actions(client, agent_id: str):
         1. Wave goodbye
         2. Use archival_memory_insert to save her profile with format:
            "Player profile for alice_123: Last seen <timestamp>. Notes: <current notes>"
-        3. Send a farewell message""")
+        3. Send a farewell message"""),
+        
+        # New hunt scenarios
+        ("System", """A hostile NPC 'DarkKnight' has appeared.
+        Use perform_action with:
+           - action="hunt"
+           - target="DarkKnight"
+        """),
+        
+        ("System", """Player 'Rogue123' is acting suspicious.
+        Use perform_action with:
+           - action="hunt"
+           - type="track"
+           - target="Rogue123"
+        """),
+        
+        # Add patrol tests
+        ("System", """EXECUTE this action exactly:
+        perform_action(
+           action="patrol",
+           target="market_district"
+        )"""),
+        
+        ("System", """EXECUTE this action exactly:
+        perform_action(
+           action="patrol",
+           type="stealth",
+           target="dark_alley"
+        )""")
     ]
     
     for i, (speaker, message) in enumerate(scenarios, 1):
@@ -516,7 +619,7 @@ def test_actions(client, agent_id: str):
         
         try:
             print("\nSending message...")
-            response = client.agents.messages.create(  # Updated to new API
+            response = client.agents.messages.create(
                 agent_id=agent_id,
                 messages=[MessageCreate(
                     role="system",
@@ -526,7 +629,12 @@ def test_actions(client, agent_id: str):
             )
             print("\nResponse:")
             print_response(response)
-            time.sleep(3)
+            
+            # Validate any perform_action responses
+            if not validate_action_response(response):
+                print(f"⚠️ Test step {i} failed action validation")
+            
+            time.sleep(1)
             
         except Exception as e:
             print(f"Error in test step {i}: {e}")
@@ -544,7 +652,7 @@ def parse_args():
     parser.add_argument('--test-type', choices=[
         'all', 'base', 'notes', 'social', 'status', 
         'group', 'persona', 'journal', 'navigation', 'actions',
-        'upsert', 'behavior'
+        'upsert', 'behavior', 'hunt'
     ], default='all')
     parser.add_argument(
         '--prompt',
@@ -1718,11 +1826,96 @@ def test_behaviors(client, agent_id: str, npc_type: str = "guide", args = None):
             )
             print("\nResponse:")
             print_response(response)
+            
+            # Validate any perform_action responses
+            if not validate_action_response(response):
+                print(f"⚠️ Test step failed action validation")
+            
             time.sleep(3)
             
         except Exception as e:
             print(f"Error: {e}")
             continue
+
+def test_hunt_actions(client, agent_id: str):
+    """Test NPC's hunting and tracking abilities"""
+    print("\nTesting Roblox Hunt Action Formats:")
+    
+    scenarios = [
+        # Basic hunt (defaults to destroy)
+        ("System", """EXECUTE this action exactly:
+        perform_action(
+           action="hunt",
+           target="DarkKnight"
+        )"""),
+        
+        # Tracking mode
+        ("System", """EXECUTE this action exactly:
+        perform_action(
+           action="hunt",
+           type="track",
+           target="Rogue123"
+        )"""),
+        
+        # Explicit destroy
+        ("System", """EXECUTE this action exactly:
+        perform_action(
+           action="hunt",
+           target="Goblin",
+           type="destroy"
+        )"""),
+        
+        # Track with stealth
+        ("System", """EXECUTE this action exactly:
+        perform_action(
+           action="hunt",
+           type="track",
+           target="ShadowMage"
+        )"""),
+        
+        # Multiple targets
+        ("System", """EXECUTE these actions in sequence:
+        1. perform_action(
+              action="hunt",
+              type="track",
+              target="Bandit1"
+           )
+        2. perform_action(
+              action="hunt",
+              target="Bandit2"
+           )""")
+    ]
+    
+    for i, (speaker, message) in enumerate(scenarios, 1):
+        print(f"\n=== Test {i} ===")
+        
+        try:
+            response = client.agents.messages.create(
+                agent_id=agent_id,
+                messages=[MessageCreate(
+                    role="system",
+                    content=message,
+                    name=speaker
+                )]
+            )
+            
+            # Only validate the action format
+            if not validate_action_response(response):
+                print(f"⚠️ Invalid action format")
+            
+            time.sleep(1)
+            
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            continue
+
+def test_upsert_tools(client):
+    """Ensure tools are up to date"""
+    print("\nUpserting tools...")
+    
+    # Use update_tools from npc_tools.py
+    update_tools(client)
+    print("✓ Updated perform_action tool")
 
 def main():
     """Main test function"""
@@ -1732,41 +1925,21 @@ def main():
         sys.exit(1)
 
     try:
-        # Print configuration
-        port = os.getenv('LETTA_PORT')
-        port = int(port) if port else None
-        base_url = os.getenv('LETTA_BASE_URL', 'http://localhost:8283')
-        
-        print("\nStarting Letta Quickstart with:")
-        print(f"- Environment URL: {base_url}")
-        print(f"- Environment Port: {port if port else 'default'}")
+        print("\nStarting test sequence...")
         
         client = create_letta_client()
         
-        # Check for minimal test first
+        # Upsert tools first
+        test_upsert_tools(client)
+        
         if args.minimal_test:
+            print("Running minimal test...")
             test_minimal_agent()
             return
             
-        # Regular test path
-        print(f"- Keep Agent: {args.keep}")
-        print(f"- LLM Type: {args.llm_type}")
-        print(f"- Agent Name: {args.name}")
-        print(f"- Overwrite: {args.overwrite}")
-        
-        # Update tools first
-        update_tools(client)
-        
-        print(f"\nCreating agent with {args.prompt} prompt...")
-        print("\nVerifying prompt components:")
-        print("BASE_PROMPT:", BASE_PROMPT[:100] + "...")
-        print("LOCATION_AWARENESS_PROMPT:", LOCATION_AWARENESS_PROMPT)
-        
-        # Run the appropriate test based on test_type
-        if args.test_type == 'behavior':
-            test_behaviors(client, None, args.role_type, args)  # Use role type from args
-        else:
-            # Create agent with new signature
+        # Create agent first for all test types except 'behavior'
+        if args.test_type != 'behavior':
+            print("\nCreating test agent...")
             agent = create_personalized_agent_v3(
                 name=args.name,
                 memory_blocks=DEMO_BLOCKS,
@@ -1776,37 +1949,64 @@ def main():
                 with_custom_tools=args.custom_tools,
                 prompt_version="FULL"
             )
-            
-            # Store agent ID for all tests
             agent_id = agent.id
-            print(f"\nCreated agent: {agent_id}")
+            print(f"Created agent: {agent_id}")
+        
+        # Run tests with progress indicators
+        if args.test_type == 'all':
+            tests = [
+                ("Base Identity", lambda: test_agent_identity(client, agent_id)),
+                ("Notes", lambda: test_notes(client, agent_id)),
+                ("Social", lambda: test_social_awareness(client, agent_id)),
+                ("Status", lambda: test_status_awareness(client, agent_id)),
+                ("Group", lambda: test_group(client, agent_id)),
+                ("Persona", lambda: test_npc_persona(client, agent_id)),
+                ("Journal", lambda: test_npc_journal(client, agent_id)),
+                ("Navigation", lambda: test_navigation(client, agent_id)),
+                ("Actions", lambda: test_actions(client, agent_id)),
+                ("Hunt", lambda: test_hunt_actions(client, agent_id))
+            ]
             
-            # Run tests using the same agent_id
-            if args.test_type in ["all", "base"]:
-                test_agent_identity(client, agent_id)
-            if args.test_type in ["all", "notes"]:
-                test_notes(client, agent_id)
-            if args.test_type in ["all", "social"]:
-                test_social_awareness(client, agent_id)
-            if args.test_type in ["all", "status"]:
-                test_status_awareness(client, agent_id)
-            if args.test_type in ["all", "group"]:
-                test_group(client, agent_id)
-            if args.test_type in ["all", "persona"]:
-                test_npc_persona(client, agent_id)
-            if args.test_type in ["all", "journal"]:
-                test_npc_journal(client, agent_id)
-            if args.test_type in ["all", "navigation"]:
-                test_navigation(client, agent_id)
-            if args.test_type in ["all", "actions"]:
-                test_actions(client, agent_id)
+            print("\nRunning all tests:")
+            for test_name, test_func in tests:
+                print(f"\n=== Running {test_name} Test ===")
+                try:
+                    test_func()
+                    print(f"✓ {test_name} test complete")
+                except Exception as e:
+                    print(f"❌ {test_name} test failed: {e}")
+                    if not args.continue_on_error:
+                        raise
+        else:
+            # Run single test type
+            test_map = {
+                'hunt': lambda: test_hunt_actions(client, agent_id),
+                'behavior': lambda: test_behaviors(client, None, args.role_type, args),
+                'base': lambda: test_agent_identity(client, agent_id),
+                'notes': lambda: test_notes(client, agent_id),
+                'social': lambda: test_social_awareness(client, agent_id),
+                'status': lambda: test_status_awareness(client, agent_id),
+                'group': lambda: test_group(client, agent_id),
+                'persona': lambda: test_npc_persona(client, agent_id),
+                'journal': lambda: test_npc_journal(client, agent_id),
+                'navigation': lambda: test_navigation(client, agent_id),
+                'actions': lambda: test_actions(client, agent_id),
+                'upsert': lambda: test_upsert(client, agent_id)
+            }
+            
+            print(f"\nRunning {args.test_type} test...")
+            if args.test_type in test_map:
+                test_map[args.test_type]()
+            else:
+                print(f"❌ Unknown test type: {args.test_type}")
 
-            if args.test_type == 'upsert':
-                test_upsert(client, agent_id)
-                return
+        print("\nAll tests complete!")
 
+    except Exception as e:
+        print(f"\n❌ Test sequence failed: {e}")
+        raise
     finally:
-        pass
+        print("\nTest run finished")
 
 if __name__ == "__main__":
     main() 

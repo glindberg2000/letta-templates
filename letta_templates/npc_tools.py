@@ -112,7 +112,7 @@ def _format_action_message(action: str, target: Optional[str], state: ActionStat
     
     return messages.get(action, f"Performing action: {action}{' targeting ' + target if target else ''}")
 
-def perform_action(action: str, type: str = "", target: str = "", request_heartbeat: bool = True) -> str:
+def perform_action(action: str, type: str = "", target: str = "", request_heartbeat: bool = True) -> Dict:
     """Perform an NPC action in the game world
     
     Args:
@@ -124,21 +124,67 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
                 - "hide": Take cover from danger
                 - "flee": Escape from danger/location
                 - "emote": Play animation
+                - "hunt": Track or destroy target
+                - "jump": Jump animation
             
-        type (str): For emotes only:
-            - "wave": Greeting gesture
-            - "dance": Dance animation
-            - "point": Point at target
-            - "laugh": Laugh animation
+        type (str): For emotes and hunt:
+            Emotes:
+                - "wave": Greeting gesture
+                - "dance": Dance animation
+                - "point": Point at target
+                - "laugh": Laugh animation
+            Hunt:
+                - "track": Follow and monitor target
+                - "destroy": Pursue and eliminate target (default)
+            Jump:
+                - "high": High jump
+                - "low": Small hop (default)
             
         target (str, optional): Target for the action:
             - For emotes: Target entity
             - For patrol: Area name
             - For hide: Cover location
             - For flee: Threat/location to flee from
+            - For idle: Target to face/attend to
+            - For hunt: Name of player/NPC to hunt
             
         request_heartbeat (bool, optional): Request status updates from the system.
             Set True to maintain state awareness (default: True)
+            
+    Returns:
+        dict: Action result with format:
+            {
+                "status": str,      # "success" or "error"
+                "action": str,      # The action being performed
+                "type": str,        # Specific type of the action
+                "target": str,      # Target of the action if any
+                "message": str,     # Human readable description
+                "metadata": dict,   # Additional action-specific data
+                "roblox_format": {  # Single action format for Roblox
+                    "type": str,    # Action type
+                    "data": dict,   # Action-specific data
+                    "message": str  # Display message
+                }
+            }
+            
+    Examples:
+        >>> perform_action("hunt", target="Enemy1")
+        {
+            "status": "success",
+            "action": "hunt",
+            "type": "destroy",
+            "target": "Enemy1",
+            "message": "Initiating pursuit of Enemy1 with intent to eliminate.",
+            "metadata": {"priority": "high", "persistence": "high"},
+            "roblox_format": {
+                "type": "hunt",
+                "data": {
+                    "target": "Enemy1",
+                    "type": "destroy"
+                },
+                "message": "Initiating pursuit of Enemy1 with intent to eliminate."
+            }
+        }
     """
     # Normalize inputs
     action = action.lower().strip()
@@ -147,66 +193,290 @@ def perform_action(action: str, type: str = "", target: str = "", request_heartb
     
     # Valid action types
     valid_emotes = ["wave", "dance", "point", "laugh"]
-    valid_actions = ["patrol", "wander", "idle", "hide", "flee", "emote", "follow", "unfollow"]  # Added back follow/unfollow
+    valid_actions = ["patrol", "wander", "idle", "hide", "flee", "emote", "follow", "unfollow", "hunt", "jump", "run"]
+    valid_hunt_types = ["track", "destroy"]
+    
+    # Base response structure
+    response = {
+        "status": "success",
+        "action": action,
+        "type": type,
+        "target": target,
+        "message": "",
+        "metadata": {
+            "request_heartbeat": request_heartbeat
+        }
+    }
     
     # Validate action
     if action not in valid_actions:
         if action in valid_emotes:
-            return f"Error: For emotes use action='emote' with type='{action}' instead"
-        return f"Error: Unknown action: {action}. Valid actions are: {', '.join(valid_actions)}"
-    
+            return {
+                "status": "error",
+                "action": "none",
+                "message": f"Error: For emotes use action='emote' with type='{action}' instead",
+                "metadata": {"request_heartbeat": False}
+            }
+        return {
+            "status": "error",
+            "action": "none",
+            "message": f"Error: Unknown action: {action}. Valid actions are: {', '.join(valid_actions)}",
+            "metadata": {"request_heartbeat": False}
+        }
+
+    # Handle jump action
+    if action == "jump":
+        response.update({
+            "message": "Performing jump",
+            "metadata": {
+                "animation": "jump",
+                "request_heartbeat": request_heartbeat
+            },
+            "roblox_format": {
+                "type": "jump",
+                "data": {},  # Simplified - let game handle defaults
+                "message": "Performing jump"
+            }
+        })
+        return response
+
+    # Handle run action
+    elif action == "run":
+        response.update({
+            "message": f"Running to {target}" if target else "Running",
+            "metadata": {
+                "animation": "run",
+                "request_heartbeat": request_heartbeat
+            },
+            "roblox_format": {
+                "type": "run",
+                "data": {
+                    "target": target
+                },
+                "message": f"Running to {target}" if target else "Running"
+            }
+        })
+        return response
+
     # Handle behaviors
     if action == "set_behavior":
         if not type:
-            return "Error: Behavior type required"
+            return {
+                "status": "error",
+                "action": "none",
+                "message": "Error: Behavior type required",
+                "metadata": {"request_heartbeat": False}
+            }
         if type not in valid_behaviors:
-            return f"Error: Unknown behavior type: {type}. Valid types are: {', '.join(valid_behaviors)}"
-        if target and target not in valid_styles:
-            return f"Error: Unknown behavior style: {target}. Valid styles are: {', '.join(valid_styles)}"
+            return {
+                "status": "error",
+                "action": "none",
+                "message": f"Error: Unknown behavior type: {type}. Valid types are: {', '.join(valid_behaviors)}",
+                "metadata": {"request_heartbeat": False}
+            }
         style_msg = f" with {target} style" if target else ""
-        return f"Setting behavior to: {type}{style_msg}"
+        response.update({
+            "message": f"Setting behavior to: {type}{style_msg}",
+            "metadata": {"style": target if target else "default"}
+        })
+        return response
     
     # Handle emotes
-    if action == "emote":
+    elif action == "emote":
         if not type:
-            return "Error: Emote type required"
+            return {
+                "status": "error",
+                "action": "none",
+                "message": "Error: Emote type required",
+                "metadata": {"request_heartbeat": False}
+            }
         if type not in valid_emotes:
-            return f"Error: Unknown emote type: {type}. Valid types are: {', '.join(valid_emotes)}"
-        return f"Performing emote: {type}" + (f" at {target}" if target else "")
+            return {
+                "status": "error",
+                "action": "none",
+                "message": f"Error: Unknown emote type: {type}. Valid types are: {', '.join(valid_emotes)}",
+                "metadata": {"request_heartbeat": False}
+            }
+        response.update({
+            "message": f"Performing emote: {type}" + (f" at {target}" if target else ""),
+            "metadata": {"animation": type},
+            "roblox_format": {
+                "type": "emote",
+                "data": {
+                    "animation": type,
+                    "target": target
+                },
+                "message": f"Performing emote: {type}" + (f" at {target}" if target else "")
+            }
+        })
+        return response
     
     # Handle follow actions
     elif action == "follow":
         if not target:
-            return "Error: Target required for follow"
-        return f"Following player: {target}"
+            return {
+                "status": "error",
+                "action": "none",
+                "message": "Error: Target required for follow",
+                "metadata": {"request_heartbeat": False}
+            }
+        response.update({
+            "message": f"Following player: {target}",
+            "metadata": {"follow_distance": 5.0},
+            "roblox_format": {
+                "type": "follow",
+                "data": {
+                    "target": target,
+                    "distance": 5.0
+                },
+                "message": f"Following player: {target}"
+            }
+        })
+        return response
     
     elif action == "unfollow":
-        return "Stopping follow action. Now stationary."
+        response.update({
+            "message": "Stopping follow action. Now stationary.",
+            "metadata": {"stationary": True}
+        })
+        return response
     
     # Handle movement behaviors
     elif action == "patrol":
-        if not target:
-            return "Patrolling current area"
-        return f"Patrolling {target}"
+        response.update({
+            "message": f"Patrolling {target}" if target else "Patrolling current area",
+            "metadata": {"patrol_radius": 20.0},
+            "roblox_format": {
+                "type": "patrol",
+                "data": {
+                    "area": target or "current_area",
+                    "style": type or "normal"
+                },
+                "message": f"Patrolling {target}" if target else "Patrolling current area"
+            }
+        })
+        return response
         
     elif action == "wander":
-        if target:
-            return f"Wandering around {target}"
-        return "Wandering around current area"
+        response.update({
+            "message": f"Wandering around {target}" if target else "Wandering around current area",
+            "metadata": {"wander_radius": 10.0},
+            "roblox_format": {
+                "type": "wander",
+                "data": {
+                    "area": target or "current_area",
+                    "radius": 10.0
+                },
+                "message": f"Wandering around {target}" if target else "Wandering around current area"
+            }
+        })
+        return response
         
     elif action == "idle":
-        return "Standing by for interaction"
+        response.update({
+            "message": f"Standing by, attending to {target}" if target else "Standing by for interaction",
+            "metadata": {"idle_animation": "default"},
+            "roblox_format": {
+                "type": "idle",
+                "data": {
+                    "animation": "default"
+                },
+                "message": "Standing by for interaction"
+            }
+        })
+        return response
     
     # Handle emergency actions
     elif action == "hide":
         if not target:
-            return "Error: Cover location required for hide"
-        return f"Taking cover at {target}"
+            return {
+                "status": "error",
+                "action": "none",
+                "message": "Error: Cover location required for hide",
+                "metadata": {"request_heartbeat": False}
+            }
+        response.update({
+            "message": f"Taking cover at {target}",
+            "metadata": {"priority": "high"},
+            "roblox_format": {
+                "type": "hide",
+                "data": {
+                    "cover": target
+                },
+                "message": f"Taking cover at {target}"
+            }
+        })
+        return response
         
     elif action == "flee":
         if not target:
-            return "Error: Threat/location required to flee from"
-        return f"Running away from {target}"
+            return {
+                "status": "error",
+                "action": "none",
+                "message": "Error: Threat/location required to flee from",
+                "metadata": {"request_heartbeat": False}
+            }
+        response.update({
+            "message": f"Running away from {target}",
+            "metadata": {"priority": "high", "flee_speed": "sprint"},
+            "roblox_format": {
+                "type": "flee",
+                "data": {
+                    "threat": target,
+                    "speed": "sprint"
+                },
+                "message": f"Running away from {target}"
+            }
+        })
+        return response
+
+    # Handle hunt action
+    elif action == "hunt":
+        if not target:
+            return {
+                "status": "error",
+                "action": "none",
+                "message": "Error: Target required for hunt action",
+                "metadata": {"request_heartbeat": False}
+            }
+        
+        if type and type not in valid_hunt_types:
+            return {
+                "status": "error",
+                "action": "none",
+                "message": f"Error: Invalid hunt type: {type}. Valid types are: {', '.join(valid_hunt_types)}",
+                "metadata": {"request_heartbeat": False}
+            }
+            
+        # Default to destroy if no type provided
+        hunt_type = type if type else "destroy"
+        message = (
+            f"Beginning to track {target}. Will maintain surveillance and report movements."
+            if hunt_type == "track" else
+            f"Initiating pursuit of {target} with intent to eliminate."
+        )
+        
+        response.update({
+            "type": hunt_type,
+            "message": message,
+            "metadata": {
+                "request_heartbeat": request_heartbeat,
+                "priority": "high",
+                "persistence": "high",
+                "engagement_range": 15.0 if hunt_type == "track" else 5.0
+            },
+            "roblox_format": {  # Single action format for Roblox
+                "type": "hunt",
+                "data": {
+                    "target": target,
+                    "type": hunt_type
+                },
+                "message": message
+            }
+        })
+        return response
+    
+    return response
 
 def navigate_to(destination_slug: str, style: str = None, request_heartbeat: bool = True) -> dict:
     """Navigate to a known location
