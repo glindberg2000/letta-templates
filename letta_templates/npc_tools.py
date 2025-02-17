@@ -852,6 +852,8 @@ def create_personalized_agent_v3(
         "journal": 2000
     }
 
+    logger.debug("DEBUG - Incoming memory_blocks dict: %s", memory_blocks)
+    
     agent = client.agents.create(
         name=unique_name,
         embedding_config=embedding_config,
