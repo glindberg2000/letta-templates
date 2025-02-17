@@ -28,6 +28,8 @@ git reset --hard origin/feature/group-memory-tools
 # 3. Install package
 pip install letta==0.6.6  # Install exact letta version first
 pip install git+https://github.com/glindberg2000/letta-templates.git@v0.9.2
+pip install --upgrade git+https://github.com/glindberg2000/letta-templates.git@feature/jump-action-clean
+
 ```
 
 ## Breaking Changes

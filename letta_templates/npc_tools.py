@@ -845,11 +845,11 @@ def create_personalized_agent_v3(
     
     # Define block-specific limits
     block_limits = {
-        "group_members": 5500,  # Larger limit for group data
-        "locations": 2500,
-        "status": 2500,
-        "persona": 2500,
-        "journal": 2500
+        "group_members": 10000,  # Larger limit for group data
+        "locations": 2000,
+        "status": 2000,
+        "persona": 5000,
+        "journal": 2000
     }
 
     agent = client.agents.create(
