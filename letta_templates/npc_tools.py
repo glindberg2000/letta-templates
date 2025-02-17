@@ -852,17 +852,25 @@ def create_personalized_agent_v3(
         "journal": 2000
     }
 
-    logger.debug("DEBUG - Incoming memory_blocks dict: %s", memory_blocks)
+  #  logger.debug("DEBUG - Incoming memory_blocks dict: %s", memory_blocks)
     
+    # Process memory blocks before creating agent
+    processed_blocks = []
+    for label, data in memory_blocks.items():
+        block_value = json.dumps(data) if isinstance(data, dict) else str(data)
+        block_limit = block_limits.get(label, 2500)  # Use specific limit or default to 2500
+        processed_blocks.append({
+            "label": label,
+            "value": block_value,
+            "limit": block_limit
+        })
+    
+    logger.info("DEBUG - Incoming processed blocks: %s", processed_blocks)
     agent = client.agents.create(
         name=unique_name,
         embedding_config=embedding_config,
         llm_config=llm_config,
-        memory_blocks=[{
-            "label": label,
-            "value": json.dumps(data) if isinstance(data, dict) else str(data),
-            "limit": block_limits.get(label, 2500)  # Use specific limit or default to 2500
-        } for label, data in memory_blocks.items()],
+        memory_blocks=processed_blocks,
         system=system_prompt,
         include_base_tools=False,
         description="A Roblox development assistant"

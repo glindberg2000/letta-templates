@@ -63,6 +63,8 @@ from letta_client import (
 )
 from datetime import datetime
 
+logging.basicConfig(level=logging.INFO)
+
 # Load environment variables (keeps your custom server URL)
 load_dotenv()
 
