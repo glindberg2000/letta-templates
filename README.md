@@ -43,6 +43,9 @@ pip install git+https://github.com/glindberg2000/letta-templates.git
 
 # Install specific version
 pip install git+https://github.com/glindberg2000/letta-templates.git@v0.9.3
+
+# Install from feature branch (latest movement and memory updates)
+pip install --upgrade git+https://github.com/glindberg2000/letta-templates.git@feature/jump-action-clean
 ```
 
 ### Verify Installation
